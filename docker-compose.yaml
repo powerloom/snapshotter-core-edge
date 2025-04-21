@@ -146,6 +146,111 @@ services:
     command: bash -c "bash init_processes.sh gunicorn_core_launcher"
     depends_on:
       - system-event-detector
+  block_fetcher:
+    # Build context pointing to the parent directory and then BlockFetcher
+    build:
+      context: snapshotter-periphery-blockfetcher
+      dockerfile: Dockerfile
+    environment:
+      - NAMESPACE
+      - RPC_URL=${SOURCE_RPC_URL}
+      - RPC_RATE_LIMIT=${DEFAULT_RATE_LIMIT:-1000}
+      - RPC_RETRY=${DEFAULT_RPC_RETRY:-3}
+      - RPC_TIMEOUT=${DEFAULT_RPC_TIMEOUT:-10}
+      - POLLING_INTERVAL=${DEFAULT_POLLING_INTERVAL:-10}
+      - REDIS_HOST=${REDIS_HOST:-redis}
+      - REDIS_PORT=${REDIS_PORT:-6379}
+      - REDIS_DB=${REDIS_DB:-0}
+      - REDIS_PASSWORD=${REDIS_PASSWORD:-}
+      - REDIS_SSL=${REDIS_SSL:-false}
+      - REDIS_CLUSTER=${REDIS_CLUSTER:-false}
+      - LOG_DEBUG=${LOG_DEBUG:-false}
+      - LOG_TO_FILES=${LOG_TO_FILES:-false}
+      - LOG_LEVEL=${LOG_LEVEL:-DEBUG}
+      - TEST_MODE=${TEST_MODE:-false}
+      - HTTPX_POOL_TIMEOUT=${HTTPX_POOL_TIMEOUT:-5}
+      - HTTPX_CONNECT_TIMEOUT=${HTTPX_CONNECT_TIMEOUT:-5}
+      - HTTPX_READ_TIMEOUT=${HTTPX_READ_TIMEOUT:-5}
+      - HTTPX_WRITE_TIMEOUT=${HTTPX_WRITE_TIMEOUT:-5}
+      - REPORTING_SLACK_URL=${REPORTING_SLACK_URL:-}
+      - REPORTING_SERVICE_URL=${REPORTING_SERVICE_URL:-}
+      - REPORTING_TELEGRAM_URL=${REPORTING_TELEGRAM_URL:-}
+      - REPORTING_TELEGRAM_CHAT_ID=${REPORTING_TELEGRAM_CHAT_ID:-}
+      - REPORTING_MIN_INTERVAL=${REPORTING_MIN_INTERVAL:-10}
+    depends_on:
+      - redis
+    volumes:
+      # Volume path relative to the docker-compose file location
+      - ./logs/snapshotter-periphery-blockfetcher:/app/logs
+    restart: unless-stopped
+    networks:
+      - custom_network
+  tx_processor:
+    # Build context pointing to the parent directory and then txprocessor
+    build:
+      context: snapshotter-periphery-txprocessor
+      dockerfile: Dockerfile
+    environment:
+      - NAMESPACE
+      - RPC_URL=${SOURCE_RPC_URL}
+      - RPC_RETRY=${DEFAULT_RPC_RETRY:-3}
+      - RPC_TIMEOUT=${DEFAULT_RPC_TIMEOUT:-10}
+      - REDIS_HOST=${REDIS_HOST:-redis}
+      - REDIS_PORT=${REDIS_PORT:-6379}
+      - REDIS_DB=${REDIS_DB:-0}
+      - REDIS_PASSWORD=${REDIS_PASSWORD:-}
+      - REDIS_SSL=${REDIS_SSL:-false}
+      - REDIS_CLUSTER=${REDIS_CLUSTER:-false}
+      - LOG_DEBUG=${LOG_DEBUG:-false}
+      - LOG_TO_FILES=${LOG_TO_FILES:-false}
+      - LOG_LEVEL=${LOG_LEVEL:-DEBUG}
+      - PROCESSOR_QUEUE_KEY=${PROCESSOR_QUEUE_KEY:-}
+      - PROCESSOR_BLOCK_TIMEOUT=${PROCESSOR_BLOCK_TIMEOUT:-}
+    depends_on:
+      - redis
+    volumes:
+      # Volume path relative to the docker-compose file location
+      - ./logs/snapshotter-periphery-txprocessor:/app/logs
+    restart: unless-stopped
+    networks:
+      - custom_network
+  epoch_syncer:
+    build:
+      context: snapshotter-periphery-epochsyncer
+      dockerfile: Dockerfile
+    environment:
+      - NAMESPACE
+      - INSTANCE_ID=${SIGNER_ACCOUNT_ADDRESS}
+      - SOURCE_RPC_URL=${SOURCE_RPC_URL}
+      - SOURCE_RPC_RATE_LIMIT=${DEFAULT_RATE_LIMIT:-1000}
+      - SOURCE_RPC_MAX_RETRIES=${DEFAULT_RPC_RETRY:-3}
+      - SOURCE_RPC_TIMEOUT=${DEFAULT_RPC_TIMEOUT:-10}
+      - SOURCE_RPC_POLLING_INTERVAL=${DEFAULT_POLLING_INTERVAL:-10}
+      - POWERLOOM_RPC_URL=${POWERLOOM_RPC_URL}
+      - POWERLOOM_RPC_RATE_LIMIT=${DEFAULT_RATE_LIMIT:-1000}
+      - POWERLOOM_RPC_RETRY=${DEFAULT_RPC_RETRY:-3}
+      - POWERLOOM_RPC_TIMEOUT=${DEFAULT_RPC_TIMEOUT:-10}
+      - POWERLOOM_RPC_POLLING_INTERVAL=${DEFAULT_POLLING_INTERVAL:-10}
+      - REDIS_HOST=${REDIS_HOST:-redis}
+      - REDIS_PORT=${REDIS_PORT:-6379}
+      - REDIS_DB=${REDIS_DB:-0}
+      - REDIS_PASSWORD=${REDIS_PASSWORD:-}
+      - REDIS_SSL=${REDIS_SSL:-false}
+      - REDIS_CLUSTER_MODE=${REDIS_CLUSTER:-false}
+      - PROTOCOL_STATE_CONTRACT_ADDRESS=${PROTOCOL_STATE_CONTRACT}
+      - DATA_MARKET_CONTRACT_ADDRESS=${DATA_MARKET_CONTRACT}
+      - POLLING_INTERVAL=${DEFAULT_POLLING_INTERVAL:-10}
+      - LOG_LEVEL=${LOG_LEVEL:-DEBUG}
+      - WRITE_LOGS_TO_FILES=${LOG_TO_FILES:-false}
+      - DEBUG_MODE=${DEBUG_MODE:-false}
+    depends_on:
+      - redis
+      - rate-limiter
+    volumes:
+      - ./logs/snapshotter-periphery-epochsyncer:/app/logs
+    restart: unless-stopped
+    networks:
+      - custom_network
   # IPFS Service with improved configuration
   ipfs:
     image: ipfs/kubo:master-latest

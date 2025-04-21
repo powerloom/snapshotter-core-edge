@@ -22,3 +22,6 @@ redis_data
 .pytest_cache
 .mypy_cache
 htmlcov
+snapshotter-periphery-blockfetcher
+snapshotter-periphery-txprocessor
+snapshotter-periphery-epochsyncer

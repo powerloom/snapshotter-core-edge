@@ -11,6 +11,24 @@ mkdir logs;
 cd logs;
 mkdir snapshotter;
 mkdir local-collector;
+
+rm -rf snapshotter-periphery-blockfetcher;
+rm -rf snapshotter-periphery-txprocessor;
+rm -rf snapshotter-periphery-epochsyncer;
+
+git clone https://github.com/Powerloom/snapshotter-periphery-blockfetcher.git;
+cd snapshotter-periphery-blockfetcher;
+git checkout $SNAPSHOTTER_PERIPHERY_BLOCKFETCHER_BRANCH;
+cd ..;
+
+git clone https://github.com/Powerloom/snapshotter-periphery-txprocessor.git;
+cd snapshotter-periphery-txprocessor;
+git checkout $SNAPSHOTTER_PERIPHERY_TXPROCESSOR_BRANCH;
+cd ..;
+
+git clone https://github.com/Powerloom/snapshotter-periphery-epochsyncer.git;
+cd snapshotter-periphery-epochsyncer;
+git checkout $SNAPSHOTTER_PERIPHERY_EPOCHSYNCER_BRANCH;
 cd ..;
 
 if [ "$SNAPSHOT_CONFIG_REPO" ]; then
