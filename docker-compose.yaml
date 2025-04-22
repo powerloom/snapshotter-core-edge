@@ -66,9 +66,6 @@ services:
   snapshotter-local-collector:
     image: ${SNAPSHOTTER_COLLECTOR_IMAGE:-ghcr.io/powerloom/snapshotter-lite-local-collector:dockerify}
     profiles: ["local-collector"]
-    depends_on:
-      redis:
-        condition: service_healthy
     ports:
       - ${LOCAL_COLLECTOR_PORT:-50051}:${LOCAL_COLLECTOR_PORT:-50051}
     volumes:
@@ -109,14 +106,13 @@ services:
   # Worker services using the base configuration
   system-event-detector:
     <<: *snapshotter-base
-    command: bash -c "bash snapshotter_autofill.sh && bash init_processes.sh system_event_detector"
-
+    command: bash -c "bash init_processes.sh system_event_detector"
+    depends_on:
+      - processor-distributor
+    profiles: ["old"]
   processor-distributor:
     <<: *snapshotter-base
-    command: bash -c "bash init_processes.sh processor_distributor"
-    depends_on:
-      - system-event-detector
-
+    command: bash -c "bash snapshotter_autofill.sh &&bash init_processes.sh processor_distributor"
   snapshot-worker:
     <<: *snapshotter-base
     command: bash -c "bash init_processes.sh utils.snapshot_worker"
@@ -135,6 +131,7 @@ services:
     <<: *snapshotter-base
     command: bash -c "bash init_processes.sh utils.ipfs_unpinning_worker"
     depends_on:
+      - processor-distributor
       - ipfs
   # Core API Service
   core-api:
@@ -145,7 +142,7 @@ services:
       - ${CORE_API_PORT:-8002}:${CORE_API_PORT:-8002}
     command: bash -c "bash init_processes.sh gunicorn_core_launcher"
     depends_on:
-      - system-event-detector
+      - processor-distributor
   block_fetcher:
     # Build context pointing to the parent directory and then BlockFetcher
     build:
@@ -183,6 +180,7 @@ services:
       # Volume path relative to the docker-compose file location
       - ./logs/snapshotter-periphery-blockfetcher:/app/logs
     restart: unless-stopped
+    profiles: ["new"]
     networks:
       - custom_network
   tx_processor:
@@ -208,6 +206,7 @@ services:
       - PROCESSOR_BLOCK_TIMEOUT=${PROCESSOR_BLOCK_TIMEOUT:-}
     depends_on:
       - redis
+    profiles: ["new"]
     volumes:
       # Volume path relative to the docker-compose file location
       - ./logs/snapshotter-periphery-txprocessor:/app/logs
@@ -226,7 +225,7 @@ services:
       - SOURCE_RPC_MAX_RETRIES=${DEFAULT_RPC_RETRY:-3}
       - SOURCE_RPC_TIMEOUT=${DEFAULT_RPC_TIMEOUT:-10}
       - SOURCE_RPC_POLLING_INTERVAL=${DEFAULT_POLLING_INTERVAL:-10}
-      - POWERLOOM_RPC_URL=${POWERLOOM_RPC_URL}
+      - POWERLOOM_RPC_URL=${PROST_RPC_URL}
       - POWERLOOM_RPC_RATE_LIMIT=${DEFAULT_RATE_LIMIT:-1000}
       - POWERLOOM_RPC_RETRY=${DEFAULT_RPC_RETRY:-3}
       - POWERLOOM_RPC_TIMEOUT=${DEFAULT_RPC_TIMEOUT:-10}
@@ -246,6 +245,7 @@ services:
     depends_on:
       - redis
       - rate-limiter
+    profiles: ["new"]
     volumes:
       - ./logs/snapshotter-periphery-epochsyncer:/app/logs
     restart: unless-stopped

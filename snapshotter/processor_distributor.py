@@ -860,13 +860,7 @@ class ProcessorDistributor(multiprocessing.Process):
             self._active_tasks.add((current_time, task))
             task.add_done_callback(lambda _: self._active_tasks.discard((current_time, task)))
 
-            _ = await self._redis_conn.get(active_status_key)
-            if _:
-                active_status = bool(int(_))
-                if not active_status:
-                    self._logger.error('System is not active, ignoring released Epoch')
-                else:
-                    await self._epoch_release_processor(event_data)
+            await self._epoch_release_processor(event_data)
 
         elif event_type == 'SnapshotSubmitted':
             await self._distribute_callbacks_aggregate(

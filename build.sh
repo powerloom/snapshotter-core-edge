@@ -263,6 +263,11 @@ fi
 PROFILES=""
 [ "$IPFS_URL" = "/dns/ipfs/tcp/5001" ] && PROFILES="$PROFILES --profile ipfs"
 [ "$ARG1" = "yes_collector" ] && PROFILES="$PROFILES --profile local-collector"
+if [ "$USE_NEW_SETUP" = "true" ]; then
+    PROFILES="$PROFILES --profile new"
+else
+    PROFILES="$PROFILES --profile old"
+fi
 
 if command -v docker-compose &> /dev/null; then
     COMPOSE_CMD="docker-compose"
