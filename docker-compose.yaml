@@ -207,6 +207,8 @@ services:
     depends_on:
       - redis
     profiles: ["new"]
+    deploy:
+      replicas: ${TRANSACTION_PROCESSOR_REPLICAS:-3}
     volumes:
       # Volume path relative to the docker-compose file location
       - ./logs/snapshotter-periphery-txprocessor:/app/logs
