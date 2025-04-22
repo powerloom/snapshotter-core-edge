@@ -25,3 +25,4 @@ htmlcov
 snapshotter-periphery-blockfetcher
 snapshotter-periphery-txprocessor
 snapshotter-periphery-epochsyncer
+rate-limiter
