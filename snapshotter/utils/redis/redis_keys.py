@@ -2,7 +2,7 @@ from snapshotter.settings.config import settings
 
 # Redis key for cached block details at a specific height
 cached_block_details_at_height = (
-    'uniswap:blockDetail:' + settings.namespace + ':blockDetailZset'
+    'block_cache:' + settings.namespace
 )
 
 # Redis key for the last processed epoch by the epoch detector
@@ -39,9 +39,6 @@ rpc_get_transaction_receipt_calls = (
 
 # Redis key for cached epoch process report
 epoch_process_report_cached_key = 'epochProcessReport'
-
-# Redis key for snapshotter active status
-active_status_key = f'snapshotterActiveStatus:{settings.namespace}'
 
 
 def project_finalized_data_zset(project_id):

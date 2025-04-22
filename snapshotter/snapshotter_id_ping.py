@@ -6,7 +6,6 @@ from web3 import Web3
 from snapshotter.settings.config import settings
 from snapshotter.utils.file_utils import read_json_file
 from snapshotter.utils.redis.redis_conn import RedisPoolCache
-from snapshotter.utils.redis.redis_keys import active_status_key
 from snapshotter.utils.rpc import RpcHelper
 
 
@@ -61,10 +60,9 @@ async def main():
     if slot_id_snapshotter_addr == Web3.to_checksum_address(settings.instance_id):
         print('Snapshotter identity found in slot ID mapping...')
         # Set active status in Redis
-        await redis_conn.set(
-            active_status_key,
-            int(True),
-        )
+    else:
+        print('Snapshotter identity not found in slot ID mapping...')
+        sys.exit(1)
 
 if __name__ == '__main__':
     asyncio.run(main())

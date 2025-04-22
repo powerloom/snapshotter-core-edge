@@ -62,14 +62,9 @@ async def get_block_details_in_block_range(
         # Process and format block details
         for block_num, block_details in enumerate(rpc_batch_block_details, start=from_block):
             block_details = block_details.get('result')
-            formatted_details = {
-                'timestamp': int(block_details.get('timestamp', None), 16),
-                'number': int(block_details.get('number', None), 16),
-                'transactions': block_details.get('transactions', []),
-            }
 
-            block_details_dict[block_num] = formatted_details
-            redis_cache_mapping[json.dumps(formatted_details)] = int(block_num)
+            block_details_dict[block_num] = block_details
+            redis_cache_mapping[json.dumps(block_details)] = int(block_num)
 
         # Cache new block details and prune old ones
         source_chain_epoch_size = int(await redis_conn.get(source_chain_epoch_size_key()))

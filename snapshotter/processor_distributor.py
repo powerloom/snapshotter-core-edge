@@ -1,12 +1,12 @@
 import asyncio
 import importlib
+import json
 import multiprocessing
 import queue
 import resource
 import sys
 import threading
 import time
-import json
 from collections import defaultdict
 from functools import lru_cache
 from signal import SIGINT
@@ -24,12 +24,12 @@ import uvloop
 from dramatiq.brokers.redis import RedisBroker
 from dramatiq.middleware import AsyncIO
 from dramatiq.worker import Worker
+from eth_utils.address import to_checksum_address
+from eth_utils.crypto import keccak
 from httpx import Client as SyncClient
 from httpx import HTTPTransport
 from httpx import Limits
 from httpx import Timeout
-from eth_utils.address import to_checksum_address
-from eth_utils.crypto import keccak
 from redis import asyncio as aioredis
 from web3 import Web3
 
@@ -55,7 +55,6 @@ from snapshotter.utils.models.message_models import PowerloomSnapshotProcessMess
 from snapshotter.utils.models.message_models import PowerloomSnapshotSubmittedMessage
 from snapshotter.utils.models.settings_model import AggregateOn
 from snapshotter.utils.redis.redis_conn import RedisPoolCache
-from snapshotter.utils.redis.redis_keys import active_status_key
 from snapshotter.utils.redis.redis_keys import epoch_id_epoch_released_key
 from snapshotter.utils.redis.redis_keys import epoch_id_project_to_state_mapping
 from snapshotter.utils.redis.redis_keys import project_finalized_data_zset
@@ -430,7 +429,7 @@ class ProcessorDistributor(multiprocessing.Process):
                     self._distribute_callbacks_snapshotting(
                         project_type, msg_obj,
                     ),
-                    name=f'distribute_snapshotting_{project_type}_epoch_{msg_obj.epochId}'
+                    name=f'distribute_snapshotting_{project_type}_epoch_{msg_obj.epochId}',
                 )
                 task_tuple = (current_time, task)
                 self._active_tasks.add(task_tuple)
@@ -442,7 +441,7 @@ class ProcessorDistributor(multiprocessing.Process):
             self._preloader_waiter(
                 epoch=msg_obj,
             ),
-            name=f'preloader_waiter_epoch_{msg_obj.epochId}'
+            name=f'preloader_waiter_epoch_{msg_obj.epochId}',
         )
         preloader_task_tuple = (current_time, preloader_task)
         self._active_tasks.add(preloader_task_tuple)
@@ -463,7 +462,7 @@ class ProcessorDistributor(multiprocessing.Process):
         current_time = time.time()
         task = asyncio.create_task(
             self._exec_preloaders(msg_obj=msg_obj),
-            name=f'exec_preloaders_epoch_{msg_obj.epochId}'
+            name=f'exec_preloaders_epoch_{msg_obj.epochId}',
         )
         task_tuple = (current_time, task)
         self._active_tasks.add(task_tuple)
@@ -851,7 +850,7 @@ class ProcessorDistributor(multiprocessing.Process):
             current_time = time.time()
             task = asyncio.create_task(
                 self._cleanup_older_epoch_status(epoch_msg.epochId),
-                name=f'cleanup_epoch_{epoch_msg.epochId - 30}'
+                name=f'cleanup_epoch_{epoch_msg.epochId - 30}',
             )
             task_tuple = (current_time, task)
             self._active_tasks.add(task_tuple)
@@ -984,7 +983,7 @@ class ProcessorDistributor(multiprocessing.Process):
         """
 
         if (int(time.time()) - self.last_notification_time) >= self.notification_cooldown and \
-            (settings.reporting.telegram_url and settings.reporting.telegram_chat_id):
+                (settings.reporting.telegram_url and settings.reporting.telegram_chat_id):
 
             if not self._telegram_httpx_client:
                 self._logger.error('Telegram client not initialized')
