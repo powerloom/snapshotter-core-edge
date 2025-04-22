@@ -13,16 +13,24 @@ from typing import Union
 
 import dramatiq
 from dramatiq.brokers.redis import RedisBroker
+from httpx import AsyncClient
+from httpx import AsyncHTTPTransport
+from httpx import Limits
+from httpx import Timeout
 from redis import asyncio as aioredis
 from web3 import Web3
 
 from snapshotter.settings.config import settings
+from snapshotter.utils.callback_helpers import send_telegram_notification_async
 from snapshotter.utils.default_logger import default_logger
 from snapshotter.utils.exceptions import GenericExitOnSignal
 from snapshotter.utils.file_utils import read_json_file
 from snapshotter.utils.models.data_models import EpochReleasedEvent
 from snapshotter.utils.models.data_models import SnapshotBatchSubmittedEvent
 from snapshotter.utils.models.data_models import SnapshotFinalizedEvent
+from snapshotter.utils.models.data_models import SnapshotterIssue
+from snapshotter.utils.models.data_models import SnapshotterReportState
+from snapshotter.utils.models.data_models import TelegramEpochProcessingReportMessage
 from snapshotter.utils.redis.redis_conn import RedisPoolCache
 from snapshotter.utils.redis.redis_keys import event_detector_last_processed_block
 from snapshotter.utils.redis.redis_keys import last_epoch_detected_epoch_id_key
@@ -87,6 +95,7 @@ class EventDetectorProcess(multiprocessing.Process):
 
     _redis_conn: aioredis.Redis
     _redis_pool: RedisPoolCache
+    _telegram_httpx_client: AsyncClient
 
     def __init__(self, name, **kwargs):
         """
@@ -112,9 +121,12 @@ class EventDetectorProcess(multiprocessing.Process):
         self._logger = None
         self.contract_address = settings.protocol_state.address
 
-        self._last_reporting_service_ping = 0
-        self._last_reporting_message_sent = 0
         self._simulation_completed = False
+
+        # Initialize reporting and notification related attributes
+        self._telegram_httpx_client = None
+        self.notification_cooldown = settings.reporting.min_reporting_interval
+        self.last_notification_time = 0
 
     async def _wait_for_simulation_completion(self):
         """
@@ -320,6 +332,10 @@ class EventDetectorProcess(multiprocessing.Process):
                     settings.rpc.polling_interval,
                 )
 
+                await self._send_telegram_epoch_processing_notification(
+                    error=e,
+                )
+
                 await asyncio.sleep(settings.rpc.polling_interval)
                 continue
 
@@ -364,6 +380,11 @@ class EventDetectorProcess(multiprocessing.Process):
                         e,
                         settings.rpc.polling_interval,
                     )
+
+                    await self._send_telegram_epoch_processing_notification(
+                        error=e,
+                    )
+
                     await asyncio.sleep(settings.rpc.polling_interval)
                     continue
 
@@ -385,6 +406,11 @@ class EventDetectorProcess(multiprocessing.Process):
                         e,
                         settings.rpc.polling_interval,
                     )
+
+                    await self._send_telegram_epoch_processing_notification(
+                        error=e,
+                    )
+
                     await asyncio.sleep(settings.rpc.polling_interval)
                     continue
 
@@ -413,6 +439,73 @@ class EventDetectorProcess(multiprocessing.Process):
         """
         await self._anchor_rpc_helper.init()
         await self._source_rpc_helper.init()
+
+    async def _init_httpx_client(self):
+        """
+        Initializes the httpx client for sending Telegram notifications.
+        """
+        # Initialize HTTP client for Telegram notifications
+        self._telegram_httpx_client = AsyncClient(
+            base_url=settings.reporting.telegram_url,
+            timeout=Timeout(timeout=5.0),
+            follow_redirects=False,
+            transport=AsyncHTTPTransport(
+                limits=Limits(
+                    max_connections=100,
+                    max_keepalive_connections=50,
+                    keepalive_expiry=None,
+                ),
+            ),
+        )
+
+    async def _send_telegram_epoch_processing_notification(
+        self,
+        error: Exception,
+    ):
+        """
+        Send a Telegram notification about epoch processing errors.
+
+        This method constructs and sends a detailed error notification via Telegram
+        when epoch processing encounters issues. The notification includes instance
+        details, error information, and current status.
+
+        Args:
+            error (Exception): The error that occurred during processing
+
+        Raises:
+            Various exceptions possible during HTTP requests
+        """
+
+        if (int(time.time()) - self.last_notification_time) >= self.notification_cooldown and \
+            (settings.reporting.telegram_url and settings.reporting.telegram_chat_id):
+
+            if not self._telegram_httpx_client:
+                self._logger.error('Telegram client not initialized')
+                return
+
+            try:
+                telegram_message = TelegramEpochProcessingReportMessage(
+                    chatId=settings.reporting.telegram_chat_id,
+                    slotId=settings.slot_id,
+                    issue=SnapshotterIssue(
+                        instanceID=settings.instance_id,
+                        issueType=SnapshotterReportState.UNHEALTHY_EPOCH_PROCESSING.value,
+                        projectID='',
+                        epochId='',
+                        timeOfReporting=str(time.time()),
+                        extra=json.dumps({'issueDetails': f'Error : {error}'}),
+                    ),
+                )
+
+                await send_telegram_notification_async(
+                    client=self._telegram_httpx_client,
+                    message=telegram_message,
+                    redis_conn=self._redis_conn,
+                )
+
+                self.last_notification_time = int(time.time())
+            except Exception as e:
+                self._logger.error('Error sending Telegram notification: {}', e)
 
     @redis_cleanup
     def run(self):
@@ -451,6 +544,9 @@ class EventDetectorProcess(multiprocessing.Process):
 
         # Initialize the event detector
         self.ev_loop.run_until_complete(self.init())
+
+        # Initialize the httpx client
+        self.ev_loop.run_until_complete(self._init_httpx_client())
 
         # Check if simulation is completed
         if not self._simulation_completed:

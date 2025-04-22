@@ -2,49 +2,42 @@
 
 # check if .env exists
 if [ ! -f .env ]; then
-    echo ".env file not found, please create one!"
-    echo "creating .env file..."
+    echo "🟡 .env file not found, creating one..."
     cp env.example .env
 
-    # ask user for SOURCE_RPC_URL and replace it in .env
-    if [ -z "$SOURCE_RPC_URL" ]; then
-        read -p "Enter SOURCE_RPC_URL: " SOURCE_RPC_URL
-        sed -i'.backup' "s#<source-rpc-url>#$SOURCE_RPC_URL#" .env
+    # Prompt for required values that were previously handled here
+    read -p "Enter SOURCE_RPC_URL: " SOURCE_RPC_URL_INPUT
+    read -p "Enter SIGNER_ACCOUNT_ADDRESS: " SIGNER_ACCOUNT_ADDRESS_INPUT
+    read -s -p "Enter SIGNER_ACCOUNT_PRIVATE_KEY: " SIGNER_ACCOUNT_PRIVATE_KEY_INPUT
+    echo # Add a newline after the silent private key input
+    read -p "Enter Your SLOT_ID (NFT_ID): " SLOT_ID_INPUT
+    read -p "Enter Your TELEGRAM_CHAT_ID (Optional, leave blank to skip.): " TELEGRAM_CHAT_ID_INPUT
+
+    # Update env file with collected values
+    sed -i".backup" "s#<source-rpc-url>#$SOURCE_RPC_URL_INPUT#" ".env"
+    sed -i".backup" "s#<signer-account-address>#$SIGNER_ACCOUNT_ADDRESS_INPUT#" ".env"
+    sed -i".backup" "s#<signer-account-private-key>#$SIGNER_ACCOUNT_PRIVATE_KEY_INPUT#" ".env"
+    sed -i".backup" "s#<slot-id>#$SLOT_ID_INPUT#" ".env"
+    # Handle potentially empty TELEGRAM_CHAT_ID
+    if [ -z "$TELEGRAM_CHAT_ID_INPUT" ]; then
+        # If empty, remove the placeholder line or just the placeholder depending on desired outcome
+        # This example removes just the placeholder, leaving the variable empty
+        sed -i".backup" "s#<telegram-chat-id>##" ".env"
+    else
+        sed -i".backup" "s#<telegram-chat-id>#$TELEGRAM_CHAT_ID_INPUT#" ".env"
     fi
 
-    # ask user for SIGNER_ACCOUNT_ADDRESS and replace it in .env
-    if [ -z "$SIGNER_ACCOUNT_ADDRESS" ]; then
-        read -p "Enter SIGNER_ACCOUNT_ADDRESS: " SIGNER_ACCOUNT_ADDRESS
-        sed -i'.backup' "s#<signer-account-address>#$SIGNER_ACCOUNT_ADDRESS#" .env
-    fi
-
-    # ask user for SIGNER_ACCOUNT_PRIVATE_KEY and replace it in .env
-    if [ -z "$SIGNER_ACCOUNT_PRIVATE_KEY" ]; then
-        read -p "Enter SIGNER_ACCOUNT_PRIVATE_KEY: " SIGNER_ACCOUNT_PRIVATE_KEY
-        sed -i'.backup' "s#<signer-account-private-key>#$SIGNER_ACCOUNT_PRIVATE_KEY#" .env
-    fi
-
-    # ask user for SLOT_ID and replace it in .env
-    if [ -z "$SLOT_ID" ]; then
-        read -p "Enter Your SLOT_ID (NFT_ID): " SLOT_ID
-        sed -i'.backup' "s#<slot-id>#$SLOT_ID#" .env
-    fi
-
-    # ask user for TELEGRAM_CHAT_ID and replace it in .env
-    if [ -z "$TELEGRAM_CHAT_ID" ]; then
-        read -p "Enter Your TELEGRAM_CHAT_ID (Optional, leave blank to skip.): " TELEGRAM_CHAT_ID
-        sed -i'.backup' "s#<telegram-chat-id>#$TELEGRAM_CHAT_ID#" .env
-    fi
+    echo "🟢 .env file created and populated with required inputs."
 fi
 
 source .env
 
 if [ -z "$OVERRIDE_DEFAULTS" ]; then
     echo "setting default values..."
-    export PROST_RPC_URL="https://rpc-prost1m.powerloom.io"
-    export PROTOCOL_STATE_CONTRACT="0xE88E5f64AEB483d7057645326AdDFA24A3B312DF"
-    export DATA_MARKET_CONTRACT="0x0C2E22fe7526fAeF28E7A58c84f8723dEFcE200c"
-    export PROST_CHAIN_ID="11169"
+    export PROST_RPC_URL="https://rpc-v2.powerloom.network"
+    export PROTOCOL_STATE_CONTRACT="0x000AA7d3a6a2556496f363B59e56D9aA1881548F"
+    export DATA_MARKET_CONTRACT="0x21cb57C1f2352ad215a463DD867b838749CD3b8f"
+    export PROST_CHAIN_ID="7869"
 fi
 
 
@@ -71,9 +64,7 @@ echo "Found SIGNER ACCOUNT ADDRESS ${SIGNER_ACCOUNT_ADDRESS}"
 [ -n "$PROST_RPC_URL" ] && echo "Found PROST_RPC_URL ${PROST_RPC_URL}"
 [ -n "$PROST_CHAIN_ID" ] && echo "Found PROST_CHAIN_ID ${PROST_CHAIN_ID}"
 [ -n "$IPFS_URL" ] && echo "Found IPFS_URL ${IPFS_URL}"
-[ -n "$PROTOCOL_STATE_CONTRACT" ] && echo "Found PROTOCOL_STATE_CONTRACT ${PROTOCOL_STATE_CONTRACT}"
-[ -n "$SLACK_REPORTING_URL" ] && echo "Found SLACK_REPORTING_URL ${SLACK_REPORTING_URL}"
-[ -n "$POWERLOOM_REPORTING_URL" ] && echo "Found POWERLOOM_REPORTING_URL ${POWERLOOM_REPORTING_URL}"
+[ -n "$PROTOCOL_STATE_CONTRACT" ] && echo "Found PROTOCOL_STATE_CONTRACT ${PROTOCOL_STATE_CONTRACT}" 
 [ -n "$IPFS_S3_CONFIG_ENABLED" ] && echo "Found IPFS_S3_CONFIG_ENABLED ${IPFS_S3_CONFIG_ENABLED}"
 [ -n "$IPFS_S3_CONFIG_ENDPOINT_URL" ] && echo "Found IPFS_S3_CONFIG_ENDPOINT_URL ${IPFS_S3_CONFIG_ENDPOINT_URL}"
 [ -n "$IPFS_S3_CONFIG_BUCKET_NAME" ] && echo "Found IPFS_S3_CONFIG_BUCKET_NAME ${IPFS_S3_CONFIG_BUCKET_NAME}"

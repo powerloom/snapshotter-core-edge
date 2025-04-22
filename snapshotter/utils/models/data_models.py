@@ -236,23 +236,6 @@ class ProjectStatus(BaseModel):
     missedSubmissions: int = 0
 
 
-class SnapshotterPing(BaseModel):
-    """
-    Ping message from a snapshotter.
-    """
-    instanceID: str
-
-
-class SnapshotterStatus(BaseModel):
-    """
-    Overall status of a snapshotter.
-    """
-    totalSuccessfulSubmissions: int = 0
-    totalIncorrectSubmissions: int = 0
-    totalMissedSubmissions: int = 0
-    projects: List[ProjectStatus]
-
-
 class SnapshotterMissedSubmission(BaseModel):
     """
     Details of a missed submission by a snapshotter.
@@ -374,10 +357,14 @@ class SnapshotBatchSubmittedEvent(EventBase):
     transactionHash: str
 
 
-class TelegramEpochProcessingReportMessage(BaseModel):
-    """
-    Message model for Telegram epoch processing report.
-    """
+class TelegramMessage(BaseModel):
     chatId: str
     slotId: int
+
+
+class TelegramEpochProcessingReportMessage(TelegramMessage):
+    issue: SnapshotterIssue
+
+
+class TelegramSnapshotterCoreReportMessage(TelegramMessage):
     issue: SnapshotterIssue

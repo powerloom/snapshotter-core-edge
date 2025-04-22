@@ -40,13 +40,14 @@ from tenacity import wait_random_exponential
 from web3 import Web3
 
 from snapshotter.settings.config import settings
-from snapshotter.utils.callback_helpers import send_failure_notifications_async
+from snapshotter.utils.callback_helpers import send_telegram_notification_async
 from snapshotter.utils.default_logger import default_logger
 from snapshotter.utils.file_utils import read_json_file
 from snapshotter.utils.models.data_models import SnapshotterIssue
 from snapshotter.utils.models.data_models import SnapshotterReportState
 from snapshotter.utils.models.data_models import SnapshotterStates
 from snapshotter.utils.models.data_models import SnapshotterStateUpdate
+from snapshotter.utils.models.data_models import TelegramSnapshotterCoreReportMessage
 from snapshotter.utils.models.data_models import UnfinalizedSnapshot
 from snapshotter.utils.models.message_models import AggregateBase
 from snapshotter.utils.models.message_models import PowerloomCalculateAggregateMessage
@@ -152,6 +153,7 @@ class GenericAsyncWorker(multiprocessing.Process):
     _ipfs_singleton: AsyncIPFSClientSingleton
     _ipfs_writer_client: AsyncIPFSClient
     _ipfs_reader_client: AsyncIPFSClient
+    _telegram_httpx_client: AsyncClient
 
     def __init__(self, name, **kwargs):
         """
@@ -182,6 +184,11 @@ class GenericAsyncWorker(multiprocessing.Process):
         self._last_stream_close_time = 0
         self._stream_lifetime = 30  # Close stream every 30 seconds
         self._event_loop = None
+
+        # Initialize notification related attributes
+        self._telegram_httpx_client = None
+        self._last_notification_time = 0
+        self._notification_cooldown = settings.reporting.min_reporting_interval
 
     def _signal_handler(self, signum, frame):
         """
@@ -305,19 +312,7 @@ class GenericAsyncWorker(multiprocessing.Process):
                 'Exception uploading snapshot to IPFS for epoch {}: {}, Error: {},'
                 'sending failure notifications', epoch, snapshot, e,
             )
-            notification_message = SnapshotterIssue(
-                instanceID=settings.instance_id,
-                issueType=SnapshotterReportState.MISSED_SNAPSHOT.value,
-                projectID=project_id,
-                epochId=str(epoch.epochId),
-                timeOfReporting=str(time.time()),
-                extra=json.dumps({'issueDetails': f'Error : {e}'}),
-            )
-            await send_failure_notifications_async(
-                client=self._client,
-                message=notification_message,
-                redis_conn=self._redis_conn,
-            )
+            await self._send_failure_notifications(error=e, epoch_id=epoch.epochId, project_id=project_id)
         else:
             # Add to zset of unfinalized snapshot CIDs
             unfinalized_entry = UnfinalizedSnapshot(
@@ -374,6 +369,7 @@ class GenericAsyncWorker(multiprocessing.Process):
                         ).json(),
                     },
                 )
+                await self._send_failure_notifications(error=e, epoch_id=epoch.epochId, project_id=project_id)
             else:
                 await self._redis_conn.hset(
                     name=epoch_id_project_to_state_mapping(
@@ -422,19 +418,19 @@ class GenericAsyncWorker(multiprocessing.Process):
 
     async def _init_httpx_client(self):
         """
-        Initializes the HTTPX client and transport objects for making HTTP requests.
+        Initializes the Telegram client.
         """
-        self._async_transport = AsyncHTTPTransport(
-            limits=Limits(
-                max_connections=200,
-                max_keepalive_connections=50,
-                keepalive_expiry=None,
-            ),
-        )
-        self._client = AsyncClient(
+        self._telegram_httpx_client = AsyncClient(
+            base_url=settings.reporting.telegram_url,
             timeout=Timeout(timeout=5.0),
             follow_redirects=False,
-            transport=self._async_transport,
+            transport=AsyncHTTPTransport(
+                limits=Limits(
+                    max_connections=100,
+                    max_keepalive_connections=50,
+                    keepalive_expiry=None,
+                ),
+            ),
         )
 
     @asynccontextmanager
@@ -545,6 +541,7 @@ class GenericAsyncWorker(multiprocessing.Process):
                 self._logger.error(
                     f'Probable exception in _send_submission_to_collector while sending snapshot to local collector {msg}: {e}',
                 )
+                raise
         else:
             self._logger.info('In _send_submission_to_collector successfully sent snapshot to local collector {msg}')
 
@@ -656,6 +653,54 @@ class GenericAsyncWorker(multiprocessing.Process):
             asyncio.create_task(self._cleanup_tasks())
 
         self._initialized = True
+
+    async def _send_failure_notifications(
+        self,
+        error: Exception,
+        epoch_id: str,
+        project_id: str,
+    ):
+        """
+        Sends failure notifications for missed snapshots.
+
+        Args:
+            error (Exception): The error that occurred.
+            epoch_id (str): The ID of the epoch that missed the snapshot.
+            project_id (str): The ID of the project that missed the snapshot.
+        """
+        if (int(time.time()) - self._last_notification_time) >= self._notification_cooldown and \
+            (settings.reporting.telegram_url and settings.reporting.telegram_chat_id):
+
+            if not self._telegram_httpx_client:
+                self._logger.error('Telegram client not initialized')
+                return
+
+            try:
+                notification_message = SnapshotterIssue(
+                    instanceID=settings.instance_id,
+                    issueType=SnapshotterReportState.MISSED_SNAPSHOT.value,
+                    projectID=project_id,
+                    epochId=str(epoch_id),
+                    timeOfReporting=str(time.time()),
+                    extra=json.dumps({'issueDetails': f'Error : {error}'}),
+                )
+
+                telegram_message = TelegramSnapshotterCoreReportMessage(
+                    chatId=settings.reporting.telegram_chat_id,
+                    slotId=settings.slot_id,
+                    issue=notification_message,
+                )
+
+                await send_telegram_notification_async(
+                    client=self._telegram_httpx_client,
+                    message=telegram_message,
+                    redis_conn=self._redis_conn,
+                )
+
+                self._last_notification_time = int(time.time())
+
+            except Exception as e:
+                self._logger.error(f'Error sending failure notifications: {e}')
 
     async def _cleanup_tasks(self):
         """

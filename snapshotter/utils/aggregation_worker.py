@@ -1,7 +1,6 @@
 import asyncio
 import hashlib
 import importlib
-import json
 import resource
 import threading
 import time
@@ -21,11 +20,8 @@ from pydantic import ValidationError
 from snapshotter.settings.config import aggregator_config
 from snapshotter.settings.config import projects_config
 from snapshotter.settings.config import settings
-from snapshotter.utils.callback_helpers import send_failure_notifications_async
 from snapshotter.utils.default_logger import default_logger
 from snapshotter.utils.generic_worker import GenericAsyncWorker
-from snapshotter.utils.models.data_models import SnapshotterIssue
-from snapshotter.utils.models.data_models import SnapshotterReportState
 from snapshotter.utils.models.data_models import SnapshotterStates
 from snapshotter.utils.models.data_models import SnapshotterStateUpdate
 from snapshotter.utils.models.message_models import PowerloomCalculateAggregateMessage
@@ -201,19 +197,6 @@ class AggregationAsyncWorker(GenericAsyncWorker):
                 'Exception processing callback for epoch: {}, Error: {},'
                 'sending failure notifications', msg_obj, e,
             )
-            notification_message = SnapshotterIssue(
-                instanceID=settings.instance_id,
-                issueType=SnapshotterReportState.MISSED_SNAPSHOT.value,
-                projectID=project_id,
-                epochId=str(msg_obj.epochId),
-                timeOfReporting=str(time.time()),
-                extra=json.dumps({'issueDetails': f'Error : {e}'}),
-            )
-            await send_failure_notifications_async(
-                client=self._client,
-                message=notification_message,
-                redis_conn=self._redis_conn,
-            )
 
             # Update Redis with failure state
             await self._redis_conn.hset(
@@ -238,19 +221,6 @@ class AggregationAsyncWorker(GenericAsyncWorker):
                             status='failed', timestamp=int(time.time()), error='Empty snapshot',
                         ).json(),
                     },
-                )
-                notification_message = SnapshotterIssue(
-                    instanceID=settings.instance_id,
-                    issueType=SnapshotterReportState.MISSED_SNAPSHOT.value,
-                    projectID=project_id,
-                    epochId=str(msg_obj.epochId),
-                    timeOfReporting=str(time.time()),
-                    extra=json.dumps({'issueDetails': 'Error : Empty snapshot'}),
-                )
-                await send_failure_notifications_async(
-                    client=self._client,
-                    message=notification_message,
-                    redis_conn=self._redis_conn,
                 )
             else:
                 # Handle successful snapshot case

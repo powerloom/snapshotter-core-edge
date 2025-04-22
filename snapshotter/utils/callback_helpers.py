@@ -1,11 +1,8 @@
 import asyncio
 import functools
-import time
 from abc import ABC
 from abc import ABCMeta
 from abc import abstractmethod
-from typing import Any
-from typing import Dict
 from typing import Union
 from urllib.parse import urljoin
 
@@ -17,11 +14,10 @@ from redis import asyncio as aioredis
 
 from snapshotter.settings.config import settings
 from snapshotter.utils.default_logger import default_logger
-from snapshotter.utils.models.data_models import SnapshotterIssue
 from snapshotter.utils.models.data_models import TelegramEpochProcessingReportMessage
+from snapshotter.utils.models.data_models import TelegramSnapshotterCoreReportMessage
 from snapshotter.utils.models.message_models import EpochBase
 from snapshotter.utils.models.message_models import PowerloomCalculateAggregateMessage
-from snapshotter.utils.models.message_models import PowerloomDelegateWorkerRequestMessage
 from snapshotter.utils.models.message_models import PowerloomSnapshotProcessMessage
 from snapshotter.utils.models.message_models import PowerloomSnapshotSubmittedMessage
 from snapshotter.utils.redis.redis_keys import callback_last_sent_by_issue
@@ -31,12 +27,12 @@ from snapshotter.utils.rpc import RpcHelper
 helper_logger = default_logger.bind(module='Callback|Helpers')
 
 
-def misc_notification_callback_result_handler(fut: asyncio.Future):
+def misc_notification_callback_result_handler(fut: asyncio.Task):
     """
-    Handles the result of a callback or notification.
+    Handles the result of a callback or notification task.
 
     Args:
-        fut (asyncio.Future): The future object representing the callback or notification.
+        fut (asyncio.Task): The task object representing the callback or notification.
 
     Returns:
         None
@@ -79,116 +75,117 @@ def sync_notification_callback_result_handler(f: functools.partial):
         helper_logger.debug('Callback or notification result:{}', result)
 
 
-async def send_failure_notifications_async(
+async def send_telegram_notification_async(
     client: AsyncClient,
-    message: SnapshotterIssue,
+    message: Union[TelegramEpochProcessingReportMessage, TelegramSnapshotterCoreReportMessage],
     redis_conn: aioredis.Redis,
 ):
     """
-    Sends failure notifications asynchronously to the configured reporting services.
+    Sends an asynchronous Telegram notification for reporting issues.
+
+    This function checks if Telegram reporting is configured, checks the minimum reporting interval via Redis,
+    and then sends the appropriate message based on its type (epoch processing issue or snapshotter issue).
 
     Args:
         client (AsyncClient): The async HTTP client to use for sending notifications.
-        message (SnapshotterIssue): The message to send as notification.
+        message (Union[TelegramEpochProcessingReportMessage, TelegramSnapshotterCoreReportMessage]): The message to send as a Telegram notification.
         redis_conn (aioredis.Redis): Redis connection for rate limiting.
 
     Returns:
         None
     """
+
+    if not settings.reporting.telegram_url or not settings.reporting.telegram_chat_id:
+        return
+
     # Check if the last notification was sent within the minimum reporting interval
-    caching_task = []
-    if settings.reporting.min_reporting_interval > 0:
+    issue_type = None
+    time_of_reporting = None
+    if isinstance(message, TelegramEpochProcessingReportMessage) or isinstance(message, TelegramSnapshotterCoreReportMessage):
+        issue_type = message.issue.issueType
+        time_of_reporting = message.issue.timeOfReporting
+
+    if issue_type and time_of_reporting and settings.reporting.min_reporting_interval > 0:
         last_sent_timestamp = await redis_conn.get(
-            callback_last_sent_by_issue(message.issueType),
+            callback_last_sent_by_issue(issue_type),
         )
-        if not last_sent_timestamp:
-            caching_task.append(
+        if last_sent_timestamp:
+            helper_logger.debug(
+                'Not sending Telegram notification for {} because the last notification was sent within the minimum reporting interval',
+                issue_type,
+            )
+            return
+        else:
+            # Set the timestamp for the current notification if not found
+            # We don't await this specifically, let it run in the background
+            asyncio.create_task(
                 redis_conn.set(
-                    name=callback_last_sent_by_issue(message.issueType),
-                    value=message.timeOfReporting,
+                    name=callback_last_sent_by_issue(issue_type),
+                    value=time_of_reporting,
                     ex=settings.reporting.min_reporting_interval,
                 ),
             )
-        else:
-            helper_logger.debug(
-                'Not sending failure notification for {} because the last notification was sent within the minimum reporting interval',
-                message.issueType,
-            )
-            return
 
-    notification_tasks = []
-    if settings.reporting.service_url:
-        f = asyncio.create_task(
-            client.post(
-                url=urljoin(settings.reporting.service_url, '/reportIssue'),
-                json=message.dict(),
-            ),
+    if isinstance(message, TelegramEpochProcessingReportMessage):
+        endpoint = '/reportEpochProcessingIssue'
+    elif isinstance(message, TelegramSnapshotterCoreReportMessage):
+        endpoint = '/reportSnapshotterCoreIssue'
+    else:
+        helper_logger.error(
+            f'Unsupported telegram message type: {type(message)} - message not sent',
         )
-        f.add_done_callback(misc_notification_callback_result_handler)
-        notification_tasks.append(f)
-    if settings.reporting.slack_url:
-        f = asyncio.create_task(
-            client.post(
-                url=settings.reporting.slack_url,
-                json=message.dict(),
-            ),
-        )
-        f.add_done_callback(misc_notification_callback_result_handler)
-        notification_tasks.append(f)
+        return
 
-    if notification_tasks:
-        notification_tasks = caching_task + notification_tasks
-        await asyncio.gather(*notification_tasks)
+    f = asyncio.create_task(
+        client.post(
+            url=urljoin(settings.reporting.telegram_url, endpoint),
+            json=message.dict(),
+        ),
+    )
+    f.add_done_callback(misc_notification_callback_result_handler)
 
 
-def send_failure_notifications_sync(
+def send_telegram_notification_sync(
     client: SyncClient,
-    message: SnapshotterIssue,
-    redis_conn: aioredis.Redis,
+    message: Union[TelegramEpochProcessingReportMessage, TelegramSnapshotterCoreReportMessage],
 ):
     """
-    Sends failure notifications synchronously to the reporting service, Slack, and Telegram.
+    Sends a synchronous Telegram notification for reporting issues using the sync_notification_callback_result_handler.
+
+    This function checks if Telegram reporting is configured, determines the correct endpoint,
+    and then delegates the actual HTTP POST call and result/exception handling to
+    sync_notification_callback_result_handler.
+    Rate limiting is NOT handled by this function and should be implemented by the caller if needed.
 
     Args:
-        client (SyncClient): The HTTP client to use for sending notifications.
-        message (SnapshotterIssue): The message to send as notification.
+        client (SyncClient): The sync HTTP client to use for sending notifications.
+        message (Union[TelegramEpochProcessingReportMessage, TelegramSnapshotterCoreReportMessage]): The message to send as a Telegram notification.
 
     Returns:
         None
     """
-    # Send notification to the reporting service if configured
-    if settings.reporting.service_url:
-        f = functools.partial(
-            client.post,
-            url=urljoin(settings.reporting.service_url, '/reportIssue'),
-            json=message.dict(),
-        )
-        sync_notification_callback_result_handler(f)
 
-    # Send notification to Slack if configured
-    if settings.reporting.slack_url:
-        f = functools.partial(
-            client.post,
-            url=settings.reporting.slack_url,
-            json=message.dict(),
-        )
-        sync_notification_callback_result_handler(f)
+    if not settings.reporting.telegram_url or not settings.reporting.telegram_chat_id:
+        helper_logger.debug('Telegram reporting not configured, skipping notification.')
+        return
 
-    # Send notification to Telegram if configured
-    if settings.reporting.telegram_url and settings.reporting.telegram_chat_id:
-        reporting_message = TelegramEpochProcessingReportMessage(
-            chatId=settings.reporting.telegram_chat_id,
-            slotId=settings.slot_id,
-            issue=message,
+    if isinstance(message, TelegramEpochProcessingReportMessage):
+        endpoint = '/reportEpochProcessingIssue'
+    elif isinstance(message, TelegramSnapshotterCoreReportMessage):
+        endpoint = '/reportSnapshotterCoreIssue'
+    else:
+        helper_logger.error(
+            f'Unsupported telegram message type: {type(message)} - message not sent',
         )
+        return
 
-        f = functools.partial(
-            client.post,
-            url=urljoin(settings.reporting.telegram_url, '/reportEpochProcessingIssue'),
-            json=reporting_message.dict(),
-        )
-        sync_notification_callback_result_handler(f)
+    f = functools.partial(
+        client.post,
+        url=urljoin(settings.reporting.telegram_url, endpoint),
+        json=message.dict(),
+    )
 
+    sync_notification_callback_result_handler(f)
 
 class GenericProcessorSnapshot(ABC):
     """
