@@ -47,49 +47,6 @@ if [ -z "$OVERRIDE_DEFAULTS" ]; then
     export PROST_CHAIN_ID="11169"
 fi
 
-export DOCKER_NETWORK_NAME="snapshotter-lite-v2-${SLOT_ID}"
-# Use 172.18.0.0/16 as the base, which is within Docker's default pool
-if [ -z "$SUBNET_THIRD_OCTET" ]; then
-    SUBNET_THIRD_OCTET=1
-    echo "SUBNET_THIRD_OCTET not found in .env, setting to default value ${SUBNET_THIRD_OCTET}"
-fi
-export DOCKER_NETWORK_SUBNET="172.18.${SUBNET_THIRD_OCTET}.0/24"
-
-echo "Selected DOCKER_NETWORK_NAME: ${DOCKER_NETWORK_NAME}"
-echo "Selected DOCKER_NETWORK_SUBNET: ${DOCKER_NETWORK_SUBNET}"
-
-# Check if the first argument is "test"
-if [ "$1" = "test" ]; then
-    echo "Running subnet calculation tests..."
-
-    # Test function for subnet calculation
-    test_subnet_calculation() {
-        local test_slot_id=$1
-        local expected_third_octet=$2
-
-        SLOT_ID=$test_slot_id
-        SUBNET_THIRD_OCTET=$((SLOT_ID % 256))
-        SUBNET="172.18.${SUBNET_THIRD_OCTET}.0/24"
-
-        if [ $SUBNET_THIRD_OCTET -eq $expected_third_octet ]; then
-            echo "Test passed for SLOT_ID $test_slot_id: $SUBNET"
-        else
-            echo "Test failed for SLOT_ID $test_slot_id: Expected 172.18.$expected_third_octet.0/24, got $SUBNET"
-        fi
-    }
-
-    # Run test cases
-    test_subnet_calculation 0 0
-    test_subnet_calculation 1 1
-    test_subnet_calculation 99 99
-    test_subnet_calculation 100 100
-    test_subnet_calculation 255 255
-    test_subnet_calculation 256 0
-
-    echo "Subnet calculation tests completed."
-    exit 0
-fi
-
 
 echo "testing before build..."
 
@@ -205,24 +162,6 @@ if [ "$STREAM_POOL_HEALTH_CHECK_INTERVAL" ]; then
 else
     export STREAM_POOL_HEALTH_CHECK_INTERVAL=600
     echo "STREAM_POOL_HEALTH_CHECK_INTERVAL not found in .env, setting to default value ${STREAM_POOL_HEALTH_CHECK_INTERVAL}";
-fi
-
-# check if ufw command exists
-if command -v ufw &> /dev/null; then
-    # delete old blanket allow rule
-    ufw delete allow $LOCAL_COLLECTOR_PORT &> /dev/null
-    if ufw allow from $DOCKER_NETWORK_SUBNET to any port $LOCAL_COLLECTOR_PORT; then
-        echo "ufw allow rule added for local collector port ${LOCAL_COLLECTOR_PORT} to allow connections from ${DOCKER_NETWORK_SUBNET}."
-    else
-        echo "ufw firewall allow rule could not be added for local collector port ${LOCAL_COLLECTOR_PORT}"
-        echo "Please attempt to add it manually with the following command with sudo privileges:"
-        echo "sudo ufw allow from $DOCKER_NETWORK_SUBNET to any port $LOCAL_COLLECTOR_PORT"
-        echo "Then run ./build.sh again."
-        exit 1
-    fi
-else
-    echo "ufw command not found, skipping firewall rule addition for local collector port ${LOCAL_COLLECTOR_PORT}."
-    echo "If you are on a Linux VPS, please ensure that the port is open for connections from ${DOCKER_NETWORK_SUBNET} manually to ${LOCAL_COLLECTOR_PORT}."
 fi
 
 # Get the first command line argument

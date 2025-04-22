@@ -2,11 +2,6 @@
 
 source .env
 
-# Calculate subnet values based on SLOT_ID
-SUBNET_SECOND_OCTET=$((16 + (SLOT_ID / 256) % 240))
-SUBNET_THIRD_OCTET=$((SLOT_ID % 256))
-export DOCKER_NETWORK_NAME="snapshotter-core-${SLOT_ID}"
-export DOCKER_NETWORK_SUBNET="172.${SUBNET_SECOND_OCTET}.${SUBNET_THIRD_OCTET}.0/24"
 
 if [ "$DEVMODE" != "true" ]; then
 
@@ -18,8 +13,6 @@ if [ "$DEVMODE" != "true" ]; then
         export PROST_CHAIN_ID="11169"
     fi
 
-    export DOCKER_NETWORK_NAME="snapshotter-core-${SLOT_ID}"
-    export DOCKER_NETWORK_SUBNET="172.${SUBNET_SECOND_OCTET}.${SUBNET_THIRD_OCTET}.0/24"
 fi
 
 echo "testing before build..."
@@ -38,15 +31,6 @@ if [ -z "$SIGNER_ACCOUNT_PRIVATE_KEY" ]; then
     echo "SIGNER_ACCOUNT_PRIVATE_KEY not found, please set this in your .env!"
     exit 1
 fi
-
-if [ -z "$DOCKER_NETWORK_SUBNET" ]; then
-    echo "DOCKER_NETWORK_SUBNET not found, please set this in your .env!"
-    exit 1
-fi
-
-echo "DOCKER NETWORK SUBNET: ${DOCKER_NETWORK_SUBNET}"
-echo "DOCKER NETWORK NAME: ${DOCKER_NETWORK_NAME}"
-
 echo "Found SOURCE RPC URL ${SOURCE_RPC_URL}"
 echo "Found SIGNER ACCOUNT ADDRESS ${SIGNER_ACCOUNT_ADDRESS}"
 

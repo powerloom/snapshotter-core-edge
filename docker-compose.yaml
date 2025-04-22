@@ -49,9 +49,6 @@ x-snapshotter-base: &snapshotter-base
   extra_hosts:
     - "host.docker.internal:host-gateway"
   restart: unless-stopped
-  networks:
-    - custom_network
-
 
 services:
 
@@ -60,8 +57,6 @@ services:
     environment:
       - DEFAULT_RATE_LIMIT=${DEFAULT_RATE_LIMIT:-1000}
     command: poetry run uvicorn app:app --host 0.0.0.0 --port 8000
-    networks:
-      - custom_network
   # Local Collector Service
   snapshotter-local-collector:
     image: ${SNAPSHOTTER_COLLECTOR_IMAGE:-ghcr.io/powerloom/snapshotter-lite-local-collector:dockerify}
@@ -95,8 +90,6 @@ services:
       - MAX_CONCURRENT_WRITES=${MAX_CONCURRENT_WRITES:-10}
       - STREAM_POOL_HEALTH_CHECK_INTERVAL=${STREAM_POOL_HEALTH_CHECK_INTERVAL:-60000}
       - DATA_MARKET_IN_REQUEST=${DATA_MARKET_IN_REQUEST:-false}
-    networks:
-      - custom_network
     restart: on-failure:10
     # Increase file descriptors limit for better performance
     ulimits:
@@ -181,8 +174,6 @@ services:
       - ./logs/snapshotter-periphery-blockfetcher:/app/logs
     restart: unless-stopped
     profiles: ["new"]
-    networks:
-      - custom_network
   tx_processor:
     # Build context pointing to the parent directory and then txprocessor
     build:
@@ -213,8 +204,6 @@ services:
       # Volume path relative to the docker-compose file location
       - ./logs/snapshotter-periphery-txprocessor:/app/logs
     restart: unless-stopped
-    networks:
-      - custom_network
   epoch_syncer:
     build:
       context: snapshotter-periphery-epochsyncer
@@ -251,8 +240,6 @@ services:
     volumes:
       - ./logs/snapshotter-periphery-epochsyncer:/app/logs
     restart: unless-stopped
-    networks:
-      - custom_network
   # IPFS Service with improved configuration
   ipfs:
     image: ipfs/kubo:master-latest
@@ -286,8 +273,6 @@ services:
       timeout: 10s
       retries: 3
     restart: unless-stopped
-    networks:
-      - custom_network
     ulimits:
       nofile:
         soft: 65536
@@ -308,18 +293,8 @@ services:
       retries: 3
       start_period: 30s
     restart: on-failure
-    networks:
-      - custom_network
     volumes:
       - ./redis_data:/data
     # Add optional password and memory configurations
     environment:
       - REDIS_PASSWORD
-
-networks:
-  custom_network:
-    name: ${DOCKER_NETWORK_NAME}
-    driver: bridge
-    ipam:
-      config:
-        - subnet: ${DOCKER_NETWORK_SUBNET}
