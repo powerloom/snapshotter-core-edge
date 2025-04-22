@@ -66,6 +66,14 @@ class SigningWorkStates(Enum):
     SLOT_COLLECTOR_SUBMISSION = 'SLOT_COLLECTOR_SUBMISSION'  # htable update in redis
 
 
+class ServiceNames(Enum):
+    """Enumeration of service names used in the application."""
+    SYSTEM_EVENT_DETECTOR = 'system_event_detector'
+    PROCESSOR_DISTRIBUTOR = 'processor_distributor'
+    SNAPSHOT_WORKER = 'snapshot_worker'
+    AGGREGATION_WORKER = 'aggregation_worker'
+
+
 class SigningWorkProjectsSnapshottedStateItem(BaseModel):
     """
     State item for snapshotted projects in signing work.

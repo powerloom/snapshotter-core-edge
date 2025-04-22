@@ -180,6 +180,7 @@ class Settings(BaseModel):
     rlimit: RLimit
     httpx: HTTPXConfig
     reporting: ReportingConfig
+    health_report_interval: int
     redis: Redis
     redis_reader: RedisReader
     logs: Logs

@@ -9,6 +9,7 @@ from signal import signal
 from signal import SIGQUIT
 from signal import SIGTERM
 from typing import Union
+from socket import gethostname
 
 import dramatiq
 import uvloop
@@ -28,6 +29,7 @@ from snapshotter.utils.models.message_models import PowerloomCalculateAggregateM
 from snapshotter.utils.models.message_models import PowerloomSnapshotSubmittedMessage
 from snapshotter.utils.models.settings_model import AggregateOn
 from snapshotter.utils.redis.redis_keys import epoch_id_project_to_state_mapping
+from snapshotter.utils.redis.redis_keys import service_health_timestamps_key
 
 AGGREGATION_QUEUE_NAME = f'powerloom-aggregator_{settings.namespace}_{settings.instance_id}'
 logger = default_logger.bind(module='AggregationWorker')
@@ -82,6 +84,8 @@ class AggregationAsyncWorker(GenericAsyncWorker):
             queue_name=AGGREGATION_QUEUE_NAME,
             actor_name='handleEvent',
         )(self.handle_event)
+        self._hostname = gethostname()
+        self._health_report_interval = settings.health_report_interval
 
     def _gen_single_type_project_id(self, task_type, epoch):
         """
@@ -327,6 +331,38 @@ class AggregationAsyncWorker(GenericAsyncWorker):
             await self._init_project_calculation_mapping()
             await self.init()
 
+    async def report_health_status(self):
+        """Reports the current timestamp for this container's hostname to Redis."""
+        if not hasattr(self, '_redis_conn') or self._redis_conn is None:
+            self._logger.warning('Redis connection not initialized, skipping health report.')
+            return
+        try:
+            current_timestamp = int(time.time())
+            await self._redis_conn.hset(
+                service_health_timestamps_key,
+                self._hostname,
+                current_timestamp,
+            )
+            self._logger.debug(f'Reported health for {self._hostname} at {current_timestamp}')
+        except Exception as e:
+            self._logger.error(f'Failed to report health status for hostname {self._hostname}: {e}')
+
+    async def _periodic_health_reporter(self):
+        """Periodically reports health status."""
+        self._logger.info(
+            f'Starting periodic health reporter task for {self._hostname} (Interval: {self._health_report_interval}s)',
+        )
+        while True:
+            try:
+                await self.report_health_status()
+                await asyncio.sleep(self._health_report_interval)
+            except asyncio.CancelledError:
+                self._logger.info(f'Periodic health reporter task for {self._hostname} cancelled.')
+                break
+            except Exception as e:
+                self._logger.error(f'Error in periodic health reporter loop: {e}')
+                await asyncio.sleep(self._health_report_interval)
+
     def run(self) -> None:
         """
         Runs the worker by setting resource limits, registering signal handlers, starting the Dramatiq worker, and
@@ -361,9 +397,19 @@ class AggregationAsyncWorker(GenericAsyncWorker):
         worker = Worker(redis_broker, queues=[AGGREGATION_QUEUE_NAME])
         worker_thread = threading.Thread(target=worker.start, daemon=True)
         worker_thread.start()
+
+        health_reporter_task = self._event_loop.create_task(self._periodic_health_reporter())
+
         try:
             ev_loop.run_forever()
         finally:
+            if health_reporter_task and not health_reporter_task.done():
+                health_reporter_task.cancel()
+                try:
+                    ev_loop.run_until_complete(asyncio.sleep(1))
+                except RuntimeError as e:
+                    self._logger.warning(f"Could not fully await health reporter cancellation on loop close: {e}")
+
             ev_loop.close()
 
 

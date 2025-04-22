@@ -46,6 +46,14 @@ x-snapshotter-base: &snapshotter-base
     - IPFS_UNPINNING_AFTER=${IPFS_UNPINNING_AFTER:-86400}
   extra_hosts:
     - "host.docker.internal:host-gateway"
+  healthcheck:
+    # Use CMD-SHELL to evaluate hostname within the container's shell
+    # Make sure the path /snapshotter/health_ping.py is correct inside the container
+    test: ["CMD-SHELL", "poetry run python -m snapshotter.health_ping $$(hostname) || exit 1"]
+    interval: 30s
+    timeout: 10s
+    retries: 3
+    start_period: 120s # Give container time to start and report first health status
   restart: unless-stopped
 
 services:
@@ -139,6 +147,7 @@ services:
       - ${CORE_API_PORT:-8002}:${CORE_API_PORT:-8002}
     command: bash -c "bash init_processes.sh gunicorn_core_launcher"
     depends_on:
+<<<<<<< HEAD
       - processor-distributor
   block_fetcher:
     # Build context pointing to the parent directory and then BlockFetcher
@@ -244,6 +253,15 @@ services:
     volumes:
       - ./logs/snapshotter-periphery-epochsyncer:/app/logs
     restart: unless-stopped
+=======
+      - system-event-detector
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "http://localhost:${CORE_API_PORT:-8002}/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 60s
+>>>>>>> 58781d8011395d00d51068f00f8b05de496aeb99
   # IPFS Service with improved configuration
   ipfs:
     image: ipfs/kubo:master-latest

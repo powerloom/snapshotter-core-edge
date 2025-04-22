@@ -13,6 +13,7 @@ from signal import SIGINT
 from signal import signal
 from signal import SIGQUIT
 from signal import SIGTERM
+from socket import gethostname
 from typing import Awaitable
 from typing import Dict
 from typing import List
@@ -59,6 +60,7 @@ from snapshotter.utils.redis.redis_keys import epoch_id_epoch_released_key
 from snapshotter.utils.redis.redis_keys import epoch_id_project_to_state_mapping
 from snapshotter.utils.redis.redis_keys import project_finalized_data_zset
 from snapshotter.utils.redis.redis_keys import project_last_finalized_epoch_key
+from snapshotter.utils.redis.redis_keys import service_health_timestamps_key
 from snapshotter.utils.rpc import RpcHelper
 
 # Configure Redis broker with no middleware
@@ -172,6 +174,9 @@ class ProcessorDistributor(multiprocessing.Process):
         self._telegram_httpx_client = None
         self.notification_cooldown = settings.reporting.min_reporting_interval
         self.last_notification_time = 0
+
+        self._hostname = gethostname()
+        self._health_report_interval = settings.health_report_interval
 
     def _signal_handler(self, signum, frame):
         """
@@ -1012,6 +1017,38 @@ class ProcessorDistributor(multiprocessing.Process):
             except Exception as e:
                 self._logger.error('Error sending Telegram notification: {}', e)
 
+    async def report_health_status(self):
+        """Reports the current timestamp for this container's hostname to Redis."""
+        if not hasattr(self, '_redis_conn') or self._redis_conn is None:
+            self._logger.warning('Redis connection not initialized, skipping health report.')
+            return
+        try:
+            current_timestamp = int(time.time())
+            await self._redis_conn.hset(
+                service_health_timestamps_key,
+                self._hostname,
+                current_timestamp,
+            )
+            self._logger.debug(f'Reported health for {self._hostname} at {current_timestamp}')
+        except Exception as e:
+            self._logger.error(f'Failed to report health status for hostname {self._hostname}: {e}')
+
+    async def _periodic_health_reporter(self):
+        """Periodically reports health status."""
+        self._logger.info(
+            f'Starting periodic health reporter task for {self._hostname} (Interval: {self._health_report_interval}s)',
+        )
+        while True:
+            try:
+                await self.report_health_status()
+                await asyncio.sleep(self._health_report_interval)
+            except asyncio.CancelledError:
+                self._logger.info(f'Periodic health reporter task for {self._hostname} cancelled.')
+                break
+            except Exception as e:
+                self._logger.error(f'Error in periodic health reporter loop: {e}')
+                await asyncio.sleep(self._health_report_interval)
+
     def run(self) -> None:
         """
         Runs the ProcessorDistributor by setting resource limits, registering signal handlers,
@@ -1040,9 +1077,14 @@ class ProcessorDistributor(multiprocessing.Process):
         worker_thread = threading.Thread(target=worker.start, daemon=True)
         worker_thread.start()
 
+        health_reporter_task = ev_loop.create_task(self._periodic_health_reporter())
+
         try:
             ev_loop.run_forever()
         finally:
+            if health_reporter_task and not health_reporter_task.done():
+                health_reporter_task.cancel()
+                ev_loop.run_until_complete(asyncio.sleep(2))
             ev_loop.close()
 
 

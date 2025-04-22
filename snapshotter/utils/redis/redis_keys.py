@@ -40,6 +40,9 @@ rpc_get_transaction_receipt_calls = (
 # Redis key for cached epoch process report
 epoch_process_report_cached_key = 'epochProcessReport'
 
+# Redis key for service health timestamps
+service_health_timestamps_key = f'service:health:timestamps'
+
 
 def project_finalized_data_zset(project_id):
     """
