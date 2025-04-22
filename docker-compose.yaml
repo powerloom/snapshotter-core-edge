@@ -147,8 +147,13 @@ services:
       - ${CORE_API_PORT:-8002}:${CORE_API_PORT:-8002}
     command: bash -c "bash init_processes.sh gunicorn_core_launcher"
     depends_on:
-<<<<<<< HEAD
       - processor-distributor
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "http://localhost:${CORE_API_PORT:-8002}/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 60s
   block_fetcher:
     # Build context pointing to the parent directory and then BlockFetcher
     build:
@@ -253,15 +258,6 @@ services:
     volumes:
       - ./logs/snapshotter-periphery-epochsyncer:/app/logs
     restart: unless-stopped
-=======
-      - system-event-detector
-    healthcheck:
-      test: ["CMD", "curl", "--fail", "http://localhost:${CORE_API_PORT:-8002}/health"]
-      interval: 30s
-      timeout: 5s
-      retries: 3
-      start_period: 60s
->>>>>>> 58781d8011395d00d51068f00f8b05de496aeb99
   # IPFS Service with improved configuration
   ipfs:
     image: ipfs/kubo:master-latest
