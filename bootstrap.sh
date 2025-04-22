@@ -15,6 +15,7 @@ mkdir local-collector;
 rm -rf snapshotter-periphery-blockfetcher;
 rm -rf snapshotter-periphery-txprocessor;
 rm -rf snapshotter-periphery-epochsyncer;
+rm -rf rate-limiter;
 
 git clone https://github.com/Powerloom/snapshotter-periphery-blockfetcher.git;
 cd snapshotter-periphery-blockfetcher;
@@ -29,6 +30,11 @@ cd ..;
 git clone https://github.com/Powerloom/snapshotter-periphery-epochsyncer.git;
 cd snapshotter-periphery-epochsyncer;
 git checkout $SNAPSHOTTER_PERIPHERY_EPOCHSYNCER_BRANCH;
+cd ..;
+
+git clone https://github.com/Powerloom/rate-limiter.git;
+cd rate-limiter;
+git checkout $RATE_LIMITER_BRANCH;
 cd ..;
 
 if [ "$SNAPSHOT_CONFIG_REPO" ]; then
