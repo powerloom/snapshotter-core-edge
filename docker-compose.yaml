@@ -212,13 +212,15 @@ services:
       - LOG_LEVEL=${LOG_LEVEL:-DEBUG}
       - PROCESSOR_QUEUE_KEY=${PROCESSOR_QUEUE_KEY:-}
       - PROCESSOR_BLOCK_TIMEOUT=${PROCESSOR_BLOCK_TIMEOUT:-}
+      - EVENT_FILTER_CONFIG_PATH=${EVENT_FILTER_CONFIG_PATH:-config/event_filters.example.json}
     depends_on:
       - redis
     profiles: ["new"]
     deploy:
       replicas: ${TRANSACTION_PROCESSOR_REPLICAS:-3}
     volumes:
-      # Volume path relative to the docker-compose file location
+      - ./config:/app/shared_config:ro
+      - ./computes:/app/computes:ro
       - ./logs/snapshotter-periphery-txprocessor:/app/logs
     restart: unless-stopped
   epoch_syncer:
