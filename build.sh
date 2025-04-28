@@ -210,4 +210,4 @@ if [ "$DEVMODE" = "false" ]; then
     $COMPOSE_CMD -f docker-compose.yaml $PROFILES pull
 fi
 
-$COMPOSE_CMD -f docker-compose.yaml $PROFILES up -V --remove-orphans
+$COMPOSE_CMD -f docker-compose.yaml $PROFILES up -V --remove-orphans --build
