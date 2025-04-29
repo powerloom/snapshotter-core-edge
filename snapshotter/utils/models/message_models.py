@@ -1,5 +1,3 @@
-from typing import Any
-from typing import Dict
 from typing import List
 from typing import Optional
 
@@ -45,15 +43,14 @@ class EpochBase(BaseModel):
     end: int
 
 
-class PowerloomSnapshotProcessMessage(EpochBase):
-    """Model for Powerloom snapshot process messages."""
+class SnapshotProcessMessage(EpochBase):
+    """Model for snapshot process messages."""
     data_source: Optional[str] = None
     primary_data_source: Optional[str] = None
-    bulk_mode: Optional[bool] = False
 
 
-class PowerloomSnapshotFinalizedMessage(BaseModel):
-    """Model for Powerloom snapshot finalized messages."""
+class SnapshotFinalizedMessage(BaseModel):
+    """Model for snapshot finalized messages."""
     epochId: int
     epochEnd: int
     projectId: str
@@ -61,45 +58,25 @@ class PowerloomSnapshotFinalizedMessage(BaseModel):
     timestamp: int
 
 
-class PowerloomSnapshotBatchSubmittedMessage(BaseModel):
-    """Model for Powerloom snapshot batch submitted messages."""
+class SnapshotBatchSubmittedMessage(BaseModel):
+    """Model for snapshot batch submitted messages."""
     epochId: int
     batchCid: str
     timestamp: int
     transactionHash: str
 
 
-class PowerloomSnapshotSubmittedMessage(BaseModel):
-    """Model for Powerloom snapshot submission messages."""
+class SnapshotSubmittedMessage(BaseModel):
+    """Model for snapshot submission messages."""
     snapshotCid: str
     epochId: int
     projectId: str
     timestamp: int
 
 
-class PowerloomDelegateWorkerRequestMessage(BaseModel):
-    """Model for Powerloom delegate worker request messages."""
-    epochId: int
-    requestId: int
-    task_type: str
-    extra: Optional[Dict[Any, Any]] = dict()
-
-
-class PowerloomDelegateWorkerResponseMessage(BaseModel):
-    """Model for Powerloom delegate worker response messages."""
-    epochId: int
-    requestId: int
-
-
-class PowerloomDelegateTxReceiptWorkerResponseMessage(PowerloomDelegateWorkerResponseMessage):
-    """Model for Powerloom delegate transaction receipt worker response messages."""
-    txHash: str
-    txReceipt: Dict[Any, Any]
-
-
-class PowerloomCalculateAggregateMessage(BaseModel):
-    """Model for Powerloom calculate aggregate messages."""
-    messages: List[PowerloomSnapshotSubmittedMessage]
+class CalculateAggregateMessage(BaseModel):
+    """Model for calculate aggregate messages."""
+    messages: List[SnapshotSubmittedMessage]
     epochId: int
     timestamp: int
 
@@ -119,5 +96,5 @@ class PayloadCommitMessage(BaseModel):
 
 class PayloadCommitFinalizedMessage(BaseModel):
     """Model for payload commit finalized messages."""
-    message: PowerloomSnapshotFinalizedMessage
+    message: SnapshotFinalizedMessage
     sourceChainId: int

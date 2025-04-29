@@ -7,8 +7,8 @@ import resource
 import sys
 import threading
 import time
+import traceback
 from collections import defaultdict
-from functools import lru_cache
 from signal import SIGINT
 from signal import signal
 from signal import SIGQUIT
@@ -48,12 +48,12 @@ from snapshotter.utils.models.data_models import SnapshotterReportState
 from snapshotter.utils.models.data_models import SnapshotterStates
 from snapshotter.utils.models.data_models import SnapshotterStateUpdate
 from snapshotter.utils.models.data_models import TelegramEpochProcessingReportMessage
+from snapshotter.utils.models.message_models import CalculateAggregateMessage
 from snapshotter.utils.models.message_models import EpochBase
-from snapshotter.utils.models.message_models import PowerloomCalculateAggregateMessage
-from snapshotter.utils.models.message_models import PowerloomSnapshotBatchSubmittedMessage
-from snapshotter.utils.models.message_models import PowerloomSnapshotFinalizedMessage
-from snapshotter.utils.models.message_models import PowerloomSnapshotProcessMessage
-from snapshotter.utils.models.message_models import PowerloomSnapshotSubmittedMessage
+from snapshotter.utils.models.message_models import SnapshotBatchSubmittedMessage
+from snapshotter.utils.models.message_models import SnapshotFinalizedMessage
+from snapshotter.utils.models.message_models import SnapshotProcessMessage
+from snapshotter.utils.models.message_models import SnapshotSubmittedMessage
 from snapshotter.utils.models.settings_model import AggregateOn
 from snapshotter.utils.redis.redis_conn import RedisPoolCache
 from snapshotter.utils.redis.redis_keys import epoch_id_epoch_released_key
@@ -148,7 +148,7 @@ class ProcessorDistributor(multiprocessing.Process):
         self._all_preload_tasks = set()
         self._project_type_config_mapping = dict()
         for project_config in projects_config:
-            self._project_type_config_mapping[project_config.project_type] = project_config
+            self._project_type_config_mapping[project_config.project_name] = project_config
             for preload_task in project_config.preload_tasks:
                 self._all_preload_tasks.add(preload_task)
 
@@ -348,39 +348,39 @@ class ProcessorDistributor(multiprocessing.Process):
                 )
 
         self._logger.debug('Final list of successful preloads: {} for epoch {}', succesful_preloads, epoch.epochId)
-        for project_type in self._project_type_config_mapping:
-            project_config = self._project_type_config_mapping[project_type]
+        for project_name in self._project_type_config_mapping:
+            project_config = self._project_type_config_mapping[project_name]
             if not project_config.preload_tasks:
                 continue
             self._logger.debug(
-                'Expected list of successful preloading for project type {} epoch {}: {}',
-                project_type,
+                'Expected list of successful preloading for project name {} epoch {}: {}',
+                project_name,
                 epoch.epochId,
                 project_config.preload_tasks,
             )
             if all([t in succesful_preloads for t in project_config.preload_tasks]):
                 self._logger.info(
-                    'Preloading dependency satisfied for project type {} epoch {}. Distributing snapshot build tasks...',
-                    project_type, epoch.epochId,
+                    'Preloading dependency satisfied for project name {} epoch {}. Distributing snapshot build tasks...',
+                    project_name, epoch.epochId,
                 )
                 await self._redis_conn.hset(
                     name=epoch_id_project_to_state_mapping(epoch.epochId, SnapshotterStates.PRELOAD.value),
                     mapping={
-                        project_type: SnapshotterStateUpdate(
+                        project_name: SnapshotterStateUpdate(
                             status='success', timestamp=int(time.time()),
                         ).json(),
                     },
                 )
-                await self._distribute_callbacks_snapshotting(project_type, epoch)
+                await self._distribute_callbacks_snapshotting(project_name, epoch)
             else:
                 self._logger.error(
-                    'Preloading dependency not satisfied for project type {} epoch {}. Not distributing snapshot build tasks...',
-                    project_type, epoch.epochId,
+                    'Preloading dependency not satisfied for project name {} epoch {}. Not distributing snapshot build tasks...',
+                    project_name, epoch.epochId,
                 )
                 await self._redis_conn.hset(
                     name=epoch_id_project_to_state_mapping(epoch.epochId, SnapshotterStates.PRELOAD.value),
                     mapping={
-                        project_type: SnapshotterStateUpdate(
+                        project_name: SnapshotterStateUpdate(
                             status='failed', timestamp=int(time.time()),
                         ).json(),
                     },
@@ -426,20 +426,6 @@ class ProcessorDistributor(multiprocessing.Process):
                     preloader.task_type,
                     msg_obj.epochId,
                 )
-        for project_type, project_config in self._project_type_config_mapping.items():
-            if not project_config.preload_tasks:
-                # Release for snapshotting
-                current_time = time.time()
-                task = asyncio.create_task(
-                    self._distribute_callbacks_snapshotting(
-                        project_type, msg_obj,
-                    ),
-                    name=f'distribute_snapshotting_{project_type}_epoch_{msg_obj.epochId}',
-                )
-                task_tuple = (current_time, task)
-                self._active_tasks.add(task_tuple)
-                task.add_done_callback(lambda t: self._handle_task_result(t, task_tuple))
-                continue
 
         current_time = time.time()
         preloader_task = asyncio.create_task(
@@ -469,13 +455,29 @@ class ProcessorDistributor(multiprocessing.Process):
             self._exec_preloaders(msg_obj=msg_obj),
             name=f'exec_preloaders_epoch_{msg_obj.epochId}',
         )
+
         task_tuple = (current_time, task)
         self._active_tasks.add(task_tuple)
         task.add_done_callback(lambda t: self._handle_task_result(t, task_tuple))
 
-    async def _distribute_callbacks_snapshotting(self, project_type: str, epoch: EpochBase):
+        # Handle all projects without preload tasks
+        for project_name, project_config in self._project_type_config_mapping.items():
+            if not project_config.preload_tasks:
+                # Release for snapshotting
+                current_time = time.time()
+                task = asyncio.create_task(
+                    self._distribute_callbacks_snapshotting(
+                        project_name, msg_obj,
+                    ),
+                    name=f'distribute_snapshotting_{project_name}_epoch_{msg_obj.epochId}',
+                )
+                task_tuple = (current_time, task)
+                self._active_tasks.add(task_tuple)
+                task.add_done_callback(lambda t: self._handle_task_result(t, task_tuple))
+
+    async def _distribute_callbacks_snapshotting(self, project_name: str, epoch: EpochBase):
         """
-        Distributes callbacks for snapshotting to the appropriate snapshotters based on the project type and epoch.
+        Distributes callbacks for snapshotting to the appropriate snapshotters based on the project name and epoch.
 
         Args:
             project_type (str): The type of project.
@@ -484,144 +486,25 @@ class ProcessorDistributor(multiprocessing.Process):
         Returns:
             None
         """
-        # Send to snapshotters to get the balances of the addresses
-        queuing_tasks = []
-
-        project_config = self._project_type_config_mapping[project_type]
-
-        # Handling bulk mode projects
-        if project_config.bulk_mode:
-            process_unit = PowerloomSnapshotProcessMessage(
-                begin=epoch.begin,
-                end=epoch.end,
-                epochId=epoch.epochId,
-                bulk_mode=True,
-            )
-
-            dramatiq.broker.get_broker().enqueue(
-                dramatiq.Message(
-                    queue_name=SNAPSHOT_QUEUE_NAME,
-                    actor_name='handleEvent',  # Match actor name with event_receiver.py
-                    args=(project_type, process_unit.json()),
-                    kwargs={},
-                    options={},
-                ),
-            )
-            self._logger.info(
-                'Sent out message to be processed by worker'
-                f' {project_type} : {process_unit}',
-            )
-            return
-        # Handling projects with no data sources
-        if project_config.projects is None:
-            project_id = f'{project_type}:{settings.namespace}'
-            process_unit = PowerloomSnapshotProcessMessage(
-                begin=epoch.begin,
-                end=epoch.end,
-                epochId=epoch.epochId,
-            )
-
-            dramatiq.broker.get_broker().enqueue(
-                dramatiq.Message(
-                    queue_name=SNAPSHOT_QUEUE_NAME,
-                    actor_name='handleEvent',  # Match actor name with event_receiver.py
-                    args=(project_type, process_unit.json()),
-                    kwargs={},
-                    options={},
-                ),
-            )
-            self._logger.info(
-                'Sent out message to be processed by worker'
-                f' {project_type} : {process_unit}',
-            )
-            return
-        static_source_project_ids = list()
-        # Handling projects with data sources
-        for project in project_config.projects:
-            project_id = f'{project_type}:{project}:{settings.namespace}'
-            static_source_project_ids.append(project_id)
-            data_sources = project.split('_')
-            if len(data_sources) == 1:
-                data_source = data_sources[0]
-                primary_data_source = None
-            else:
-                primary_data_source, data_source = data_sources
-
-            process_unit = PowerloomSnapshotProcessMessage(
-                begin=epoch.begin,
-                end=epoch.end,
-                epochId=epoch.epochId,
-                data_source=data_source,
-                primary_data_source=primary_data_source,
-            )
-
-            dramatiq.broker.get_broker().enqueue(
-                dramatiq.Message(
-                    queue_name=SNAPSHOT_QUEUE_NAME,
-                    actor_name='handleEvent',  # Match actor name with event_receiver.py
-                    args=(project_type, process_unit.json()),
-                    kwargs={},
-                    options={},
-                ),
-            )
-
-        results = await asyncio.gather(*queuing_tasks, return_exceptions=True)
-        for result in results:
-            if isinstance(result, Exception):
-                self._logger.error(
-                    'Error while sending message to queue. Error - {}',
-                    result,
-                )
-        self._logger.info(
-            f'Sent out {len(project_config.projects)} messages to be processed by snapshot builder worker'
-            f' for epoch {epoch.epochId}',
+        process_unit = SnapshotProcessMessage(
+            begin=epoch.begin,
+            end=epoch.end,
+            epochId=epoch.epochId,
         )
 
-    def _fetch_base_project_list(self, project_type: str) -> List[str]:
-        """
-        Fetches the base project list for the given project type.
-
-        Args:
-            project_type (str): The project type.
-
-        Returns:
-            List[str]: The base project list.
-        """
-        if project_type in self._project_type_config_mapping:
-            return self._project_type_config_mapping[project_type].projects
-        # another sigle based aggregate project
-        else:
-            base_project_type = self._aggregator_config_mapping[project_type].base_project_type
-            return self._fetch_base_project_list(base_project_type)
-
-    @lru_cache(maxsize=None)
-    def _gen_projects_to_wait_for(self, project_type: str) -> List[str]:
-        """
-        Generates the projects to wait for based on the project type.
-
-        Args:
-            project_type (str): The project type.
-
-        Returns:
-            List[str]: The projects to wait for.
-        """
-        aggregator_config = self._aggregator_config_mapping[project_type]
-
-        if aggregator_config.aggregate_on == AggregateOn.single_project:
-            base_project_type = aggregator_config.base_project_type
-            return set([f'{project_type}:{project}:{settings.namespace}' for project in self._fetch_base_project_list(base_project_type)])
-        else:
-            project_types_to_wait_for = aggregator_config.project_types_to_wait_for
-            projects_to_wait_for = set()
-            for project_type in project_types_to_wait_for:
-                if project_type in self._project_type_config_mapping:
-                    base_project_config = self._project_type_config_mapping[project_type]
-                    projects_to_wait_for.update(
-                        [f'{project_type}:{project}:{settings.namespace}' for project in base_project_config.projects],
-                    )
-                else:
-                    projects_to_wait_for.update(self._gen_projects_to_wait_for(project_type))
-            return projects_to_wait_for
+        dramatiq.broker.get_broker().enqueue(
+            dramatiq.Message(
+                queue_name=SNAPSHOT_QUEUE_NAME,
+                actor_name='handleEvent',  # Match actor name with event_receiver.py
+                args=(project_name, process_unit.json()),
+                kwargs={},
+                options={},
+            ),
+        )
+        self._logger.info(
+            'Sent out message to be processed by worker'
+            f' {project_name} : {process_unit}',
+        )
 
     # NOTE: Considering SequencerFinalized state as Finalized for now
     # data data is overwritten upon receiving SnapshotFinalized message for the project
@@ -637,8 +520,8 @@ class ProcessorDistributor(multiprocessing.Process):
             None
         """
         self._logger.debug(f'SnapshotBatchSubmittedEvent caught with message {event_data}')
-        msg_obj: PowerloomSnapshotBatchSubmittedMessage = (
-            PowerloomSnapshotBatchSubmittedMessage.parse_raw(event_data)
+        msg_obj: SnapshotBatchSubmittedMessage = (
+            SnapshotBatchSubmittedMessage.parse_raw(event_data)
         )
 
         transaction_hash = msg_obj.transactionHash
@@ -686,8 +569,8 @@ class ProcessorDistributor(multiprocessing.Process):
             None
         """
         self._logger.debug(f'SnapshotFinalizedEvent caught with message {event_data}')
-        msg_obj: PowerloomSnapshotFinalizedMessage = (
-            PowerloomSnapshotFinalizedMessage.parse_raw(event_data)
+        msg_obj: SnapshotFinalizedMessage = (
+            SnapshotFinalizedMessage.parse_raw(event_data)
         )
 
         # set project last finalized epoch in redis
@@ -720,101 +603,29 @@ class ProcessorDistributor(multiprocessing.Process):
 
         :param message: IncomingMessage object containing the message to be processed.
         """
-        process_unit: PowerloomSnapshotSubmittedMessage = (
-            PowerloomSnapshotSubmittedMessage.parse_raw(event_data)
+        process_unit: SnapshotSubmittedMessage = (
+            SnapshotSubmittedMessage.parse_raw(event_data)
         )
 
         self._logger.trace(f'Aggregation Task Distribution time - {int(time.time())}')
-
+        pass
         # go through aggregator config, if it matches then send appropriate message
-        for config in aggregator_config:
-            task_type = config.project_type
-            if config.aggregate_on == AggregateOn.single_project:
-                if config.base_project_type not in process_unit.projectId:
-                    self._logger.trace(f'projectId mismatch {process_unit.projectId} {config.base_project_type}')
-                    continue
+        # for config in aggregator_config:
+        #     task_type = config.project_type
+        #     if config.aggregate_on == AggregateOn.single_project:
+        #         if config.base_project_type not in process_unit.projectId:
+        #             self._logger.trace(f'projectId mismatch {process_unit.projectId} {config.base_project_type}')
+        #             continue
 
-                dramatiq.broker.get_broker().enqueue(
-                    dramatiq.Message(
-                        queue_name=AGGREGATION_QUEUE_NAME,
-                        actor_name='handleEvent',  # Match actor name with event_receiver.py
-                        args=(task_type, process_unit.json()),
-                        kwargs={},
-                        options={},
-                    ),
-                )
-            elif config.aggregate_on == AggregateOn.multi_project:
-                projects_to_wait_for = self._gen_projects_to_wait_for(config.project_type)
-                if process_unit.projectId not in projects_to_wait_for:
-                    self._logger.trace(
-                        f'projectId not required for {config.project_type}: {process_unit.projectId}',
-                    )
-                    continue
-
-                # cleanup redis for all previous epochs (5 buffer)
-                await self._redis_conn.zremrangebyscore(
-                    f'powerloom:aggregator:{config.project_type}:events',
-                    0,
-                    process_unit.epochId - 5,
-                )
-
-                await self._redis_conn.zadd(
-                    f'powerloom:aggregator:{config.project_type}:events',
-                    {process_unit.json(): process_unit.epochId},
-                )
-
-                events = await self._redis_conn.zrangebyscore(
-                    f'powerloom:aggregator:{config.project_type}:events',
-                    process_unit.epochId,
-                    process_unit.epochId,
-                )
-
-                if not events:
-                    self._logger.debug(f'No events found for {process_unit.epochId}')
-                    continue
-
-                event_project_ids = set()
-                finalized_messages = list()
-
-                for event in events:
-                    event = PowerloomSnapshotSubmittedMessage.parse_raw(event)
-                    if event.projectId not in event_project_ids:
-                        event_project_ids.add(event.projectId)
-                        finalized_messages.append(event)
-
-                if event_project_ids == projects_to_wait_for:
-                    self._logger.info(
-                        f'All project snapshots accumulated for epoch {process_unit.epochId} against multi aggregate project type {config.project_type}, aggregating',
-                    )
-                    final_msg = PowerloomCalculateAggregateMessage(
-                        messages=sorted(finalized_messages, key=lambda x: x.projectId),
-                        epochId=process_unit.epochId,
-                        timestamp=int(time.time()),
-                    )
-
-                    dramatiq.broker.get_broker().enqueue(
-                        dramatiq.Message(
-                            queue_name=AGGREGATION_QUEUE_NAME,
-                            actor_name='handleEvent',  # Match actor name with event_receiver.py
-                            args=(task_type, final_msg.json()),
-                            kwargs={},
-                            options={},
-                        ),
-                    )
-
-                    # Cleanup redis for current epoch
-
-                    await self._redis_conn.zremrangebyscore(
-                        f'powerloom:aggregator:{config.project_type}:events',
-                        process_unit.epochId,
-                        process_unit.epochId,
-                    )
-
-                else:
-                    self._logger.trace(
-                        f'Not all projects present for epoch {process_unit.epochId} against multi aggregate project type {config.project_type},'
-                        f' {len(projects_to_wait_for) - len(event_project_ids)} missing',
-                    )
+        #         dramatiq.broker.get_broker().enqueue(
+        #             dramatiq.Message(
+        #                 queue_name=AGGREGATION_QUEUE_NAME,
+        #                 actor_name='handleEvent',  # Match actor name with event_receiver.py
+        #                 args=(task_type, process_unit.json()),
+        #                 kwargs={},
+        #                 options={},
+        #             ),
+        #         )
 
     async def _cleanup_older_epoch_status(self, epoch_id: int):
         """
@@ -911,7 +722,12 @@ class ProcessorDistributor(multiprocessing.Process):
 
             return None
         except Exception as e:
+            # Capture the full traceback for better debugging
+            error_traceback = ''.join(
+                traceback.format_exception(type(e), e, e.__traceback__),
+            )
             self._logger.error(f'Error processing event: {e}')
+            self._logger.error(f'Detailed traceback:\n{error_traceback}')
             self._logger.error(f'Event data: {args}')
             self._send_telegram_epoch_processing_notification(e)
 
@@ -921,14 +737,22 @@ class ProcessorDistributor(multiprocessing.Process):
             exception = task.exception()
             if exception:
                 task_name = task.get_name() if hasattr(task, 'get_name') else 'Unnamed task'
+                error_traceback = ''.join(
+                    traceback.format_exception(type(exception), exception, exception.__traceback__),
+                )
                 self._logger.error(f"Task '{task_name}' failed: {exception}", exc_info=exception)
+                self._logger.error(f"Detailed traceback for task '{task_name}':\n{error_traceback}")
                 self._send_telegram_epoch_processing_notification(exception)
         except asyncio.CancelledError:
             task_name = task.get_name() if hasattr(task, 'get_name') else 'Unnamed task'
             self._logger.warning(f"Task '{task_name}' was cancelled.")
         except Exception as e:
             # Catch potential errors within the callback itself
+            error_traceback = ''.join(
+                traceback.format_exception(type(e), e, e.__traceback__),
+            )
             self._logger.error(f'Error in task result handler: {e}', exc_info=e)
+            self._logger.error(f'Detailed traceback for handler error:\n{error_traceback}')
         finally:
             # Ensure cleanup happens even if the callback logic has an error
             self._active_tasks.discard(task_tuple)
@@ -946,7 +770,9 @@ class ProcessorDistributor(multiprocessing.Process):
 
                 elif current_time - task_start_time > self._task_timeout:
                     self._logger.warning(
-                        f'Task {task} timed out. Cancelling..., current_time: {current_time}, start_time: {task_start_time}',
+                        f'Task {task} timed out. Cancelling..., current_time: {
+                            current_time
+                        }, start_time: {task_start_time}',
                     )
                     task.cancel()
                     self._active_tasks.discard((task_start_time, task))
@@ -995,6 +821,11 @@ class ProcessorDistributor(multiprocessing.Process):
                 return
 
             try:
+                # Format the error with detailed traceback information
+                error_traceback = ''.join(
+                    traceback.format_exception(type(error), error, error.__traceback__),
+                )
+
                 telegram_message = TelegramEpochProcessingReportMessage(
                     chatId=settings.reporting.telegram_chat_id,
                     slotId=settings.slot_id,
@@ -1004,7 +835,7 @@ class ProcessorDistributor(multiprocessing.Process):
                         projectID='',
                         epochId='',
                         timeOfReporting=str(time.time()),
-                        extra=json.dumps({'issueDetails': f'Error : {error}'}),
+                        extra=json.dumps({'issueDetails': f'Error: {error}\n\nTraceback:\n{error_traceback}'}),
                     ),
                 )
 

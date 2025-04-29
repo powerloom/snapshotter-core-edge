@@ -7,8 +7,8 @@ from signal import SIGINT
 from signal import signal
 from signal import SIGQUIT
 from signal import SIGTERM
-from typing import Optional
 from socket import gethostname
+from typing import Optional
 
 import dramatiq
 import uvloop
@@ -23,7 +23,7 @@ from snapshotter.utils.default_logger import default_logger
 from snapshotter.utils.generic_worker import GenericAsyncWorker
 from snapshotter.utils.models.data_models import SnapshotterStates
 from snapshotter.utils.models.data_models import SnapshotterStateUpdate
-from snapshotter.utils.models.message_models import PowerloomSnapshotProcessMessage
+from snapshotter.utils.models.message_models import SnapshotProcessMessage
 from snapshotter.utils.redis.redis_keys import epoch_id_project_to_state_mapping
 from snapshotter.utils.redis.redis_keys import last_snapshot_processing_complete_timestamp_key
 from snapshotter.utils.redis.redis_keys import service_health_timestamps_key
@@ -66,7 +66,7 @@ class SnapshotAsyncWorker(GenericAsyncWorker):
         self._project_calculation_mapping = None
         self._task_types = []
         for project_config in projects_config:
-            task_type = project_config.project_type
+            task_type = project_config.project_name
             self._task_types.append(task_type)
         self._handle_event_actor = dramatiq.actor(
             queue_name=SNAPSHOT_QUEUE_NAME,
@@ -97,117 +97,14 @@ class SnapshotAsyncWorker(GenericAsyncWorker):
                 project_id = f'{task_type}:{data_source.lower()}:{settings.namespace}'
         return project_id
 
-    async def _process_single_mode(self, msg_obj: PowerloomSnapshotProcessMessage, task_type: str):
-        """
-        Process a single mode snapshot task.
-
-        This method handles the computation, transformation, and storage of a single snapshot.
-
-        Args:
-            msg_obj (PowerloomSnapshotProcessMessage): The message object containing snapshot task details.
-            task_type (str): The type of task to be performed.
-
-        Raises:
-            Exception: If an error occurs while processing the snapshot task.
-        """
-        project_id = self._gen_project_id(
-            task_type=task_type,
-            data_source=msg_obj.data_source,
-            primary_data_source=msg_obj.primary_data_source,
-        )
-
-        try:
-            # Get the task processor for the given task type
-            task_processor = self._project_calculation_mapping[task_type]
-
-            # Compute the snapshot
-            snapshot = await task_processor.compute(
-                epoch=msg_obj,
-                redis_conn=self._redis_conn,
-                rpc_helper=self._rpc_helper,
-            )
-
-            if snapshot is None:
-                self._logger.debug(
-                    'No snapshot data for: {}, skipping...', msg_obj,
-                )
-
-        except Exception as e:
-            # Handle exceptions during snapshot processing
-            self._logger.opt(exception=settings.logs.debug_mode).error(
-                'Exception processing callback for epoch: {}, Error: {},'
-                'sending failure notifications', msg_obj, e,
-            )
-
-            # Update Redis with failure state
-            await self._redis_conn.hset(
-                name=epoch_id_project_to_state_mapping(
-                    epoch_id=msg_obj.epochId, state_id=SnapshotterStates.SNAPSHOT_BUILD.value,
-                ),
-                mapping={
-                    project_id: SnapshotterStateUpdate(
-                        status='failed', error=str(e), timestamp=int(time.time()),
-                    ).json(),
-                },
-            )
-            await self._send_failure_notifications(error=e, epoch_id=msg_obj.epochId, project_id=project_id)
-        else:
-            # Handle successful snapshot processing
-            p = self._redis_conn.pipeline()
-
-            # Store the snapshot in Redis
-            p.set(
-                name=submitted_base_snapshots_key(
-                    epoch_id=msg_obj.epochId, project_id=project_id,
-                ),
-                value=snapshot.json(),
-                # Store snapshot for 10 mins
-                ex=600,
-            )
-
-            # Update Redis with success state
-            p.hset(
-                name=epoch_id_project_to_state_mapping(
-                    epoch_id=msg_obj.epochId, state_id=SnapshotterStates.SNAPSHOT_BUILD.value,
-                ),
-                mapping={
-                    project_id: SnapshotterStateUpdate(
-                        status='success', timestamp=int(time.time()),
-                    ).json(),
-                },
-            )
-
-            # Update last snapshot processing timestamp
-            await self._redis_conn.set(
-                name=last_snapshot_processing_complete_timestamp_key(),
-                value=int(time.time()),
-            )
-
-            if not snapshot:
-                self._logger.debug(
-                    'No snapshot data for: {}, skipping...', msg_obj,
-                )
-                return
-
-            # Execute Redis pipeline
-            await p.execute()
-
-            await self._commit_payload(
-                task_type=task_type,
-                project_id=project_id,
-                epoch=msg_obj,
-                snapshot=snapshot,
-                _ipfs_writer_client=self._ipfs_writer_client,
-            )
-
-    async def _process_bulk_mode(self, msg_obj: PowerloomSnapshotProcessMessage, task_type: str):
+    async def _process(self, msg_obj: SnapshotProcessMessage, task_type: str):
         """
         Process snapshots in bulk mode.
 
         This method handles the computation and storage of multiple snapshots at once.
 
         Args:
-            msg_obj (PowerloomSnapshotProcessMessage): The message object containing snapshot task details.
+            msg_obj (SnapshotProcessMessage): The message object containing snapshot task details.
             task_type (str): The type of task to be performed.
 
         Raises:
@@ -222,6 +119,7 @@ class SnapshotAsyncWorker(GenericAsyncWorker):
                 epoch=msg_obj,
                 redis_conn=self._redis_conn,
                 rpc_helper=self._rpc_helper,
+                task_type=task_type,
             )
 
             if not snapshots:
@@ -247,7 +145,7 @@ class SnapshotAsyncWorker(GenericAsyncWorker):
                     ).json(),
                 },
             )
-            await self._send_failure_notifications(error=e, epoch_id=msg_obj.epochId, project_id="bulk_mode")
+            await self._send_failure_notifications(error=e, epoch_id=msg_obj.epochId, project_id='bulk_mode')
         else:
             # Handle successful bulk snapshot processing
             await self._redis_conn.set(
@@ -264,20 +162,7 @@ class SnapshotAsyncWorker(GenericAsyncWorker):
             self._logger.info('Sending snapshots to commit service: {}', snapshots)
 
             # Process each snapshot in the bulk result
-            for project_data_source, snapshot in snapshots:
-                # Parse data sources
-                data_sources = project_data_source.split('_')
-                if len(data_sources) == 1:
-                    data_source = data_sources[0]
-                    primary_data_source = None
-                else:
-                    primary_data_source, data_source = data_sources
-
-                # Generate project ID
-                project_id = self._gen_project_id(
-                    task_type=task_type, data_source=data_source, primary_data_source=primary_data_source,
-                )
-
+            for project_id, snapshot in snapshots:
                 # Store snapshot in Redis
                 await self._redis_conn.set(
                     name=submitted_base_snapshots_key(
@@ -310,15 +195,15 @@ class SnapshotAsyncWorker(GenericAsyncWorker):
                     _ipfs_writer_client=self._ipfs_writer_client,
                 )
 
-    async def _process_task(self, msg_obj: PowerloomSnapshotProcessMessage, task_type: str):
+    async def _process_task(self, msg_obj: SnapshotProcessMessage, task_type: str):
         """
-        Process a PowerloomSnapshotProcessMessage object for a given task type.
+        Process a SnapshotProcessMessage object for a given task type.
 
         This method initializes necessary components and delegates the processing
         to either single mode or bulk mode based on the message object.
 
         Args:
-            msg_obj (PowerloomSnapshotProcessMessage): The message object to process.
+            msg_obj (SnapshotProcessMessage): The message object to process.
             task_type (str): The type of task to perform.
         """
         self._logger.debug(
@@ -338,11 +223,8 @@ class SnapshotAsyncWorker(GenericAsyncWorker):
             task_type, msg_obj,
         )
 
-        # Process in bulk mode or single mode based on the message object
-        if msg_obj.bulk_mode:
-            await self._process_bulk_mode(msg_obj=msg_obj, task_type=task_type)
-        else:
-            await self._process_single_mode(msg_obj=msg_obj, task_type=task_type)
+        await self._process(msg_obj=msg_obj, task_type=task_type)
+
         await self._redis_conn.close()
 
     def handle_event(self, *args):
@@ -354,8 +236,8 @@ class SnapshotAsyncWorker(GenericAsyncWorker):
             event_type = args[0]
             event_data = args[1]
 
-            msg_obj: PowerloomSnapshotProcessMessage = (
-                PowerloomSnapshotProcessMessage.parse_raw(event_data)
+            msg_obj: SnapshotProcessMessage = (
+                SnapshotProcessMessage.parse_raw(event_data)
             )
         except ValidationError as e:
             self._logger.opt(exception=settings.logs.debug_mode).error(
@@ -394,7 +276,7 @@ class SnapshotAsyncWorker(GenericAsyncWorker):
         # Generate project function mapping
         self._project_calculation_mapping = dict()
         for project_config in projects_config:
-            key = project_config.project_type
+            key = project_config.project_name
             if key in self._project_calculation_mapping:
                 raise Exception('Duplicate project type found')
             module = importlib.import_module(project_config.processor.module)

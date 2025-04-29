@@ -5,43 +5,11 @@ cached_block_details_at_height = (
     'block_cache:' + settings.namespace
 )
 
-# Redis key for the last processed epoch by the epoch detector
-epoch_detector_last_processed_epoch = 'SystemEpochDetector:lastProcessedEpoch'
-
 # Redis key for the last processed block by the event detector
 event_detector_last_processed_block = 'SystemEventDetector:lastProcessedBlock'
 
-
-# Redis keys for various RPC call counters
-rpc_json_rpc_calls = (
-    'rpc:jsonRpc:' + settings.namespace + ':calls'
-)
-
-rpc_get_event_logs_calls = (
-    'rpc:eventLogsCount:' + settings.namespace + ':calls'
-)
-
-rpc_web3_calls = (
-    'rpc:web3:' + settings.namespace + ':calls'
-)
-
-rpc_blocknumber_calls = (
-    'rpc:blocknumber:' + settings.namespace + ':calls'
-)
-
-rpc_get_block_number_calls = (
-    'rpc:blockNumber:' + settings.namespace + ':calls'
-)
-
-rpc_get_transaction_receipt_calls = (
-    'rpc:transactionReceipt:' + settings.namespace + ':calls'
-)
-
-# Redis key for cached epoch process report
-epoch_process_report_cached_key = 'epochProcessReport'
-
 # Redis key for service health timestamps
-service_health_timestamps_key = f'service:health:timestamps'
+service_health_timestamps_key = 'service:health:timestamps'
 
 
 def project_finalized_data_zset(project_id):
@@ -123,36 +91,6 @@ def project_last_finalized_epoch_key(project_id):
     return f'projectID:{project_id}:lastFinalizedEpoch'
 
 
-def project_successful_snapshot_submissions_suffix():
-    """
-    Generate Redis key suffix for successful snapshot submissions count.
-
-    Returns:
-        str: Redis key suffix for successful snapshot submissions count.
-    """
-    return 'totalSuccessfulSnapshotCount'
-
-
-def project_incorrect_snapshot_submissions_suffix():
-    """
-    Generate Redis key suffix for incorrect snapshot submissions count.
-
-    Returns:
-        str: Redis key suffix for incorrect snapshot submissions count.
-    """
-    return 'totalIncorrectSnapshotCount'
-
-
-def project_missed_snapshot_submissions_suffix():
-    """
-    Generate Redis key suffix for missed snapshot submissions count.
-
-    Returns:
-        str: Redis key suffix for missed snapshot submissions count.
-    """
-    return 'totalMissedSnapshotCount'
-
-
 def unpinned_snapshots_zset_name():
     """
     Generate Redis key for unpinned snapshots zset.
@@ -161,42 +99,6 @@ def unpinned_snapshots_zset_name():
         str: Redis key for the unpinned snapshots zset.
     """
     return 'snapshotsToUnpin'
-
-
-def project_snapshotter_status_report_key(project_id):
-    """
-    Generate Redis key for project's snapshotter status report.
-
-    Args:
-        project_id (str): The ID of the project.
-
-    Returns:
-        str: Redis key for the project's snapshotter status report.
-    """
-    return f'projectID:{project_id}:snapshotterStatusReport'
-
-
-def stored_projects_key():
-    """
-    Generate Redis key for stored project IDs.
-
-    Returns:
-        str: Redis key for stored project IDs.
-    """
-    return 'storedProjectIds'
-
-
-def epoch_txs_htable(epoch_id):
-    """
-    Generate Redis key for epoch transaction receipts hashtable.
-
-    Args:
-        epoch_id (str): The ID of the epoch.
-
-    Returns:
-        str: Redis key for the epoch's transaction receipts hashtable.
-    """
-    return f'epochID:{epoch_id}:txReceipts'
 
 
 def epoch_id_epoch_released_key(epoch_id):

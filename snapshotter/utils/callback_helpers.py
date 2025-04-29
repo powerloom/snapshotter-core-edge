@@ -16,10 +16,10 @@ from snapshotter.settings.config import settings
 from snapshotter.utils.default_logger import default_logger
 from snapshotter.utils.models.data_models import TelegramEpochProcessingReportMessage
 from snapshotter.utils.models.data_models import TelegramSnapshotterCoreReportMessage
+from snapshotter.utils.models.message_models import CalculateAggregateMessage
 from snapshotter.utils.models.message_models import EpochBase
-from snapshotter.utils.models.message_models import PowerloomCalculateAggregateMessage
-from snapshotter.utils.models.message_models import PowerloomSnapshotProcessMessage
-from snapshotter.utils.models.message_models import PowerloomSnapshotSubmittedMessage
+from snapshotter.utils.models.message_models import SnapshotProcessMessage
+from snapshotter.utils.models.message_models import SnapshotSubmittedMessage
 from snapshotter.utils.redis.redis_keys import callback_last_sent_by_issue
 from snapshotter.utils.rpc import RpcHelper
 
@@ -187,6 +187,7 @@ def send_telegram_notification_sync(
 
     sync_notification_callback_result_handler(f)
 
+
 class GenericProcessorSnapshot(ABC):
     """
     Abstract base class for snapshot processors.
@@ -199,15 +200,16 @@ class GenericProcessorSnapshot(ABC):
     @abstractmethod
     async def compute(
         self,
-        epoch: PowerloomSnapshotProcessMessage,
+        epoch: SnapshotProcessMessage,
         redis: aioredis.Redis,
         rpc_helper: RpcHelper,
+        task_type: str = None,
     ):
         """
         Abstract method to compute the snapshot.
 
         Args:
-            epoch (PowerloomSnapshotProcessMessage): The epoch message.
+            epoch (SnapshotProcessMessage): The epoch message.
             redis (aioredis.Redis): Redis connection.
             rpc_helper (RpcHelper): RPC helper instance.
         """
@@ -260,7 +262,7 @@ class GenericProcessorAggregate(ABC):
     @abstractmethod
     async def compute(
         self,
-        msg_obj: Union[PowerloomSnapshotSubmittedMessage, PowerloomCalculateAggregateMessage],
+        msg_obj: Union[SnapshotSubmittedMessage, CalculateAggregateMessage],
         redis: aioredis.Redis,
         rpc_helper: RpcHelper,
         anchor_rpc_helper: RpcHelper,
@@ -272,7 +274,7 @@ class GenericProcessorAggregate(ABC):
         Abstract method to compute aggregate processing.
 
         Args:
-            msg_obj (Union[PowerloomSnapshotSubmittedMessage, PowerloomCalculateAggregateMessage]): The message object.
+            msg_obj (Union[SnapshotSubmittedMessage, CalculateAggregateMessage]): The message object.
             redis (aioredis.Redis): Redis connection.
             rpc_helper (RpcHelper): RPC helper instance.
             anchor_rpc_helper (RpcHelper): Anchor RPC helper instance.
