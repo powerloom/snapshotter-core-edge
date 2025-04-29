@@ -4,6 +4,7 @@ from typing import List
 
 import tenacity
 from redis import asyncio as aioredis
+from rpc_helper.rpc import RpcHelper
 from tenacity import retry
 from tenacity import retry_if_exception_type
 from tenacity import stop_after_attempt
@@ -18,7 +19,6 @@ from snapshotter.utils.redis.redis_keys import project_first_epoch_hmap
 from snapshotter.utils.redis.redis_keys import source_chain_block_time_key
 from snapshotter.utils.redis.redis_keys import source_chain_epoch_size_key
 from snapshotter.utils.redis.redis_keys import source_chain_id_key
-from snapshotter.utils.rpc import RpcHelper
 
 logger = default_logger.bind(module='data_helper')
 BATCH_SIZE = 50

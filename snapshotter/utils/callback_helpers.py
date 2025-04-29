@@ -11,6 +11,7 @@ from httpx import Client as SyncClient
 from ipfs_client.main import AsyncIPFSClient
 from pydantic import BaseModel
 from redis import asyncio as aioredis
+from rpc_helper.rpc import RpcHelper
 
 from snapshotter.settings.config import settings
 from snapshotter.utils.default_logger import default_logger
@@ -21,7 +22,6 @@ from snapshotter.utils.models.message_models import PowerloomCalculateAggregateM
 from snapshotter.utils.models.message_models import PowerloomSnapshotProcessMessage
 from snapshotter.utils.models.message_models import PowerloomSnapshotSubmittedMessage
 from snapshotter.utils.redis.redis_keys import callback_last_sent_by_issue
-from snapshotter.utils.rpc import RpcHelper
 
 # Setup logger for this module
 helper_logger = default_logger.bind(module='Callback|Helpers')
