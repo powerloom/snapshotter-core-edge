@@ -3,6 +3,9 @@ import json
 
 import pytest
 from pytest_asyncio import fixture as async_fixture
+from rpc_helper.rpc import RpcHelper
+from rpc_helper.rpc import get_contract_abi_dict
+from rpc_helper.rpc import get_event_sig_and_abi
 from web3 import AsyncHTTPProvider
 from web3 import AsyncWeb3
 from web3.contract import AsyncContract
@@ -10,9 +13,6 @@ from web3.contract import AsyncContract
 from snapshotter.settings.config import settings
 from snapshotter.utils.models.settings_model import RPCConfigFull
 from snapshotter.utils.models.settings_model import RPCNodeConfig
-from snapshotter.utils.rpc import get_contract_abi_dict
-from snapshotter.utils.rpc import get_event_sig_and_abi
-from snapshotter.utils.rpc import RpcHelper
 
 """
 RPC Helper Test Suite

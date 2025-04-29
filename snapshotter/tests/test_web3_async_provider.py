@@ -2,13 +2,13 @@ import asyncio
 import json
 
 from eth_utils.address import to_checksum_address
+from rpc_helper.rpc import RpcHelper
 from web3 import HTTPProvider
 from web3 import Web3
 
 from snapshotter.settings.config import settings
 from snapshotter.utils.default_logger import default_logger
 from snapshotter.utils.redis.redis_conn import RedisPoolCache
-from snapshotter.utils.rpc import RpcHelper
 
 test_logger = default_logger.bind(module='test_web3_async_call')
 
