@@ -12,6 +12,7 @@ from fastapi_pagination import add_pagination
 from fastapi_pagination import Page
 from ipfs_client.main import AsyncIPFSClientSingleton
 from pydantic import Field
+from rpc_helper.rpc import RpcHelper
 from web3 import Web3
 
 from snapshotter.settings.config import settings
@@ -22,7 +23,6 @@ from snapshotter.utils.default_logger import default_logger
 from snapshotter.utils.file_utils import read_json_file
 from snapshotter.utils.models.data_models import TaskStatusRequest
 from snapshotter.utils.redis.redis_conn import RedisPoolCache
-from snapshotter.utils.rpc import RpcHelper
 
 
 rest_logger = default_logger.bind(module='CoreAPI')

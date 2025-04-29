@@ -33,6 +33,7 @@ from ipfs_client.dag import IPFSAsyncClientError
 from ipfs_client.main import AsyncIPFSClient
 from ipfs_client.main import AsyncIPFSClientSingleton
 from pydantic import BaseModel
+from rpc_helper.rpc import RpcHelper
 from tenacity import retry
 from tenacity import retry_if_exception_type
 from tenacity import stop_after_attempt
@@ -60,7 +61,6 @@ from snapshotter.utils.redis.redis_conn import RedisPoolCache
 from snapshotter.utils.redis.redis_keys import epoch_id_project_to_state_mapping
 from snapshotter.utils.redis.redis_keys import submitted_unfinalized_snapshot_cids
 from snapshotter.utils.redis.redis_keys import unpinned_snapshots_zset_name
-from snapshotter.utils.rpc import RpcHelper
 
 logger = default_logger.bind(module='GenericWorker')
 

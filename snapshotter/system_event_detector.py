@@ -19,6 +19,8 @@ from httpx import AsyncHTTPTransport
 from httpx import Limits
 from httpx import Timeout
 from redis import asyncio as aioredis
+from rpc_helper.rpc import get_event_sig_and_abi
+from rpc_helper.rpc import RpcHelper
 from web3 import Web3
 
 from snapshotter.settings.config import settings
@@ -37,8 +39,6 @@ from snapshotter.utils.redis.redis_keys import event_detector_last_processed_blo
 from snapshotter.utils.redis.redis_keys import last_epoch_detected_epoch_id_key
 from snapshotter.utils.redis.redis_keys import last_epoch_detected_timestamp_key
 from snapshotter.utils.redis.redis_keys import service_health_timestamps_key
-from snapshotter.utils.rpc import get_event_sig_and_abi
-from snapshotter.utils.rpc import RpcHelper
 
 
 # Setup Dramatiq with Redis broker for sending only

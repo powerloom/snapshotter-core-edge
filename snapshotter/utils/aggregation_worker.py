@@ -8,7 +8,7 @@ from signal import SIGINT
 from signal import signal
 from signal import SIGQUIT
 from signal import SIGTERM
-from typing import Union
+from typing import Union, Optional
 from socket import gethostname
 
 import dramatiq
@@ -84,6 +84,7 @@ class AggregationAsyncWorker(GenericAsyncWorker):
             queue_name=AGGREGATION_QUEUE_NAME,
             actor_name='handleEvent',
         )(self.handle_event)
+        self._worker_thread: Optional[threading.Thread] = None
         self._hostname = gethostname()
         self._health_report_interval = settings.health_report_interval
 
@@ -353,8 +354,24 @@ class AggregationAsyncWorker(GenericAsyncWorker):
             f'Starting periodic health reporter task for {self._hostname} (Interval: {self._health_report_interval}s)',
         )
         while True:
+            should_report = True
+            if not self._worker_thread or not self._worker_thread.is_alive():
+                should_report = False
+                if self._worker_thread:
+                    # Worker thread is no longer alive
+                    self._logger.critical(
+                        'Main Dramatiq worker thread has died. Halting health reports.'
+                    )
+                    # Halt the health reporter
+                    break
+                else:
+                    # Worker thread hasn't been initialized yet
+                    self._logger.warning('Worker thread not found. Skipping health report for now.')
+
             try:
-                await self.report_health_status()
+                if should_report:
+                    await self.report_health_status()
+
                 await asyncio.sleep(self._health_report_interval)
             except asyncio.CancelledError:
                 self._logger.info(f'Periodic health reporter task for {self._hostname} cancelled.')
@@ -396,6 +413,7 @@ class AggregationAsyncWorker(GenericAsyncWorker):
         # Start a Dramatiq worker in a separate thread
         worker = Worker(redis_broker, queues=[AGGREGATION_QUEUE_NAME])
         worker_thread = threading.Thread(target=worker.start, daemon=True)
+        self._worker_thread = worker_thread # Store the thread object
         worker_thread.start()
 
         health_reporter_task = self._event_loop.create_task(self._periodic_health_reporter())
