@@ -141,9 +141,7 @@ def ipfs_upload_retry_state_callback(retry_state: tenacity.RetryCallState):
     """
     if retry_state and retry_state.outcome.failed:
         logger.warning(
-            f'Encountered ipfs upload exception: {retry_state.outcome.exception()} | args: {retry_state.args}, kwargs:{
-                retry_state.kwargs
-            }',
+            f'Encountered ipfs upload exception: {retry_state.outcome.exception()} | args: {retry_state.args}, kwargs:{retry_state.kwargs}',
         )
 
 
@@ -541,13 +539,11 @@ class GenericAsyncWorker(multiprocessing.Process):
                 pass  # fail silently as this is intended for the stream to be closed right after sending the message
             else:
                 self._logger.error(
-                    f'Probable exception in _send_submission_to_collector while sending snapshot to local collector {
-                        msg
-                    }: {e}',
+                    f'Probable exception in _send_submission_to_collector while sending snapshot to local collector {msg}: {e}',
                 )
                 raise
         else:
-            self._logger.info('In _send_submission_to_collector successfully sent snapshot to local collector {msg}')
+            self._logger.info(f'In _send_submission_to_collector successfully sent snapshot to local collector {msg}')
 
     @retry(
         wait=wait_random_exponential(multiplier=1, max=10),
@@ -719,9 +715,7 @@ class GenericAsyncWorker(multiprocessing.Process):
 
                 elif current_time - task_start_time > self._task_timeout:
                     self._logger.warning(
-                        f'Task {task} timed out. Cancelling..., current_time: {
-                            current_time
-                        }, start_time: {task_start_time}',
+                        f'Task {task} timed out. Cancelling..., current_time: {current_time}, start_time: {task_start_time}',
                     )
                     task.cancel()
                     self._active_tasks.discard((task_start_time, task))

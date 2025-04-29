@@ -228,9 +228,12 @@ class GenericPreloader(ABC):
     @abstractmethod
     async def compute(
         self,
-        epoch: EpochBase,
-        redis_conn: aioredis.Redis,
+        redis: aioredis.Redis,
         rpc_helper: RpcHelper,
+        anchor_rpc_helper: RpcHelper,
+        ipfs_reader: AsyncIPFSClient,
+        protocol_state_contract,
+        task_type: str = None,
     ):
         """
         Abstract method to compute preload data.
@@ -239,6 +242,10 @@ class GenericPreloader(ABC):
             epoch (EpochBase): The epoch message.
             redis_conn (aioredis.Redis): Redis connection.
             rpc_helper (RpcHelper): RPC helper instance.
+            anchor_rpc_helper (RpcHelper): Anchor RPC helper instance.
+            ipfs_reader (AsyncIPFSClient): IPFS reader instance.
+            protocol_state_contract: Protocol state contract.
+            task_type (str): Task type.
         """
         pass
 

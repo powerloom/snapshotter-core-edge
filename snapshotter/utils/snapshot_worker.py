@@ -75,28 +75,6 @@ class SnapshotAsyncWorker(GenericAsyncWorker):
         self._hostname = gethostname()
         self._health_report_interval = settings.health_report_interval
 
-    def _gen_project_id(self, task_type: str, data_source: Optional[str] = None, primary_data_source: Optional[str] = None):
-        """
-        Generate a project ID based on the given parameters.
-
-        Args:
-            task_type (str): The type of task.
-            data_source (Optional[str]): The data source. Defaults to None.
-            primary_data_source (Optional[str]): The primary data source. Defaults to None.
-
-        Returns:
-            str: The generated project ID.
-        """
-        if not data_source:
-            # For generic use cases that don't have a data source like block details
-            project_id = f'{task_type}:{settings.namespace}'
-        else:
-            if primary_data_source:
-                project_id = f'{task_type}:{primary_data_source.lower()}_{data_source.lower()}:{settings.namespace}'
-            else:
-                project_id = f'{task_type}:{data_source.lower()}:{settings.namespace}'
-        return project_id
-
     async def _process(self, msg_obj: SnapshotProcessMessage, task_type: str):
         """
         Process snapshots in bulk mode.
@@ -113,12 +91,15 @@ class SnapshotAsyncWorker(GenericAsyncWorker):
         try:
             # Get the task processor for the given task type
             task_processor = self._project_calculation_mapping[task_type]
-
+            
             # Compute snapshots in bulk
             snapshots = await task_processor.compute(
                 epoch=msg_obj,
                 redis_conn=self._redis_conn,
                 rpc_helper=self._rpc_helper,
+                anchor_rpc_helper=self._anchor_rpc_helper,
+                ipfs_reader=self._ipfs_reader_client,
+                protocol_state_contract=self._protocol_state_contract,
                 task_type=task_type,
             )
 

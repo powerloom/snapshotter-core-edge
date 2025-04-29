@@ -770,9 +770,7 @@ class ProcessorDistributor(multiprocessing.Process):
 
                 elif current_time - task_start_time > self._task_timeout:
                     self._logger.warning(
-                        f'Task {task} timed out. Cancelling..., current_time: {
-                            current_time
-                        }, start_time: {task_start_time}',
+                        f'Task {task} timed out. Cancelling..., current_time: {current_time}, start_time: {task_start_time}',
                     )
                     task.cancel()
                     self._active_tasks.discard((task_start_time, task))
