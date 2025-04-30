@@ -315,7 +315,7 @@ class AggregationAsyncWorker(GenericAsyncWorker):
             class_ = getattr(module, project_config.processor.class_name)
             self._project_calculation_mapping[key] = class_()
         for project_config in projects_config:
-            key = project_config.project_type
+            key = project_config.project_name
             if key in self._project_calculation_mapping:
                 raise Exception('Duplicate project type found')
             module = importlib.import_module(project_config.processor.module)
