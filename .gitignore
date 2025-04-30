@@ -4,6 +4,7 @@ __pycache__/
 .idea/
 .DS_Store
 screenlog*
+.env*
 temp/*
 uniswapTokenData
 **/*projects.json
