@@ -128,7 +128,7 @@ class IPFSUnpinningWorker(multiprocessing.Process):
         """
         # Remove the pin from IPFS but skip S3 removal
         try:
-            await self._ipfs_writer_client.remove_bytes(snapshot_cid, skip_s3_removal=True)
+            await self._ipfs_writer_client.remove_bytes(snapshot_cid, skip_s3_removal=False)
         except Exception as e:
             self._logger.error(f'Error unpinning snapshot {snapshot_cid}: {e}, file may not exist in IPFS')
 
