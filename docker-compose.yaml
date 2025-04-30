@@ -278,11 +278,6 @@ services:
       - IPFS_ROUTING=dhtclient
     entrypoint: >
       /bin/sh -c '
-      mkdir -p /var/spool/cron/crontabs;
-      cleanup_cmd="date && echo \"Starting data cleanup process...\" && find /data/ipfs -type f -mtime +$${DATA_CLEANUP_DAYS} -name \"*.data\" -print -delete && echo \"Data cleanup process completed.\"";
-      echo "$${CLEANUP_SCHEDULE} $${cleanup_cmd} >> /proc/1/fd/1 2>&1" > /var/spool/cron/crontabs/root;
-      chmod 0644 /var/spool/cron/crontabs/root;
-      crond;
       exec /sbin/tini -- /usr/local/bin/start_ipfs daemon --migrate=true --agent-version-suffix=docker
       '
     volumes:
