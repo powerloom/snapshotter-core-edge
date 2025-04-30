@@ -9,6 +9,8 @@ import threading
 import time
 import traceback
 from collections import defaultdict
+from functools import lru_cache
+from rpc_helper.rpc import RpcHelper
 from signal import SIGINT
 from signal import signal
 from signal import SIGQUIT
@@ -18,6 +20,7 @@ from typing import Awaitable
 from typing import Dict
 from typing import List
 from typing import Set
+from typing import Optional
 from uuid import uuid4
 
 import dramatiq
@@ -61,7 +64,6 @@ from snapshotter.utils.redis.redis_keys import epoch_id_project_to_state_mapping
 from snapshotter.utils.redis.redis_keys import project_finalized_data_zset
 from snapshotter.utils.redis.redis_keys import project_last_finalized_epoch_key
 from snapshotter.utils.redis.redis_keys import service_health_timestamps_key
-from snapshotter.utils.rpc import RpcHelper
 
 # Configure Redis broker with no middleware
 redis_broker = RedisBroker(host=settings.redis.host, port=settings.redis.port)
@@ -177,6 +179,7 @@ class ProcessorDistributor(multiprocessing.Process):
 
         self._hostname = gethostname()
         self._health_report_interval = settings.health_report_interval
+        self._worker_thread: Optional[threading.Thread] = None
 
     def _signal_handler(self, signum, frame):
         """
@@ -202,7 +205,7 @@ class ProcessorDistributor(multiprocessing.Process):
         """
         Initializes the RpcHelper instance if it is not already initialized.
         """
-        self._rpc_helper = RpcHelper()
+        self._rpc_helper = RpcHelper(settings.rpc)
         await self._rpc_helper.init()
         self._anchor_rpc_helper = RpcHelper(rpc_settings=settings.anchor_chain_rpc)
         await self._anchor_rpc_helper.init()
@@ -868,8 +871,24 @@ class ProcessorDistributor(multiprocessing.Process):
             f'Starting periodic health reporter task for {self._hostname} (Interval: {self._health_report_interval}s)',
         )
         while True:
+            should_report = True
+            if not self._worker_thread or not self._worker_thread.is_alive():
+                should_report = False
+                if self._worker_thread:
+                    # Worker thread is no longer alive
+                    self._logger.critical(
+                        'Main Dramatiq worker thread has died. Halting health reports.'
+                    )
+                    # Halt the health reporter
+                    break
+                else:
+                    # Worker thread hasn't been initialized yet
+                    self._logger.warning('Worker thread not found. Skipping health report for now.')
+
             try:
-                await self.report_health_status()
+                if should_report:
+                    await self.report_health_status()
+
                 await asyncio.sleep(self._health_report_interval)
             except asyncio.CancelledError:
                 self._logger.info(f'Periodic health reporter task for {self._hostname} cancelled.')
@@ -904,6 +923,7 @@ class ProcessorDistributor(multiprocessing.Process):
         # Start a Dramatiq worker in a separate thread
         worker = Worker(redis_broker, queues=[EVENT_DETECTOR_QUEUE_NAME])
         worker_thread = threading.Thread(target=worker.start, daemon=True)
+        self._worker_thread = worker_thread # Store the thread object
         worker_thread.start()
 
         health_reporter_task = ev_loop.create_task(self._periodic_health_reporter())

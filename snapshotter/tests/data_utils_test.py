@@ -7,6 +7,7 @@ from unittest.mock import patch
 import pytest
 from fakeredis import FakeAsyncRedis
 from pytest_asyncio import fixture as async_fixture
+from rpc_helper.rpc import RpcHelper
 from web3 import AsyncWeb3
 from web3.providers.async_rpc import AsyncHTTPProvider
 
@@ -19,7 +20,6 @@ from snapshotter.utils.models.settings_model import RPCConfigFull
 from snapshotter.utils.models.settings_model import RPCNodeConfig
 from snapshotter.utils.redis.redis_keys import cid_not_found_key
 from snapshotter.utils.redis.redis_keys import project_finalized_data_zset
-from snapshotter.utils.rpc import RpcHelper
 
 """
 Data Utils Test Suite

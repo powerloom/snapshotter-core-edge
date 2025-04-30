@@ -2,12 +2,12 @@ import asyncio
 import json
 
 from redis import asyncio as aioredis
+from rpc_helper.rpc import RpcHelper
 
 from snapshotter.settings.config import settings
 from snapshotter.utils.default_logger import default_logger
 from snapshotter.utils.redis.redis_keys import cached_block_details_at_height
 from snapshotter.utils.redis.redis_keys import source_chain_epoch_size_key
-from snapshotter.utils.rpc import RpcHelper
 
 
 snapshot_util_logger = default_logger.bind(module='Snapshotter|SnapshotUtilLogger')
