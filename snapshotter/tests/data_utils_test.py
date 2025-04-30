@@ -57,7 +57,6 @@ TEST_RPC_CONFIG = RPCConfigFull(
     semaphore_value=settings.rpc.semaphore_value,
     force_archive_blocks=settings.rpc.force_archive_blocks,
     request_time_out=settings.rpc.request_time_out,
-    skip_epoch_threshold_blocks=settings.rpc.skip_epoch_threshold_blocks,
     polling_interval=settings.rpc.polling_interval,
 )
 
