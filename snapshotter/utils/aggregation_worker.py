@@ -10,6 +10,7 @@ from signal import SIGQUIT
 from signal import SIGTERM
 from typing import Union, Optional
 from socket import gethostname
+from typing import Union
 
 import dramatiq
 import uvloop
@@ -25,8 +26,8 @@ from snapshotter.utils.default_logger import default_logger
 from snapshotter.utils.generic_worker import GenericAsyncWorker
 from snapshotter.utils.models.data_models import SnapshotterStates
 from snapshotter.utils.models.data_models import SnapshotterStateUpdate
-from snapshotter.utils.models.message_models import PowerloomCalculateAggregateMessage
-from snapshotter.utils.models.message_models import PowerloomSnapshotSubmittedMessage
+from snapshotter.utils.models.message_models import CalculateAggregateMessage
+from snapshotter.utils.models.message_models import SnapshotSubmittedMessage
 from snapshotter.utils.models.settings_model import AggregateOn
 from snapshotter.utils.redis.redis_keys import epoch_id_project_to_state_mapping
 from snapshotter.utils.redis.redis_keys import service_health_timestamps_key
@@ -145,7 +146,7 @@ class AggregationAsyncWorker(GenericAsyncWorker):
 
     async def _process_task(
         self,
-        msg_obj: Union[PowerloomSnapshotSubmittedMessage, PowerloomCalculateAggregateMessage],
+        msg_obj: Union[SnapshotSubmittedMessage, CalculateAggregateMessage],
         task_type: str,
     ):
         """
@@ -155,7 +156,7 @@ class AggregationAsyncWorker(GenericAsyncWorker):
         error handling, state updates, and snapshot creation.
 
         Args:
-            msg_obj (Union[PowerloomSnapshotSubmittedMessage, PowerloomCalculateAggregateMessage]):
+            msg_obj (Union[SnapshotSubmittedMessage, CalculateAggregateMessage]):
                 The message object to be processed.
             task_type (str): The type of task to be performed.
 
@@ -261,9 +262,9 @@ class AggregationAsyncWorker(GenericAsyncWorker):
         event_data = args[1]
         try:
             if event_type in self._single_project_types:
-                msg_obj: PowerloomSnapshotSubmittedMessage = PowerloomSnapshotSubmittedMessage.parse_raw(event_data)
+                msg_obj: SnapshotSubmittedMessage = SnapshotSubmittedMessage.parse_raw(event_data)
             elif event_type in self._multi_project_types:
-                msg_obj: PowerloomCalculateAggregateMessage = PowerloomCalculateAggregateMessage.parse_raw(event_data)
+                msg_obj: CalculateAggregateMessage = CalculateAggregateMessage.parse_raw(event_data)
             else:
                 self._logger.error('Unknown event type: {}', event_type)
                 return

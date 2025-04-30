@@ -22,11 +22,10 @@ with open(projects_config_path) as projects_config_file:
 projects_config = ProjectsConfig(**projects_config_dict).config
 
 # Sanity check: Ensure all project types are unique
-project_types = set()
+project_names = set()
 for project in projects_config:
-    project_types.add(project.project_type)
-    project.projects = [project.lower() for project in project.projects]
-assert len(project_types) == len(projects_config), 'Duplicate project types found'
+    project_names.add(project.project_name)
+assert len(project_names) == len(projects_config), 'Duplicate project names found'
 
 # Load aggregator configuration
 aggregator_config_path = settings.aggregator_config_path
@@ -40,8 +39,8 @@ for aggregator in aggregator_config:
     aggregator_types.add(aggregator.project_type)
 assert len(aggregator_types) == len(aggregator_config), 'Duplicate aggregator types found'
 
-# Ensure no overlap between project types and aggregator types
-assert len(project_types & aggregator_types) == 0, 'Overlap found between project and aggregator types'
+# Ensure no overlap between project names and aggregator types
+assert len(project_names & aggregator_types) == 0, 'Overlap found between project and aggregator types'
 
 # Load preloader configuration
 preloader_config_path = settings.preloader_config_path

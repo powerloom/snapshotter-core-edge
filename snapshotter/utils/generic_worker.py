@@ -51,9 +51,9 @@ from snapshotter.utils.models.data_models import SnapshotterStateUpdate
 from snapshotter.utils.models.data_models import TelegramSnapshotterCoreReportMessage
 from snapshotter.utils.models.data_models import UnfinalizedSnapshot
 from snapshotter.utils.models.message_models import AggregateBase
-from snapshotter.utils.models.message_models import PowerloomCalculateAggregateMessage
-from snapshotter.utils.models.message_models import PowerloomSnapshotProcessMessage
-from snapshotter.utils.models.message_models import PowerloomSnapshotSubmittedMessage
+from snapshotter.utils.models.message_models import CalculateAggregateMessage
+from snapshotter.utils.models.message_models import SnapshotProcessMessage
+from snapshotter.utils.models.message_models import SnapshotSubmittedMessage
 from snapshotter.utils.models.proto.snapshot_submission.submission_grpc import SubmissionStub
 from snapshotter.utils.models.proto.snapshot_submission.submission_pb2 import Request
 from snapshotter.utils.models.proto.snapshot_submission.submission_pb2 import SnapshotSubmission
@@ -281,9 +281,9 @@ class GenericAsyncWorker(multiprocessing.Process):
             _ipfs_writer_client: AsyncIPFSClient,
             project_id: str,
             epoch: Union[
-                PowerloomSnapshotProcessMessage,
-                PowerloomSnapshotSubmittedMessage,
-                PowerloomCalculateAggregateMessage,
+                SnapshotProcessMessage,
+                SnapshotSubmittedMessage,
+                CalculateAggregateMessage,
             ],
             snapshot: Union[BaseModel, AggregateBase],
     ):
@@ -295,7 +295,7 @@ class GenericAsyncWorker(multiprocessing.Process):
             task_type (str): The type of task being committed.
             _ipfs_writer_client (AsyncIPFSClient): The IPFS client to use for uploading the snapshot.
             project_id (str): The ID of the project the snapshot belongs to.
-            epoch (Union[PowerloomSnapshotProcessMessage, PowerloomSnapshotSubmittedMessage, PowerloomCalculateAggregateMessage]): The epoch the snapshot belongs to.
+            epoch (Union[SnapshotProcessMessage, SnapshotSubmittedMessage, CalculateAggregateMessage]): The epoch the snapshot belongs to.
             snapshot (Union[BaseModel, AggregateBase]): The snapshot to commit.
 
         Returns:
@@ -324,7 +324,7 @@ class GenericAsyncWorker(multiprocessing.Process):
                 mapping={unfinalized_entry.json(sort_keys=True): epoch.epochId},
             )
             # Publish snapshot submitted event to event detector queue
-            snapshot_submitted_message = PowerloomSnapshotSubmittedMessage(
+            snapshot_submitted_message = SnapshotSubmittedMessage(
                 snapshotCid=snapshot_cid,
                 epochId=epoch.epochId,
                 projectId=project_id,
@@ -543,7 +543,7 @@ class GenericAsyncWorker(multiprocessing.Process):
                 )
                 raise
         else:
-            self._logger.info('In _send_submission_to_collector successfully sent snapshot to local collector {msg}')
+            self._logger.info(f'In _send_submission_to_collector successfully sent snapshot to local collector {msg}')
 
     @retry(
         wait=wait_random_exponential(multiplier=1, max=10),
@@ -669,7 +669,7 @@ class GenericAsyncWorker(multiprocessing.Process):
             project_id (str): The ID of the project that missed the snapshot.
         """
         if (int(time.time()) - self._last_notification_time) >= self._notification_cooldown and \
-            (settings.reporting.telegram_url and settings.reporting.telegram_chat_id):
+                (settings.reporting.telegram_url and settings.reporting.telegram_chat_id):
 
             if not self._telegram_httpx_client:
                 self._logger.error('Telegram client not initialized')

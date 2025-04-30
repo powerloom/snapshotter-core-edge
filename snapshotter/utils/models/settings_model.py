@@ -189,7 +189,6 @@ class Settings(BaseModel):
     preloader_config_path: str
     aggregator_config_path: str
     protocol_state: EventContract
-    callback_worker_config: CallbackWorkerConfig
     ipfs: IPFSConfig
     ipfs_unpinning: IPFSUnpinningConfig
     node_version: str
@@ -206,11 +205,9 @@ class ProcessorConfig(BaseModel):
 
 class ProjectConfig(BaseModel):
     """Project configuration model."""
-    project_type: str
-    projects: Optional[List[str]] = None
+    project_name: str
     processor: ProcessorConfig
     preload_tasks: List[str]
-    bulk_mode: Optional[bool] = False
 
 
 class ProjectsConfig(BaseModel):
