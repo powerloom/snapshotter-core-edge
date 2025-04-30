@@ -8,6 +8,8 @@ import pytest
 from fakeredis import FakeAsyncRedis
 from pytest_asyncio import fixture as async_fixture
 from rpc_helper.rpc import RpcHelper
+from rpc_helper.utils.models.settings_model import RPCConfigFull
+from rpc_helper.utils.models.settings_model import RPCNodeConfig
 from web3 import AsyncWeb3
 from web3.providers.async_rpc import AsyncHTTPProvider
 
@@ -16,8 +18,6 @@ from snapshotter.utils.data_utils import get_project_epoch_snapshot_bulk
 from snapshotter.utils.data_utils import get_project_finalized_cid
 from snapshotter.utils.data_utils import get_project_finalized_cids_bulk
 from snapshotter.utils.data_utils import get_submission_data_bulk
-from snapshotter.utils.models.settings_model import RPCConfigFull
-from snapshotter.utils.models.settings_model import RPCNodeConfig
 from snapshotter.utils.redis.redis_keys import cid_not_found_key
 from snapshotter.utils.redis.redis_keys import project_finalized_data_zset
 
