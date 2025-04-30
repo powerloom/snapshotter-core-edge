@@ -111,9 +111,9 @@ class SnapshotAsyncWorker(GenericAsyncWorker):
 
         except Exception as e:
             # Handle exceptions during bulk snapshot processing
-            self._logger.opt(exception=settings.logs.debug_mode).error(
-                'Exception processing callback for epoch: {}, Error: {},'
-                'sending failure notifications', msg_obj, e,
+            self._logger.opt(exception=True).error(
+                'Exception processing callback for epoch: {}, task_type: {}, Error: {},'
+                'sending failure notifications', msg_obj, task_type, e,
             )
 
             # Update Redis with failure state
