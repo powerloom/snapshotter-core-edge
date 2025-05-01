@@ -449,7 +449,7 @@ class ProcessorDistributor(multiprocessing.Process):
             message (IncomingMessage): The message containing the epoch information.
         """
         msg_obj: EpochBase = (
-            EpochBase.parse_raw(event_data)
+            EpochBase.model_validate_json(event_data)
         )
 
         self._logger.debug('Pushing epoch release to preloader coroutine: {}', msg_obj)
@@ -524,7 +524,7 @@ class ProcessorDistributor(multiprocessing.Process):
         """
         self._logger.debug(f'SnapshotBatchSubmittedEvent caught with message {event_data}')
         msg_obj: SnapshotBatchSubmittedMessage = (
-            SnapshotBatchSubmittedMessage.parse_raw(event_data)
+            SnapshotBatchSubmittedMessage.model_validate_json(event_data)
         )
 
         transaction_hash = msg_obj.transactionHash
@@ -573,7 +573,7 @@ class ProcessorDistributor(multiprocessing.Process):
         """
         self._logger.debug(f'SnapshotFinalizedEvent caught with message {event_data}')
         msg_obj: SnapshotFinalizedMessage = (
-            SnapshotFinalizedMessage.parse_raw(event_data)
+            SnapshotFinalizedMessage.model_validate_json(event_data)
         )
 
         # set project last finalized epoch in redis
@@ -607,7 +607,7 @@ class ProcessorDistributor(multiprocessing.Process):
         :param message: IncomingMessage object containing the message to be processed.
         """
         process_unit: SnapshotSubmittedMessage = (
-            SnapshotSubmittedMessage.parse_raw(event_data)
+            SnapshotSubmittedMessage.model_validate_json(event_data)
         )
 
         self._logger.trace(f'Aggregation Task Distribution time - {int(time.time())}')
@@ -661,7 +661,7 @@ class ProcessorDistributor(multiprocessing.Process):
         )
 
         if event_type == 'EpochReleased':
-            epoch_msg: EpochBase = EpochBase.parse_raw(event_data)
+            epoch_msg: EpochBase = EpochBase.model_validate_json(event_data)
             await self._redis_conn.set(
                 epoch_id_epoch_released_key(epoch_msg.epochId),
                 int(time.time()),

@@ -262,9 +262,9 @@ class AggregationAsyncWorker(GenericAsyncWorker):
         event_data = args[1]
         try:
             if event_type in self._single_project_types:
-                msg_obj: SnapshotSubmittedMessage = SnapshotSubmittedMessage.parse_raw(event_data)
+                msg_obj: SnapshotSubmittedMessage = SnapshotSubmittedMessage.model_validate_json(event_data)
             elif event_type in self._multi_project_types:
-                msg_obj: CalculateAggregateMessage = CalculateAggregateMessage.parse_raw(event_data)
+                msg_obj: CalculateAggregateMessage = CalculateAggregateMessage.model_validate_json(event_data)
             else:
                 self._logger.error('Unknown event type: {}', event_type)
                 return

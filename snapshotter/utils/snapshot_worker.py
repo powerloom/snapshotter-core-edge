@@ -219,7 +219,7 @@ class SnapshotAsyncWorker(GenericAsyncWorker):
             event_data = args[1]
 
             msg_obj: SnapshotProcessMessage = (
-                SnapshotProcessMessage.parse_raw(event_data)
+                SnapshotProcessMessage.model_validate_json(event_data)
             )
         except ValidationError as e:
             self._logger.opt(exception=settings.logs.debug_mode).error(
