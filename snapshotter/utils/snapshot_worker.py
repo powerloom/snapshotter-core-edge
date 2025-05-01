@@ -124,7 +124,7 @@ class SnapshotAsyncWorker(GenericAsyncWorker):
                 mapping={
                     f'{task_type}:{settings.namespace}': SnapshotterStateUpdate(
                         status='failed', error=str(e), timestamp=int(time.time()),
-                    ).json(),
+                    ).model_dump_json(),
                 },
             )
             await self._send_failure_notifications(error=e, epoch_id=msg_obj.epochId, project_id='bulk_mode')
@@ -150,7 +150,7 @@ class SnapshotAsyncWorker(GenericAsyncWorker):
                     name=submitted_base_snapshots_key(
                         epoch_id=msg_obj.epochId, project_id=project_id,
                     ),
-                    value=snapshot.json(),
+                    value=snapshot.model_dump_json(),
                     # Store snapshot for 10 mins
                     ex=600,
                 )
@@ -164,7 +164,7 @@ class SnapshotAsyncWorker(GenericAsyncWorker):
                     mapping={
                         project_id: SnapshotterStateUpdate(
                             status='success', timestamp=int(time.time()),
-                        ).json(),
+                        ).model_dump_json(),
                     },
                 )
                 await p.execute()

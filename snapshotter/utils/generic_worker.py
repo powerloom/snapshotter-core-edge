@@ -321,7 +321,7 @@ class GenericAsyncWorker(multiprocessing.Process):
             )
             await self._redis_conn.zadd(
                 name=submitted_unfinalized_snapshot_cids(project_id),
-                mapping={unfinalized_entry.json(sort_keys=True): epoch.epochId},
+                mapping={json.dumps(unfinalized_entry.model_dump(mode='json'), sort_keys=True): epoch.epochId},
             )
             # Publish snapshot submitted event to event detector queue
             snapshot_submitted_message = SnapshotSubmittedMessage(
@@ -336,7 +336,7 @@ class GenericAsyncWorker(multiprocessing.Process):
                 dramatiq.Message(
                     queue_name=EVENT_DETECTOR_QUEUE_NAME,
                     actor_name='handleEvent',  # Match actor name with event_receiver.py
-                    args=('SnapshotSubmitted', snapshot_submitted_message.json()),
+                    args=('SnapshotSubmitted', snapshot_submitted_message.model_dump_json()),
                     kwargs={},
                     options={},
                 ),
@@ -366,7 +366,7 @@ class GenericAsyncWorker(multiprocessing.Process):
                     mapping={
                         project_id: SnapshotterStateUpdate(
                             status='failed', error=str(e), timestamp=int(time.time()),
-                        ).json(),
+                        ).model_dump_json(),
                     },
                 )
                 await self._send_failure_notifications(error=e, epoch_id=epoch.epochId, project_id=project_id)
@@ -378,7 +378,7 @@ class GenericAsyncWorker(multiprocessing.Process):
                     mapping={
                         project_id: SnapshotterStateUpdate(
                             status='success', timestamp=int(time.time()),
-                        ).json(),
+                        ).model_dump_json(),
                     },
                 )
 
