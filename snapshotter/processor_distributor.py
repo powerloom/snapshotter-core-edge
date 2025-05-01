@@ -371,7 +371,7 @@ class ProcessorDistributor(multiprocessing.Process):
                     mapping={
                         project_name: SnapshotterStateUpdate(
                             status='success', timestamp=int(time.time()),
-                        ).json(),
+                        ).model_dump_json(),
                     },
                 )
                 await self._distribute_callbacks_snapshotting(project_name, epoch)
@@ -385,7 +385,7 @@ class ProcessorDistributor(multiprocessing.Process):
                     mapping={
                         project_name: SnapshotterStateUpdate(
                             status='failed', timestamp=int(time.time()),
-                        ).json(),
+                        ).model_dump_json(),
                     },
                 )
         # TODO: set separate overall status for failed and successful preloads
@@ -499,7 +499,7 @@ class ProcessorDistributor(multiprocessing.Process):
             dramatiq.Message(
                 queue_name=SNAPSHOT_QUEUE_NAME,
                 actor_name='handleEvent',  # Match actor name with event_receiver.py
-                args=(project_name, process_unit.json()),
+                args=(project_name, process_unit.model_dump_json()),
                 kwargs={},
                 options={},
             ),
@@ -557,7 +557,7 @@ class ProcessorDistributor(multiprocessing.Process):
                 mapping={
                     project_id: SnapshotterStateUpdate(
                         status='success', timestamp=int(time.time()), extra={'snapshot_cid': snapshot_cid},
-                    ).json(),
+                    ).model_dump_json(),
                 },
             )
 
@@ -594,7 +594,7 @@ class ProcessorDistributor(multiprocessing.Process):
             mapping={
                 msg_obj.projectId: SnapshotterStateUpdate(
                     status='success', timestamp=int(time.time()), extra={'snapshot_cid': msg_obj.snapshotCid},
-                ).json(),
+                ).model_dump_json(),
             },
         )
 
@@ -624,7 +624,7 @@ class ProcessorDistributor(multiprocessing.Process):
         #             dramatiq.Message(
         #                 queue_name=AGGREGATION_QUEUE_NAME,
         #                 actor_name='handleEvent',  # Match actor name with event_receiver.py
-        #                 args=(task_type, process_unit.json()),
+        #                 args=(task_type, process_unit.model_dump_json()),
         #                 kwargs={},
         #                 options={},
         #             ),
