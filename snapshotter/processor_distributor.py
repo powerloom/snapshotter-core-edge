@@ -911,7 +911,9 @@ class ProcessorDistributor(multiprocessing.Process):
             signal(signame, self._signal_handler)
         asyncio.set_event_loop_policy(uvloop.EventLoopPolicy())
 
-        ev_loop = asyncio.get_event_loop()
+        ev_loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(ev_loop)
+
         ProcessorDistributor._event_loop = ev_loop  # Store the event loop
         # Update the middleware to use this event loop
         for middleware in redis_broker.middleware:
@@ -933,7 +935,12 @@ class ProcessorDistributor(multiprocessing.Process):
         finally:
             if health_reporter_task and not health_reporter_task.done():
                 health_reporter_task.cancel()
-                ev_loop.run_until_complete(asyncio.sleep(2))
+                try:
+                    ev_loop.run_until_complete(asyncio.wait_for(health_reporter_task, timeout=2.0))
+                except (asyncio.CancelledError, asyncio.TimeoutError):
+                    pass
+            if ev_loop.is_running():
+                ev_loop.stop()
             ev_loop.close()
 
 

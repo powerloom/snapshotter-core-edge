@@ -238,10 +238,10 @@ async def test_get_events_logs(rpc_helper: RpcHelper, web3: AsyncWeb3, protocol_
 @pytest.mark.asyncio(loop_scope='module')
 async def test_rate_limiting(rpc_helper_override: RpcHelper):
     samples = 10
-    start_time = asyncio.get_event_loop().time()
+    start_time = asyncio.new_event_loop().time()
     tasks = [rpc_helper_override.get_current_block_number() for _ in range(samples)]
     await asyncio.gather(*tasks)
-    end_time = asyncio.get_event_loop().time()
+    end_time = asyncio.new_event_loop().time()
 
     elapsed_time = end_time - start_time
     expected_time = (samples - 1) / RATE_LIMIT_OVERRIDE.requests_per_second

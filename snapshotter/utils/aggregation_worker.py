@@ -397,7 +397,8 @@ class AggregationAsyncWorker(GenericAsyncWorker):
 
         asyncio.set_event_loop_policy(uvloop.EventLoopPolicy())
 
-        ev_loop = asyncio.get_event_loop()
+        ev_loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(ev_loop)
         self._event_loop = ev_loop
 
         # Update the middleware to use this event loop
