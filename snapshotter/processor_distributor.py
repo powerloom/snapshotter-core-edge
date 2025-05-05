@@ -36,7 +36,7 @@ from redis import asyncio as aioredis
 from web3 import Web3
 
 from snapshotter.health_ping import create_health_ping_actor
-from snapshotter.health_ping import run_periodic_health_check
+from snapshotter.health_ping import run_periodic_broker_health_check
 from snapshotter.settings.config import aggregator_config
 from snapshotter.settings.config import preloaders
 from snapshotter.settings.config import projects_config
@@ -184,6 +184,7 @@ class ProcessorDistributor(multiprocessing.Process):
             broker=redis_broker,
             queue_name=DISTRIBUTOR_HEALTH_QUEUE_NAME,
             actor_name='healthPingDist',
+            logger=self._logger
         )
 
     def _signal_handler(self, signum, frame):
@@ -884,7 +885,7 @@ class ProcessorDistributor(multiprocessing.Process):
         worker.start()
 
         health_reporter_task = ev_loop.create_task(
-             run_periodic_health_check(
+             run_periodic_broker_health_check(
                 logger=self._logger,
                 redis_conn=self._redis_conn,
                 hostname=self._hostname,

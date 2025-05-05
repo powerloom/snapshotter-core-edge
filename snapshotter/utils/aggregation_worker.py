@@ -18,7 +18,7 @@ from dramatiq.worker import Worker
 from pydantic import ValidationError
 
 from snapshotter.health_ping import create_health_ping_actor
-from snapshotter.health_ping import run_periodic_health_check
+from snapshotter.health_ping import run_periodic_broker_health_check
 from snapshotter.settings.config import aggregator_config
 from snapshotter.settings.config import projects_config
 from snapshotter.settings.config import settings
@@ -66,6 +66,9 @@ class AggregationAsyncWorker(GenericAsyncWorker):
         """
         super(AggregationAsyncWorker, self).__init__(name=name, **kwargs)
 
+
+        self._logger = default_logger.bind(module='AggregationWorker')
+
         self._project_calculation_mapping = None
         self._single_project_types = set()
         self._multi_project_types = set()
@@ -85,10 +88,12 @@ class AggregationAsyncWorker(GenericAsyncWorker):
         )(self.handle_event)
         self._hostname = gethostname()
         self._health_report_interval = settings.health_report_interval
+        # Bind logger once for the instance
         self._health_ping_actor = create_health_ping_actor(
             broker=redis_broker,
             queue_name=AGGREGATION_HEALTH_QUEUE_NAME,
             actor_name='healthPingAgg',
+            logger=self._logger # Pass the instance logger
         )
 
     def _gen_single_type_project_id(self, task_type, epoch):
@@ -340,7 +345,6 @@ class AggregationAsyncWorker(GenericAsyncWorker):
         Runs the worker by setting resource limits, registering signal handlers, starting the Dramatiq worker's
         internal threads, and running the main event loop until it is stopped.
         """
-        self._logger = default_logger.bind(module='AggregationWorker')
         soft, hard = resource.getrlimit(resource.RLIMIT_NOFILE)
         resource.setrlimit(
             resource.RLIMIT_NOFILE,
@@ -371,7 +375,7 @@ class AggregationAsyncWorker(GenericAsyncWorker):
 
         # Start the centralized health reporter task
         health_reporter_task = self._event_loop.create_task(
-             run_periodic_health_check(
+             run_periodic_broker_health_check(
                 logger=self._logger,
                 redis_conn=self._redis_conn,
                 hostname=self._hostname,

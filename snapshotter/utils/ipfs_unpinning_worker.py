@@ -20,11 +20,11 @@ from tenacity import retry
 from tenacity import stop_after_attempt
 from tenacity import wait_random_exponential
 
+from snapshotter.health_ping import run_periodic_task_health_check
 from snapshotter.settings.config import settings
 from snapshotter.utils.default_logger import default_logger
 from snapshotter.utils.redis.redis_conn import RedisPoolCache
 from snapshotter.utils.redis.redis_keys import unpinned_snapshots_zset_name
-from snapshotter.utils.redis.redis_keys import service_health_timestamps_key
 
 logger = default_logger.bind(module='IPFSUnpinningWorker')
 
@@ -288,63 +288,6 @@ class IPFSUnpinningWorker(multiprocessing.Process):
                     task.cancel()
                     self._active_tasks.discard((task_start_time, task))
 
-    async def report_health_status(self):
-        """Reports the current timestamp for this container's hostname to Redis."""
-        if not hasattr(self, '_redis_conn') or self._redis_conn is None:
-            self._logger.warning('Redis connection not initialized, skipping health report.')
-            return
-        try:
-            current_timestamp = int(time.time())
-            await self._redis_conn.hset(
-                service_health_timestamps_key(),
-                self._hostname,
-                current_timestamp,
-            )
-            self._logger.debug(f'Reported health for {self._hostname} at {current_timestamp}')
-        except Exception as e:
-            self._logger.error(f'Failed to report health status for hostname {self._hostname}: {e}')
-
-    async def _periodic_health_reporter(self):
-        """Periodically reports health status."""
-        self._logger.info(
-            f'Starting periodic health reporter task for {self._hostname} (Interval: {self._health_report_interval}s)',
-        )
-        while True:
-            should_report = True
-            if not self._unpin_snapshots_task or self._unpin_snapshots_task.done():
-                should_report = False
-                if self._unpin_snapshots_task:
-                    # Task is done, check for exception
-                    exc = self._unpin_snapshots_task.exception()
-                    if exc:
-                        self._logger.error(
-                            f'Main unpin task failed with exception: {exc}. Halting health reports.'
-                        )
-                    else:
-                        self._logger.warning(
-                            'Main unpin task finished unexpectedly. Halting health reports.'
-                        )
-                    # Halt the health reporter if the main task is done (failed or finished)
-                    break
-                else:
-                    # Task hasn't started yet or was never assigned
-                    self._logger.warning('Main unpin task not found. Skipping health report for now.')
-                    # Don't break here, the task might start later
-
-            try:
-                if should_report:
-                    await self.report_health_status()
-                # else: Task is not running or not found yet, skip reporting
-
-                await asyncio.sleep(self._health_report_interval)
-            except asyncio.CancelledError:
-                self._logger.info(f'Periodic health reporter task for {self._hostname} cancelled.')
-                break
-            except Exception as e:
-                self._logger.error(f'Error in periodic health reporter loop: {e}')
-                # Optionally add a small delay before retrying after an error
-                await asyncio.sleep(self._health_report_interval) # Keep the interval consistent even after error
-
     def run(self) -> None:
         """
         Runs the worker process.
@@ -383,8 +326,18 @@ class IPFSUnpinningWorker(multiprocessing.Process):
 
         # Start the event detection loop
         # self._event_loop.run_until_complete(self._unpin_snapshots())
-        health_reporter_task = self._event_loop.create_task(self._periodic_health_reporter())
         self._unpin_snapshots_task = self._event_loop.create_task(self._unpin_snapshots())
+        
+        # Start the centralized health reporter task
+        health_reporter_task = self._event_loop.create_task(
+            run_periodic_task_health_check(
+                logger=self._logger,
+                redis_conn=self._redis_conn,
+                hostname=self._hostname,
+                health_report_interval=self._health_report_interval,
+                main_task=self._unpin_snapshots_task
+            )
+        )
 
         try:
             # Wait for the unpinning task to complete (it runs indefinitely)
@@ -399,10 +352,8 @@ class IPFSUnpinningWorker(multiprocessing.Process):
                 self._unpin_snapshots_task.cancel()
                 shutdown_tasks.append(self._unpin_snapshots_task)
 
-            # Allow some time for tasks to clean up
             if shutdown_tasks:
                 try:
-                    # Gather cancelled tasks to ensure they complete cancellation
                     self._event_loop.run_until_complete(asyncio.gather(*shutdown_tasks, return_exceptions=True))
                 except RuntimeError as e:
                     self._logger.warning(f"Could not fully await task cancellations on loop close: {e}")

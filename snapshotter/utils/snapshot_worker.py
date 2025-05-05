@@ -16,7 +16,7 @@ from dramatiq.worker import Worker
 from pydantic import ValidationError
 
 from snapshotter.health_ping import create_health_ping_actor
-from snapshotter.health_ping import run_periodic_health_check
+from snapshotter.health_ping import run_periodic_broker_health_check
 from snapshotter.settings.config import projects_config
 from snapshotter.settings.config import settings
 from snapshotter.utils.default_logger import default_logger
@@ -60,6 +60,7 @@ class SnapshotAsyncWorker(GenericAsyncWorker):
             **kwargs: Additional keyword arguments to be passed to the GenericAsyncWorker constructor.
         """
         super(SnapshotAsyncWorker, self).__init__(name=name, **kwargs)
+        self._logger = default_logger.bind(module='SnapshotWorker')
         self._project_calculation_mapping = None
         self._task_types = []
         for project_config in projects_config:
@@ -75,6 +76,7 @@ class SnapshotAsyncWorker(GenericAsyncWorker):
             broker=redis_broker,
             queue_name=SNAPSHOT_HEALTH_QUEUE_NAME,
             actor_name='healthPingSnapshot',
+            logger=self._logger # Pass the instance logger
         )
 
     async def _process(self, msg_obj: SnapshotProcessMessage, task_type: str):
@@ -282,7 +284,6 @@ class SnapshotAsyncWorker(GenericAsyncWorker):
         Runs the worker by setting resource limits, registering signal handlers, starting the Dramatiq worker's
         internal threads, and running the main event loop until it is stopped.
         """
-        self._logger = default_logger.bind(module='SnapshotWorker')
         soft, hard = resource.getrlimit(resource.RLIMIT_NOFILE)
         resource.setrlimit(
             resource.RLIMIT_NOFILE,
@@ -317,7 +318,7 @@ class SnapshotAsyncWorker(GenericAsyncWorker):
         worker.start()
 
         health_reporter_task = self._event_loop.create_task(
-            run_periodic_health_check(
+            run_periodic_broker_health_check(
                 logger=self._logger,
                 redis_conn=self._redis_conn,
                 hostname=self._hostname,
