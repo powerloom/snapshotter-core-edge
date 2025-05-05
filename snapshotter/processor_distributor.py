@@ -5,7 +5,6 @@ import multiprocessing
 import queue
 import resource
 import sys
-import threading
 import time
 import traceback
 from collections import defaultdict
@@ -20,7 +19,6 @@ from typing import Awaitable
 from typing import Dict
 from typing import List
 from typing import Set
-from typing import Optional
 from uuid import uuid4
 
 import dramatiq
@@ -81,6 +79,25 @@ dramatiq.set_broker(redis_broker)
 EVENT_DETECTOR_QUEUE_NAME = f'powerloom-event-detector_{settings.namespace}_{settings.instance_id}'
 SNAPSHOT_QUEUE_NAME = f'powerloom-snapshotter_{settings.namespace}_{settings.instance_id}'
 AGGREGATION_QUEUE_NAME = f'powerloom-aggregator_{settings.namespace}_{settings.instance_id}'
+HEALTH_QUEUE_NAME = f'powerloom-distributor-health_{settings.namespace}_{settings.instance_id}'
+logger = default_logger.bind(module='ProcessorDistributor')
+
+
+@dramatiq.actor(broker=redis_broker, queue_name=HEALTH_QUEUE_NAME, actor_name='healthPingDist')
+def health_ping(hostname: str):
+    """Simple actor that updates the main service health timestamp key for a given hostname."""
+    if not hostname:
+        logger.error("Received dist health ping request without a hostname.")
+        return
+    try:
+        # Use the sync redis client available within dramatiq actors
+        redis_conn = redis_broker.client
+        key = service_health_timestamps_key()
+        current_timestamp = int(time.time())
+        redis_conn.hset(key, hostname, current_timestamp)
+        logger.debug(f'Dist health ping processed for hostname: {hostname} at {current_timestamp}')
+    except Exception as e:
+        logger.error(f"Error in dist health_ping actor for hostname {hostname}: {e}")
 
 
 class ProcessorDistributor(multiprocessing.Process):
@@ -179,7 +196,6 @@ class ProcessorDistributor(multiprocessing.Process):
 
         self._hostname = gethostname()
         self._health_report_interval = settings.health_report_interval
-        self._worker_thread: Optional[threading.Thread] = None
 
     def _signal_handler(self, signum, frame):
         """
@@ -866,28 +882,52 @@ class ProcessorDistributor(multiprocessing.Process):
             self._logger.error(f'Failed to report health status for hostname {self._hostname}: {e}')
 
     async def _periodic_health_reporter(self):
-        """Periodically reports health status."""
+        """Periodically triggers and checks Dramatiq worker liveness via health ping."""
         self._logger.info(
-            f'Starting periodic health reporter task for {self._hostname} (Interval: {self._health_report_interval}s)',
+            f'Starting periodic Distributor health check task for {self._hostname} (Interval: {self._health_report_interval}s)',
         )
-        while True:
-            should_report = True
-            if not self._worker_thread or not self._worker_thread.is_alive():
-                should_report = False
-                if self._worker_thread:
-                    # Worker thread is no longer alive
-                    self._logger.critical(
-                        'Main Dramatiq worker thread has died. Halting health reports.'
-                    )
-                    # Halt the health reporter
-                    break
-                else:
-                    # Worker thread hasn't been initialized yet
-                    self._logger.warning('Worker thread not found. Skipping health report for now.')
+        dramatiq_liveness_threshold = self._health_report_interval + 30 
+        health_key = service_health_timestamps_key()
 
+        # Allow a grace period on startup before reporting critical errors
+        startup_grace_period_end = time.time() + dramatiq_liveness_threshold + 10
+
+        while True:
             try:
-                if should_report:
-                    await self.report_health_status()
+                health_ping.send(self._hostname)
+                self._logger.debug(f"Sent dist health ping for {self._hostname} to {HEALTH_QUEUE_NAME}")
+
+                last_ping_time_bytes = await self._redis_conn.hget(health_key, self._hostname)
+                current_time = int(time.time())
+
+                if last_ping_time_bytes:
+                    last_ping_time = int(last_ping_time_bytes.decode())
+                    time_since_last_ping = current_time - last_ping_time
+                    if time_since_last_ping > dramatiq_liveness_threshold:
+                        # Only log critical after grace period
+                        if current_time > startup_grace_period_end:
+                            self._logger.critical(
+                                f"Distributor Dramatiq workers seem unresponsive for {self._hostname}. Last health ping acknowledged {time_since_last_ping}s ago"
+                                f" (Threshold: {dramatiq_liveness_threshold}s). Key: {health_key}, Field: {self._hostname}"
+                            )
+                        else:
+                             self._logger.debug(
+                                f"Distributor Dramatiq workers potentially unresponsive for {self._hostname} (in startup grace period). Last health ping acknowledged {time_since_last_ping}s ago."
+                             )
+                    else:
+                        self._logger.debug(
+                            f"Distributor Dramatiq workers appear responsive for {self._hostname}. Last health ping acknowledged {time_since_last_ping}s ago."
+                        )
+                else:
+                    # If the key/field doesn't exist yet, maybe the first ping hasn't been processed.
+                     if current_time > startup_grace_period_end:
+                        self._logger.debug(
+                            f"Distributor Dramatiq worker health timestamp for {self._hostname} not found. Key: {health_key}"
+                        )
+                     else:
+                        self._logger.debug(
+                             f"Distributor Dramatiq worker health timestamp for {self._hostname} not yet found (in startup grace period). Key: {health_key}"
+                         )
 
                 await asyncio.sleep(self._health_report_interval)
             except asyncio.CancelledError:
@@ -900,7 +940,7 @@ class ProcessorDistributor(multiprocessing.Process):
     def run(self) -> None:
         """
         Runs the ProcessorDistributor by setting resource limits, registering signal handlers,
-        initializing the worker, starting the Dramatiq worker, and running the event loop.
+        initializing the worker, starting the Dramatiq worker's internal threads, and running the event loop.
         """
         soft, hard = resource.getrlimit(resource.RLIMIT_NOFILE)
         resource.setrlimit(
@@ -913,28 +953,42 @@ class ProcessorDistributor(multiprocessing.Process):
 
         ev_loop = asyncio.get_event_loop()
         ProcessorDistributor._event_loop = ev_loop  # Store the event loop
+        
         # Update the middleware to use this event loop
         for middleware in redis_broker.middleware:
             if isinstance(middleware, dramatiq.middleware.AsyncIO):
                 middleware.event_loop = ev_loop
 
+        # Initialize worker components
         ev_loop.run_until_complete(self.init_worker())
-
-        # Start a Dramatiq worker in a separate thread
-        worker = Worker(redis_broker, queues=[EVENT_DETECTOR_QUEUE_NAME])
-        worker_thread = threading.Thread(target=worker.start, daemon=True)
-        self._worker_thread = worker_thread # Store the thread object
-        worker_thread.start()
+        worker = Worker(redis_broker, queues=[EVENT_DETECTOR_QUEUE_NAME, HEALTH_QUEUE_NAME])
+        
+        self._logger.info("Starting Distributor Dramatiq worker internal threads...")
+        worker.start()
 
         health_reporter_task = ev_loop.create_task(self._periodic_health_reporter())
 
         try:
+            self._logger.info("Running Distributor main event loop...")
             ev_loop.run_forever()
         finally:
+            self._logger.info("Distributor main event loop stopped. Shutting down...")
             if health_reporter_task and not health_reporter_task.done():
                 health_reporter_task.cancel()
-                ev_loop.run_until_complete(asyncio.sleep(2))
+                # Give some time for cancellation
+                ev_loop.run_until_complete(asyncio.sleep(1))
+
+            try:
+                self._logger.info("Stopping Distributor Dramatiq worker internal threads...")
+                worker.stop()
+                self._logger.info("Distributor Dramatiq worker stopped.")
+            except Exception as e:
+                self._logger.error(f"Error stopping Distributor Dramatiq worker: {e}")
+            
+            # Close event loop
+            self._logger.info("Closing Distributor event loop...")
             ev_loop.close()
+            self._logger.info("Distributor Event loop closed.")
 
 
 if __name__ == '__main__':

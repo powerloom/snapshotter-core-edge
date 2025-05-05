@@ -1,14 +1,12 @@
 import asyncio
 import importlib
 import resource
-import threading
 import time
 from signal import SIGINT
 from signal import signal
 from signal import SIGQUIT
 from signal import SIGTERM
 from socket import gethostname
-from typing import Optional
 
 import dramatiq
 import uvloop
@@ -45,6 +43,23 @@ for m in middleware:
 # redis_broker.middleware.clear()  # Remove ALL middlewares
 dramatiq.set_broker(redis_broker)
 
+HEALTH_QUEUE_NAME = f'powerloom-snapshotter-health_{settings.namespace}_{settings.instance_id}'
+
+@dramatiq.actor(broker=redis_broker, queue_name=HEALTH_QUEUE_NAME, actor_name='healthPingSnapshot')
+def health_ping(hostname: str):
+    """Simple actor that updates the main service health timestamp key for a given hostname."""
+    if not hostname:
+        logger.error("Received snapshot health ping request without a hostname.")
+        return
+    try:
+        # Use the sync redis client available within dramatiq actors
+        redis_conn = redis_broker.client
+        key = service_health_timestamps_key()
+        current_timestamp = int(time.time())
+        redis_conn.hset(key, hostname, current_timestamp)
+        logger.debug(f'Snapshot health ping processed for hostname: {hostname} at {current_timestamp}')
+    except Exception as e:
+        logger.error(f"Error in snapshot health_ping actor for hostname {hostname}: {e}")
 
 class SnapshotAsyncWorker(GenericAsyncWorker):
     """
@@ -72,7 +87,6 @@ class SnapshotAsyncWorker(GenericAsyncWorker):
             queue_name=SNAPSHOT_QUEUE_NAME,
             actor_name='handleEvent',
         )(self.handle_event)
-        self._worker_thread: Optional[threading.Thread] = None
         self._hostname = gethostname()
         self._health_report_interval = settings.health_report_interval
 
@@ -276,45 +290,54 @@ class SnapshotAsyncWorker(GenericAsyncWorker):
             await self._init_project_calculation_mapping()
             await self.init()
 
-    async def report_health_status(self):
-        """Reports the current timestamp for this container's hostname to Redis."""
-        if not hasattr(self, '_redis_conn') or self._redis_conn is None:
-            self._logger.warning('Redis connection not initialized, skipping health report.')
-            return
-        try:
-            current_timestamp = int(time.time())
-            await self._redis_conn.hset(
-                service_health_timestamps_key,
-                self._hostname,
-                current_timestamp,
-            )
-            self._logger.debug(f'Reported health for {self._hostname} at {current_timestamp}')
-        except Exception as e:
-            self._logger.error(f'Failed to report health status for hostname {self._hostname}: {e}')
-
     async def _periodic_health_reporter(self):
-        """Periodically reports health status."""
+        """Periodically triggers and checks Dramatiq worker liveness via health ping."""
         self._logger.info(
-            f'Starting periodic health reporter task for {self._hostname} (Interval: {self._health_report_interval}s)',
+            f'Starting periodic Dramatiq health check task for {self._hostname} (Interval: {self._health_report_interval}s)',
         )
-        while True:
-            should_report = True
-            if not self._worker_thread or not self._worker_thread.is_alive():
-                should_report = False
-                if self._worker_thread:
-                    # Worker thread is no longer alive
-                    self._logger.critical(
-                        'Main Dramatiq worker thread has died. Halting health reports.'
-                    )
-                    # Halt the health reporter
-                    break
-                else:
-                    # Worker thread hasn't been initialized yet
-                    self._logger.warning('Worker thread not found. Skipping health report for now.')
+        dramatiq_liveness_threshold = self._health_report_interval + 30
+        health_key = service_health_timestamps_key()
 
+        # Allow a grace period on startup before reporting critical errors
+        startup_grace_period_end = time.time() + dramatiq_liveness_threshold + 10
+
+        while True:
             try:
-                if should_report:
-                    await self.report_health_status()
+                health_ping.send(self._hostname)
+                self._logger.debug(f"Sent snapshot health ping for {self._hostname} to {HEALTH_QUEUE_NAME}")
+
+                # Check the timestamp set by the health_ping actor in Redis for our hostname
+                last_ping_time_bytes = await self._redis_conn.hget(health_key, self._hostname)
+                current_time = int(time.time())
+
+                if last_ping_time_bytes:
+                    last_ping_time = int(last_ping_time_bytes.decode())
+                    time_since_last_ping = current_time - last_ping_time
+                    if time_since_last_ping > dramatiq_liveness_threshold:
+                        # Only log critical after grace period
+                        if current_time > startup_grace_period_end:
+                            self._logger.critical(
+                                f"Dramatiq workers seem unresponsive for {self._hostname}. Last health ping acknowledged {time_since_last_ping}s ago"
+                                f" (Threshold: {dramatiq_liveness_threshold}s). Key: {health_key}, Field: {self._hostname}"
+                            )
+                        else:
+                             self._logger.debug(
+                                f"Dramatiq workers potentially unresponsive for {self._hostname} (in startup grace period). Last health ping acknowledged {time_since_last_ping}s ago."
+                             )
+                    else:
+                        self._logger.debug(
+                            f"Dramatiq workers appear responsive for {self._hostname}. Last health ping acknowledged {time_since_last_ping}s ago."
+                        )
+                else:
+                    # If the key/field doesn't exist yet, maybe the first ping hasn't been processed.
+                     if current_time > startup_grace_period_end:
+                        self._logger.debug(
+                            f"Dramatiq worker health timestamp for {self._hostname} not found. Workers might be starting up or unresponsive. Key: {health_key}"
+                        )
+                     else:
+                        self._logger.debug(
+                             f"Dramatiq worker health timestamp for {self._hostname} not yet found (in startup grace period). Key: {health_key}"
+                         )
 
                 await asyncio.sleep(self._health_report_interval)
             except asyncio.CancelledError:
@@ -326,8 +349,8 @@ class SnapshotAsyncWorker(GenericAsyncWorker):
 
     def run(self) -> None:
         """
-        Runs the worker by setting resource limits, registering signal handlers, starting the Dramatiq worker, and
-        running the event loop until it is stopped.
+        Runs the worker by setting resource limits, registering signal handlers, starting the Dramatiq worker's
+        internal threads, and running the main event loop until it is stopped.
         """
         self._logger = logger
         soft, hard = resource.getrlimit(resource.RLIMIT_NOFILE)
@@ -354,20 +377,21 @@ class SnapshotAsyncWorker(GenericAsyncWorker):
             f'Starting asynchronous callback worker {self._unique_id}...',
         )
 
-        # init worker
+        # init worker components
         self._event_loop.run_until_complete(self.init_worker())
+        worker = Worker(redis_broker, queues=[SNAPSHOT_QUEUE_NAME, HEALTH_QUEUE_NAME])
 
-        # Start a Dramatiq worker in a separate thread
-        worker = Worker(redis_broker, queues=[SNAPSHOT_QUEUE_NAME])
-        worker_thread = threading.Thread(target=worker.start, daemon=True)
-        self._worker_thread = worker_thread # Store the thread object
-        worker_thread.start()
+        # Start the worker's internal threads
+        self._logger.info("Starting Dramatiq worker internal threads...")
+        worker.start()
 
         health_reporter_task = self._event_loop.create_task(self._periodic_health_reporter())
 
         try:
+            self._logger.info("Running main event loop...")
             ev_loop.run_forever()
         finally:
+            self._logger.info("Main event loop stopped. Shutting down...")
             if health_reporter_task and not health_reporter_task.done():
                 health_reporter_task.cancel()
                 try:
@@ -375,7 +399,18 @@ class SnapshotAsyncWorker(GenericAsyncWorker):
                 except RuntimeError as e:
                     self._logger.warning(f"Could not fully await health reporter cancellation on loop close: {e}")
 
+            # Stop the Dramatiq worker's internal threads
+            try:
+                self._logger.info("Stopping Dramatiq worker internal threads...")
+                worker.stop()
+                self._logger.info("Dramatiq worker stopped.")
+            except Exception as e:
+                self._logger.error(f"Error stopping Dramatiq worker: {e}")
+
+            # Close the event loop
+            self._logger.info("Closing event loop...")
             ev_loop.close()
+            self._logger.info("Event loop closed.")
 
 
 if __name__ == '__main__':

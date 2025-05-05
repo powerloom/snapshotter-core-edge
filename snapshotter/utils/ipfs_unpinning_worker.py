@@ -296,7 +296,7 @@ class IPFSUnpinningWorker(multiprocessing.Process):
         try:
             current_timestamp = int(time.time())
             await self._redis_conn.hset(
-                service_health_timestamps_key,
+                service_health_timestamps_key(),
                 self._hostname,
                 current_timestamp,
             )
