@@ -97,10 +97,10 @@ def update_health_timestamp_with_client(hostname: str, redis_broker: RedisBroker
         logger.error("Received health ping request without a hostname.")
         return
     if redis_broker is None:
-        logger.error(f"Received None redis_broker in health update for {logger.module}")
+        logger.error(f"Received None redis_broker in health update for {hostname}")
         return
     if not hasattr(redis_broker, 'client') or redis_broker.client is None:
-        logger.error(f"Could not access sync redis client from broker for {logger.module}")
+        logger.error(f"Could not access sync redis client from broker for {hostname}")
         return
 
     try:
@@ -108,27 +108,39 @@ def update_health_timestamp_with_client(hostname: str, redis_broker: RedisBroker
         key = service_health_timestamps_key()
         current_timestamp = int(time.time())
         redis_conn.hset(key, hostname, current_timestamp)
-        logger.debug(f'{logger.module} health ping processed for hostname: {hostname} at {current_timestamp}')
+        logger.debug(f'Health ping processed for hostname: {hostname} at {current_timestamp}')
     except Exception as e:
-        logger.error(f"Error in {logger.module} health_ping update for hostname {hostname}: {e}")
+        logger.error(f"Error in health_ping update for hostname {hostname}: {e}")
 
 
-def create_health_ping_actor(broker: RedisBroker, queue_name: str, actor_name: str):
-    """Factory function to create a worker-specific health ping Dramatiq actor."""
+def create_health_ping_actor(broker: RedisBroker, queue_name: str, actor_name: str, logger: logger):
+    """Factory function to create a worker-specific health ping Dramatiq actor.
+    
+    Args:
+        broker: The Dramatiq RedisBroker instance.
+        queue_name: The specific health queue name for this worker.
+        actor_name: The unique Dramatiq actor name for the health ping.
+        logger: The bound logger instance for the specific worker.
+    """
 
     @dramatiq.actor(broker=broker, queue_name=queue_name, actor_name=actor_name)
-    def generated_health_ping_actor(hostname: str, broker: RedisBroker, logger: logger):
+    # Actor only accepts arguments passed via .send()
+    def generated_health_ping_actor(hostname: str):
         """Dramatiq actor created by the factory."""
         try:
-            update_health_timestamp_with_client(hostname, logger, broker)
+            # Use broker and logger from the enclosing factory scope (closure)
+            update_health_timestamp_with_client(hostname, broker, logger)
         except Exception as e:
-            logger.error(f"Failed to execute health ping update logic in {logger.module}: {e}")
+            # Use the logger from closure here too
+            logger.error(f"Failed to execute health ping update logic in {actor_name}: {e}")
 
     return generated_health_ping_actor
 
 
-async def run_periodic_health_check(
+async def run_periodic_broker_health_check(
     logger, # Bound logger instance
+    # Remove broker parameter, it's not needed here
+    # broker: RedisBroker, 
     redis_conn: aioredis.Redis,
     hostname: str,
     health_report_interval: int,
@@ -147,10 +159,10 @@ async def run_periodic_health_check(
 
     # Allow a grace period on startup before reporting critical errors
     startup_grace_period_end = time.time() + dramatiq_liveness_threshold + 10
-
+    
     while True:
         try:
-            # Send a ping message with our hostname to the dedicated health queue
+            
             health_actor_send(hostname)
             logger.debug(f"Sent {worker_type} health ping for {hostname} to {health_queue_name}")
 
@@ -172,7 +184,7 @@ async def run_periodic_health_check(
                             f"{worker_type} Dramatiq workers potentially unresponsive for {hostname} (in startup grace period). Last health ping acknowledged {time_since_last_ping}s ago."
                          )
                 else:
-                    logger.debug(
+                    logger.info(
                         f"{worker_type} Dramatiq workers appear responsive for {hostname}. Last health ping acknowledged {time_since_last_ping}s ago."
                     )
             else:
@@ -192,6 +204,69 @@ async def run_periodic_health_check(
             break
         except Exception as e:
             logger.error(f'Error in periodic {worker_type} health reporter loop: {e}')
+            # Avoid tight loop on error
+            await asyncio.sleep(health_report_interval)
+
+
+async def run_periodic_task_health_check(
+    logger, # Bound logger instance
+    redis_conn: aioredis.Redis, 
+    hostname: str, 
+    health_report_interval: int,
+    main_task: asyncio.Task # The main task to monitor (e.g., _unpin_snapshots_task)
+):
+    """Generic coroutine for periodically reporting health status for non-Dramatiq task-based workers.
+    
+    Checks if the provided main_task is running and updates the service health timestamp.
+    """
+    logger.info(
+        f'Starting periodic health reporter task for {hostname} (Interval: {health_report_interval}s)',
+    )
+    while True:
+        should_report = True
+        task_exception = None
+        
+        if not main_task or main_task.done():
+            should_report = False
+            if main_task:
+                # Task is done, check for exception
+                try:
+                    task_exception = main_task.exception()
+                except asyncio.CancelledError:
+                     logger.warning(f'Main task for {hostname} was cancelled. Halting health reports.')
+                     break # Halt reporter if main task is cancelled
+                except Exception as e:
+                    # Should ideally be caught by main_task.exception() but as fallback
+                    logger.error(f'Error retrieving exception from main task for {hostname}: {e}. Halting health reports.')
+                    break # Halt reporter if exception retrieval fails
+
+                if task_exception:
+                    logger.error(
+                        f'Main task for {hostname} failed with exception: {task_exception}. Halting health reports.'
+                    )
+                else:
+                    logger.warning(
+                        f'Main task for {hostname} finished unexpectedly. Halting health reports.'
+                    )
+                # Halt the health reporter if the main task is done (failed or finished)
+                break
+
+        try:
+            if should_report:
+                current_timestamp = int(time.time())
+                await redis_conn.hset(
+                    service_health_timestamps_key(),
+                    hostname,
+                    current_timestamp,
+                )
+                logger.debug(f'Reported health for {hostname} at {current_timestamp}')
+
+            await asyncio.sleep(health_report_interval)
+        except asyncio.CancelledError:
+            logger.info(f'Periodic health reporter task for {hostname} cancelled.')
+            break
+        except Exception as e:
+            logger.error(f'Error in periodic health reporter loop for {hostname}: {e}')
             # Avoid tight loop on error
             await asyncio.sleep(health_report_interval)
 
