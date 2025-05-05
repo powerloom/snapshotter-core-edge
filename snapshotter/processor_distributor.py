@@ -40,6 +40,7 @@ from web3 import Web3
 from snapshotter.settings.config import aggregator_config
 from snapshotter.settings.config import preloaders
 from snapshotter.settings.config import projects_config
+from snapshotter.settings.config import aggregator_types
 from snapshotter.settings.config import settings
 from snapshotter.utils.callback_helpers import send_telegram_notification_sync
 from snapshotter.utils.data_utils import get_source_chain_epoch_size
@@ -611,24 +612,26 @@ class ProcessorDistributor(multiprocessing.Process):
         )
 
         self._logger.trace(f'Aggregation Task Distribution time - {int(time.time())}')
-        pass
         # go through aggregator config, if it matches then send appropriate message
-        # for config in aggregator_config:
-        #     task_type = config.project_type
-        #     if config.aggregate_on == AggregateOn.single_project:
-        #         if config.base_project_type not in process_unit.projectId:
-        #             self._logger.trace(f'projectId mismatch {process_unit.projectId} {config.base_project_type}')
-        #             continue
+        if len(aggregator_types) > 0:
+            for config in aggregator_config:
+                task_type = config.project_type
+                if config.aggregate_on == AggregateOn.single_project:
+                    if config.base_project_type not in process_unit.projectId:
+                        self._logger.trace(f'projectId mismatch {process_unit.projectId} {config.base_project_type}')
+                        continue
 
-        #         dramatiq.broker.get_broker().enqueue(
-        #             dramatiq.Message(
-        #                 queue_name=AGGREGATION_QUEUE_NAME,
-        #                 actor_name='handleEvent',  # Match actor name with event_receiver.py
-        #                 args=(task_type, process_unit.json()),
-        #                 kwargs={},
-        #                 options={},
-        #             ),
-        #         )
+                    dramatiq.broker.get_broker().enqueue(
+                        dramatiq.Message(
+                            queue_name=AGGREGATION_QUEUE_NAME,
+                            actor_name='handleEvent',  # Match actor name with event_receiver.py
+                            args=(task_type, process_unit.json()),
+                            kwargs={},
+                            options={},
+                        ),
+                    )
+        else:
+            self._logger.debug('No aggregator types found, skipping aggregation distribution')
 
     async def _cleanup_older_epoch_status(self, epoch_id: int):
         """
