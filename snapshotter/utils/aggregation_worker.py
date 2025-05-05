@@ -17,6 +17,8 @@ from dramatiq.middleware import AsyncIO
 from dramatiq.worker import Worker
 from pydantic import ValidationError
 
+from snapshotter.health_ping import create_health_ping_actor
+from snapshotter.health_ping import run_periodic_health_check
 from snapshotter.settings.config import aggregator_config
 from snapshotter.settings.config import projects_config
 from snapshotter.settings.config import settings
@@ -28,11 +30,8 @@ from snapshotter.utils.models.message_models import CalculateAggregateMessage
 from snapshotter.utils.models.message_models import SnapshotSubmittedMessage
 from snapshotter.utils.models.settings_model import AggregateOn
 from snapshotter.utils.redis.redis_keys import epoch_id_project_to_state_mapping
-from snapshotter.utils.redis.redis_keys import service_health_timestamps_key
+from snapshotter.utils.dramatiq_queues import AGGREGATION_QUEUE_NAME, AGGREGATION_HEALTH_QUEUE_NAME
 
-AGGREGATION_QUEUE_NAME = f'powerloom-aggregator_{settings.namespace}_{settings.instance_id}'
-HEALTH_QUEUE_NAME = f'powerloom-aggregator-health_{settings.namespace}_{settings.instance_id}'
-logger = default_logger.bind(module='AggregationWorker')
 
 # Configure Redis broker with no middleware
 redis_broker = RedisBroker(host=settings.redis.host, port=settings.redis.port)
@@ -46,23 +45,6 @@ for m in middleware:
 
 # redis_broker.middleware.clear()  # Remove ALL middlewares
 dramatiq.set_broker(redis_broker)
-
-
-@dramatiq.actor(broker=redis_broker, queue_name=HEALTH_QUEUE_NAME, actor_name='healthPingAgg')
-def health_ping(hostname: str):
-    """Simple actor that updates the main service health timestamp key for a given hostname."""
-    if not hostname:
-        logger.error("Received agg health ping request without a hostname.")
-        return
-    try:
-        # Use the sync redis client available within dramatiq actors
-        redis_conn = redis_broker.client
-        key = service_health_timestamps_key()
-        current_timestamp = int(time.time())
-        redis_conn.hset(key, hostname, current_timestamp)
-        logger.debug(f'Agg health ping processed for hostname: {hostname} at {current_timestamp}')
-    except Exception as e:
-        logger.error(f"Error in agg health_ping actor for hostname {hostname}: {e}")
 
 
 class AggregationAsyncWorker(GenericAsyncWorker):
@@ -103,6 +85,11 @@ class AggregationAsyncWorker(GenericAsyncWorker):
         )(self.handle_event)
         self._hostname = gethostname()
         self._health_report_interval = settings.health_report_interval
+        self._health_ping_actor = create_health_ping_actor(
+            broker=redis_broker,
+            queue_name=AGGREGATION_HEALTH_QUEUE_NAME,
+            actor_name='healthPingAgg',
+        )
 
     def _gen_single_type_project_id(self, task_type, epoch):
         """
@@ -348,86 +335,12 @@ class AggregationAsyncWorker(GenericAsyncWorker):
             await self._init_project_calculation_mapping()
             await self.init()
 
-    async def report_health_status(self):
-        """Reports the current timestamp for this container's hostname to Redis."""
-        if not hasattr(self, '_redis_conn') or self._redis_conn is None:
-            self._logger.warning('Redis connection not initialized, skipping health report.')
-            return
-        try:
-            current_timestamp = int(time.time())
-            await self._redis_conn.hset(
-                service_health_timestamps_key,
-                self._hostname,
-                current_timestamp,
-            )
-            self._logger.debug(f'Reported health for {self._hostname} at {current_timestamp}')
-        except Exception as e:
-            self._logger.error(f'Failed to report health status for hostname {self._hostname}: {e}')
-
-    async def _periodic_health_reporter(self):
-        """Periodically triggers and checks Dramatiq worker liveness via health ping."""
-        self._logger.info(
-            f'Starting periodic Aggregator health check task for {self._hostname} (Interval: {self._health_report_interval}s)',
-        )
-        dramatiq_liveness_threshold = self._health_report_interval + 30 
-        health_key = service_health_timestamps_key()
-
-        # Allow a grace period on startup before reporting critical errors
-        startup_grace_period_end = time.time() + dramatiq_liveness_threshold + 10
-
-        while True:
-            try:
-                # Send a ping message with our hostname to the dedicated health queue
-                health_ping.send(self._hostname)
-                self._logger.debug(f"Sent agg health ping for {self._hostname} to {HEALTH_QUEUE_NAME}")
-
-                # Check the timestamp set by the health_ping actor in Redis for our hostname
-                last_ping_time_bytes = await self._redis_conn.hget(health_key, self._hostname)
-                current_time = int(time.time())
-
-                if last_ping_time_bytes:
-                    last_ping_time = int(last_ping_time_bytes.decode())
-                    time_since_last_ping = current_time - last_ping_time
-                    if time_since_last_ping > dramatiq_liveness_threshold:
-                        # Only log critical after grace period
-                        if current_time > startup_grace_period_end:
-                            self._logger.critical(
-                                f"Aggregator Dramatiq workers seem unresponsive for {self._hostname}. Last health ping acknowledged {time_since_last_ping}s ago"
-                                f" (Threshold: {dramatiq_liveness_threshold}s). Key: {health_key}, Field: {self._hostname}"
-                            )
-                        else:
-                             self._logger.debug(
-                                f"Aggregator Dramatiq workers potentially unresponsive for {self._hostname} (in startup grace period). Last health ping acknowledged {time_since_last_ping}s ago."
-                             )
-                    else:
-                        self._logger.debug(
-                            f"Aggregator Dramatiq workers appear responsive for {self._hostname}. Last health ping acknowledged {time_since_last_ping}s ago."
-                        )
-                else:
-                    # If the key/field doesn't exist yet, maybe the first ping hasn't been processed.
-                     if current_time > startup_grace_period_end:
-                        self._logger.debug(
-                            f"Aggregator Dramatiq worker health timestamp for {self._hostname} not found. Key: {health_key}"
-                        )
-                     else:
-                        self._logger.debug(
-                             f"Aggregator Dramatiq worker health timestamp for {self._hostname} not yet found (in startup grace period). Key: {health_key}"
-                         )
-
-                await asyncio.sleep(self._health_report_interval)
-            except asyncio.CancelledError:
-                self._logger.info(f'Periodic health reporter task for {self._hostname} cancelled.')
-                break
-            except Exception as e:
-                self._logger.error(f'Error in periodic health reporter loop: {e}')
-                await asyncio.sleep(self._health_report_interval)
-
     def run(self) -> None:
         """
         Runs the worker by setting resource limits, registering signal handlers, starting the Dramatiq worker's
         internal threads, and running the main event loop until it is stopped.
         """
-        self._logger = logger
+        self._logger = default_logger.bind(module='AggregationWorker')
         soft, hard = resource.getrlimit(resource.RLIMIT_NOFILE)
         resource.setrlimit(
             resource.RLIMIT_NOFILE,
@@ -451,28 +364,36 @@ class AggregationAsyncWorker(GenericAsyncWorker):
         )
 
         self._event_loop.run_until_complete(self.init_worker())
-        worker = Worker(redis_broker, queues=[AGGREGATION_QUEUE_NAME, HEALTH_QUEUE_NAME])
+        worker = Worker(redis_broker, queues=[AGGREGATION_QUEUE_NAME, AGGREGATION_HEALTH_QUEUE_NAME])
 
         self._logger.info("Starting Aggregator Dramatiq worker internal threads...")
         worker.start()
 
-        health_reporter_task = self._event_loop.create_task(self._periodic_health_reporter())
+        # Start the centralized health reporter task
+        health_reporter_task = self._event_loop.create_task(
+             run_periodic_health_check(
+                logger=self._logger,
+                redis_conn=self._redis_conn,
+                hostname=self._hostname,
+                health_report_interval=self._health_report_interval,
+                health_actor_send=self._health_ping_actor.send,
+                worker_type="AggregatorWorker",
+                health_queue_name=AGGREGATION_HEALTH_QUEUE_NAME
+            )
+        )
 
         try:
-            # Run main event loop
             self._logger.info("Running Aggregator main event loop...")
-            ev_loop.run_forever()
+            self._event_loop.run_forever()
         finally:
             self._logger.info("Aggregator main event loop stopped. Shutting down...")
-            # Stop health reporter
             if health_reporter_task and not health_reporter_task.done():
                 health_reporter_task.cancel()
                 try:
-                    ev_loop.run_until_complete(asyncio.sleep(1))
+                    self._event_loop.run_until_complete(asyncio.sleep(1))
                 except RuntimeError as e:
                     self._logger.warning(f"Could not fully await health reporter cancellation on loop close: {e}")
 
-            # Stop Dramatiq worker
             try:
                 self._logger.info("Stopping Aggregator Dramatiq worker internal threads...")
                 worker.stop()
@@ -480,9 +401,8 @@ class AggregationAsyncWorker(GenericAsyncWorker):
             except Exception as e:
                 self._logger.error(f"Error stopping Aggregator Dramatiq worker: {e}")
 
-            # Close event loop
             self._logger.info("Closing Aggregator event loop...")
-            ev_loop.close()
+            self._event_loop.close()
             self._logger.info("Aggregator Event loop closed.")
 
 
