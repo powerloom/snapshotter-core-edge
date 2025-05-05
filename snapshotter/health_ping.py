@@ -56,7 +56,7 @@ async def check_health(hostname_to_check: str) -> bool:
         )
 
         timestamp_bytes = await redis_conn.hget(
-            service_health_timestamps_key,
+            service_health_timestamps_key(),
             hostname_to_check,
         )
 
