@@ -126,6 +126,19 @@ def epoch_id_project_to_state_mapping(epoch_id, state_id):
     return f'epochID:{epoch_id}:stateID:{state_id}:processingStatus'
 
 
+def last_submitted_snapshot_data_key(project_id):
+    """
+    Generate Redis key for last submitted snapshot data.
+
+    Args:
+        project_id (str): The ID of the project.
+
+    Returns:
+        str: Redis key for the last submitted snapshot data.
+    """
+    return f'lastSubmittedSnapshotData:{project_id}'
+
+
 def last_snapshot_processing_complete_timestamp_key():
     """
     Generate Redis key for last snapshot processing complete timestamp.
@@ -168,19 +181,6 @@ def submitted_base_snapshots_key(epoch_id, project_id):
         str: Redis key for the submitted base snapshots.
     """
     return f'submittedBaseSnapshots:{epoch_id}:{project_id}'
-
-
-def submitted_unfinalized_snapshot_cids(project_id):
-    """
-    Generate Redis key for submitted unfinalized snapshot CIDs.
-
-    Args:
-        project_id (str): The ID of the project.
-
-    Returns:
-        str: Redis key for the submitted unfinalized snapshot CIDs.
-    """
-    return f'projectID:{project_id}:unfinalizedSnapshots'
 
 
 def callback_last_sent_by_issue(issue_type):

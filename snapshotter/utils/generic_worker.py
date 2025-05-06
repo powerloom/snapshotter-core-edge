@@ -10,7 +10,6 @@ from typing import Dict
 from typing import Set
 from typing import Union
 from uuid import uuid4
-
 import dramatiq
 import grpclib
 import sha3
@@ -49,7 +48,6 @@ from snapshotter.utils.models.data_models import SnapshotterReportState
 from snapshotter.utils.models.data_models import SnapshotterStates
 from snapshotter.utils.models.data_models import SnapshotterStateUpdate
 from snapshotter.utils.models.data_models import TelegramSnapshotterCoreReportMessage
-from snapshotter.utils.models.data_models import UnfinalizedSnapshot
 from snapshotter.utils.models.message_models import AggregateBase
 from snapshotter.utils.models.message_models import CalculateAggregateMessage
 from snapshotter.utils.models.message_models import SnapshotProcessMessage
@@ -59,9 +57,12 @@ from snapshotter.utils.models.proto.snapshot_submission.submission_pb2 import Re
 from snapshotter.utils.models.proto.snapshot_submission.submission_pb2 import SnapshotSubmission
 from snapshotter.utils.redis.redis_conn import RedisPoolCache
 from snapshotter.utils.redis.redis_keys import epoch_id_project_to_state_mapping
-from snapshotter.utils.redis.redis_keys import submitted_unfinalized_snapshot_cids
 from snapshotter.utils.redis.redis_keys import unpinned_snapshots_zset_name
-
+from snapshotter.utils.redis.redis_keys import last_submitted_snapshot_data_key
+from snapshotter.utils.data_utils import get_project_last_finalized_epoch
+from snapshotter.utils.data_utils import get_project_finalized_cid
+from snapshotter.utils.data_utils import get_submission_data
+from snapshotter.settings.config import projects_config
 logger = default_logger.bind(module='GenericWorker')
 
 # Configure Redis broker with no middleware
@@ -189,7 +190,10 @@ class GenericAsyncWorker(multiprocessing.Process):
         self._telegram_httpx_client = None
         self._last_notification_time = 0
         self._notification_cooldown = settings.reporting.min_reporting_interval
-
+        self._project_config_mapping = dict()
+        for project_config in projects_config:
+            key = project_config.project_name
+            self._project_config_mapping[key] = project_config
     def _signal_handler(self, signum, frame):
         """
         Signal handler function that handles shutdown when a SIGINT, SIGTERM or SIGQUIT signal is received.
@@ -302,7 +306,35 @@ class GenericAsyncWorker(multiprocessing.Process):
             None
         """
         # Payload commit sequence begins
-        # Upload to IPFS
+        project_config = self._project_config_mapping[task_type]
+        last_snapshot = None
+        if project_config.keep_previous_snapshot_data:
+            # check if snapshot has previousSnapshots field it's a pydantic model
+            if hasattr(snapshot, 'previousSnapshots'):
+                # try to fetch last submitted data from redis
+                last_submitted_data = await self._redis_conn.get(name=last_submitted_snapshot_data_key(project_id))
+                if last_submitted_data:
+                    last_submitted_data = json.loads(last_submitted_data)
+                    last_snapshot_cid = last_submitted_data['snapshotCid']
+                    last_epoch_id = last_submitted_data['epochId']
+                    last_snapshot = last_submitted_data['snapshot']
+                else:
+                    # fetch last finalized snapshot for the project
+                    last_epoch_id = await get_project_last_finalized_epoch(self._redis_conn, self._protocol_state_contract, self._anchor_rpc_helper, project_id)
+                    if last_epoch_id:
+                        last_snapshot_cid = await get_project_finalized_cid(self._redis_conn, self._protocol_state_contract, self._anchor_rpc_helper, last_epoch_id, project_id)
+                        if last_snapshot_cid:
+                            last_snapshot = await get_submission_data(self._redis_conn, last_snapshot_cid, self._ipfs_reader_client, project_id)
+                
+                if last_snapshot and 'previousSnapshots' in last_snapshot:
+                    previous_snapshots = last_snapshot['previousSnapshots']
+                    if len(previous_snapshots) > 50:
+                        previous_snapshots.pop(0)
+                    previous_snapshots.append((last_epoch_id, last_snapshot_cid))
+                    snapshot.previousSnapshots = previous_snapshots
+                else:
+                    snapshot.previousSnapshots = []
+
         snapshot_json = json.dumps(snapshot.dict(by_alias=True), sort_keys=True, separators=(',', ':'))
         snapshot_bytes = snapshot_json.encode('utf-8')
         try:
@@ -314,14 +346,13 @@ class GenericAsyncWorker(multiprocessing.Process):
             )
             await self._send_failure_notifications(error=e, epoch_id=epoch.epochId, project_id=project_id)
         else:
-            # Add to zset of unfinalized snapshot CIDs
-            unfinalized_entry = UnfinalizedSnapshot(
-                snapshotCid=snapshot_cid,
-                snapshot=snapshot.dict(by_alias=True),
-            )
-            await self._redis_conn.zadd(
-                name=submitted_unfinalized_snapshot_cids(project_id),
-                mapping={unfinalized_entry.json(sort_keys=True): epoch.epochId},
+            await self._redis_conn.set(
+                name=last_submitted_snapshot_data_key(project_id),
+                value=json.dumps({
+                    'snapshotCid': snapshot_cid,
+                    'epochId': epoch.epochId,
+                    'snapshot': snapshot.dict(by_alias=True),
+                }),
             )
             # Publish snapshot submitted event to event detector queue
             snapshot_submitted_message = SnapshotSubmittedMessage(
@@ -341,16 +372,6 @@ class GenericAsyncWorker(multiprocessing.Process):
                     options={},
                 ),
             )
-
-            try:
-                # Remove old unfinalized snapshots
-                await self._redis_conn.zremrangebyscore(
-                    name=submitted_unfinalized_snapshot_cids(project_id),
-                    min='-inf',
-                    max=epoch.epochId - 32,
-                )
-            except:
-                pass
 
             try:
                 await self._send_submission_to_collector(snapshot_cid, epoch.epochId, project_id)
