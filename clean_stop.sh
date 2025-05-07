@@ -11,6 +11,11 @@ if [ -z "$OVERRIDE_DEFAULTS" ]; then
     export PROST_CHAIN_ID="7869"
 fi
 
+# cleanup redis and ipfs data
+rm -rf redis-data
+rm -rf ipfs-data
+rm -rf ipfs-export
+
 echo "testing before build..."
 
 if [ -z "$SOURCE_RPC_URL" ]; then
@@ -64,4 +69,4 @@ else
     COMPOSE_CMD="docker compose"
 fi
 
-$COMPOSE_CMD -f docker-compose.yaml $PROFILES down --volumes
+$COMPOSE_CMD -f docker-compose.yaml $PROFILES down --volumes --remove-orphans

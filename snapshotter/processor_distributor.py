@@ -56,7 +56,6 @@ from snapshotter.utils.models.message_models import SnapshotProcessMessage
 from snapshotter.utils.models.message_models import SnapshotSubmittedMessage
 from snapshotter.utils.models.settings_model import AggregateOn
 from snapshotter.utils.redis.redis_conn import RedisPoolCache
-from snapshotter.utils.redis.redis_keys import epoch_id_epoch_released_key
 from snapshotter.utils.redis.redis_keys import epoch_id_project_to_state_mapping
 from snapshotter.utils.redis.redis_keys import service_health_timestamps_key
 
@@ -541,7 +540,7 @@ class ProcessorDistributor(multiprocessing.Process):
         """
         Deletes the epoch status keys for the epoch that is 30 epochs older than the given epoch_id.
         """
-        tasks = [self._redis_conn.delete(epoch_id_epoch_released_key(epoch_id - 30))]
+        tasks = []
         delete_keys = list()
         for state in SnapshotterStates:
             k = epoch_id_project_to_state_mapping(epoch_id - 30, state.value)

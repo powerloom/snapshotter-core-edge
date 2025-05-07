@@ -319,7 +319,7 @@ services:
       start_period: 30s
     restart: on-failure
     volumes:
-      - ./redis_data:/data
+      - ./redis-data:/data
     # Add optional password and memory configurations
     environment:
       - REDIS_PASSWORD

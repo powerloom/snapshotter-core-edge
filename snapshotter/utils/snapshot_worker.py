@@ -27,7 +27,6 @@ from snapshotter.utils.models.message_models import SnapshotProcessMessage
 from snapshotter.utils.redis.redis_keys import epoch_id_project_to_state_mapping
 from snapshotter.utils.redis.redis_keys import last_snapshot_processing_complete_timestamp_key
 from snapshotter.utils.redis.redis_keys import service_health_timestamps_key
-from snapshotter.utils.redis.redis_keys import submitted_base_snapshots_key
 
 SNAPSHOT_QUEUE_NAME = f'powerloom-snapshotter_{settings.namespace}_{settings.instance_id}'
 logger = default_logger.bind(module='SnapshotWorker')

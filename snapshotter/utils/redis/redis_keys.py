@@ -99,19 +99,6 @@ def snapshots_to_unpin_zset_name():
     return 'snapshotsToUnpin'
 
 
-def epoch_id_epoch_released_key(epoch_id):
-    """
-    Generate Redis key for epoch release status.
-
-    Args:
-        epoch_id (str): The ID of the epoch.
-
-    Returns:
-        str: Redis key for the epoch's release status.
-    """
-    return f'epochID:{epoch_id}:epochReleased'
-
-
 def epoch_id_project_to_state_mapping(epoch_id, state_id):
     """
     Generate Redis key for epoch-project state mapping.
@@ -167,20 +154,6 @@ def last_epoch_detected_epoch_id_key():
         str: Redis key for the last detected epoch ID.
     """
     return f'lastEpochDetectedEpochID:{settings.namespace}'
-
-
-def submitted_base_snapshots_key(epoch_id, project_id):
-    """
-    Generate Redis key for submitted base snapshots.
-
-    Args:
-        epoch_id (str): The ID of the epoch.
-        project_id (str): The ID of the project.
-
-    Returns:
-        str: Redis key for the submitted base snapshots.
-    """
-    return f'submittedBaseSnapshots:{epoch_id}:{project_id}'
 
 
 def callback_last_sent_by_issue(issue_type):
