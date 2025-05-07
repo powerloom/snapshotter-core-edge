@@ -496,7 +496,6 @@ async def test_get_project_finalized_cids_bulk_partial(
 @pytest.mark.asyncio(loop_scope='module')
 async def test_get_submission_data_bulk_ensure_complete_true(
     mock_redis,
-    project_id: str,
     ipfs_reader,
     epoch_ids: List[int],
 ):
@@ -513,7 +512,6 @@ async def test_get_submission_data_bulk_ensure_complete_true(
         redis_conn=mock_redis,
         cids=cids,
         ipfs_reader=ipfs_reader,
-        project_ids=[project_id] * len(cids),
         ensure_complete=True,
     )
 
@@ -530,7 +528,6 @@ async def test_get_submission_data_bulk_ensure_complete_true(
 async def test_get_submission_data_bulk_ensure_complete_false(
     mock_redis,
     epoch_ids: List[int],
-    project_id: str,
 ):
     """
     Test `get_submission_data_bulk` function with ensure_complete=False.
@@ -553,7 +550,6 @@ async def test_get_submission_data_bulk_ensure_complete_false(
         redis_conn=mock_redis,
         cids=cids,
         ipfs_reader=ipfs_reader,
-        project_ids=[project_id] * len(cids),
         ensure_complete=False,
     )
 

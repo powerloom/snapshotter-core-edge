@@ -418,7 +418,7 @@ async def fetch_file_from_ipfs(redis_conn: aioredis.Redis, ipfs_reader, cid):
         return dict()
 
 
-async def get_submission_data(redis_conn: aioredis.Redis, cid, ipfs_reader, project_id: str) -> dict:
+async def get_submission_data(redis_conn: aioredis.Redis, cid, ipfs_reader) -> dict:
     """
     Fetches submission data from cache or IPFS.
 
@@ -444,7 +444,6 @@ async def get_submission_data_bulk(
     redis_conn: aioredis.Redis,
     cids: List[str],
     ipfs_reader,
-    project_ids: List[str],
     ensure_complete: bool = False,
 ) -> List[dict]:
     """
@@ -456,7 +455,6 @@ async def get_submission_data_bulk(
         redis_conn (aioredis.Redis): Redis connection object.
         cids (List[str]): List of submission CIDs.
         ipfs_reader: IPFS reader object.
-        project_ids (List[str]): List of project IDs.
 
     Returns:
         List[dict]: List of submission data dictionaries.
@@ -466,11 +464,10 @@ async def get_submission_data_bulk(
     # Process submissions in batches
     for i in range(0, len(cids), BATCH_SIZE):
         batch_cids = cids[i:i + BATCH_SIZE]
-        batch_project_ids = project_ids[i:i + BATCH_SIZE]
         batch_snapshot_data = await asyncio.gather(
             *[
-                get_submission_data(redis_conn, cid, ipfs_reader, project_id)
-                for cid, project_id in zip(batch_cids, batch_project_ids)
+                get_submission_data(redis_conn, cid, ipfs_reader)
+                for cid in batch_cids
             ],
         )
 
@@ -510,7 +507,7 @@ async def get_project_epoch_snapshot(
     """
     cid = await get_project_finalized_cid(redis_conn, state_contract_obj, rpc_helper, epoch_id, project_id)
     if cid:
-        data = await get_submission_data(redis_conn, cid, ipfs_reader, project_id)
+        data = await get_submission_data(redis_conn, cid, ipfs_reader)
         return data
     else:
         return dict()
@@ -725,7 +722,6 @@ async def get_project_epoch_snapshot_bulk(
         redis_conn,
         [cid for cid, _ in valid_cid_data_with_epochs],
         ipfs_reader,
-        [project_id] * len(valid_cid_data_with_epochs),
         ensure_complete=ensure_complete,
     )
 
@@ -831,11 +827,9 @@ async def get_project_time_series_data(
         count += 1
 
     all_cids = await asyncio.gather(*cid_tasks)
-    project_ids = [project_id for _ in all_cids]
 
     return await get_submission_data_bulk(
         redis_conn=redis_conn,
         cids=all_cids,
         ipfs_reader=ipfs_reader,
-        project_ids=project_ids,
     )

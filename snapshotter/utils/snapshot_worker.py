@@ -145,15 +145,6 @@ class SnapshotAsyncWorker(GenericAsyncWorker):
 
             # Process each snapshot in the bulk result
             for project_id, snapshot in snapshots:
-                # Store snapshot in Redis
-                await self._redis_conn.set(
-                    name=submitted_base_snapshots_key(
-                        epoch_id=msg_obj.epochId, project_id=project_id,
-                    ),
-                    value=snapshot.model_dump_json(),
-                    # Store snapshot for 10 mins
-                    ex=600,
-                )
 
                 # Update Redis with success state
                 p = self._redis_conn.pipeline()
@@ -219,7 +210,7 @@ class SnapshotAsyncWorker(GenericAsyncWorker):
             event_data = args[1]
 
             msg_obj: SnapshotProcessMessage = (
-                SnapshotProcessMessage.parse_raw(event_data)
+                SnapshotProcessMessage.model_validate_json(event_data)
             )
         except ValidationError as e:
             self._logger.opt(exception=settings.logs.debug_mode).error(

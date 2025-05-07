@@ -89,7 +89,7 @@ def project_last_finalized_epoch_key(project_id):
     return f'projectID:{project_id}:lastFinalizedEpoch'
 
 
-def unpinned_snapshots_zset_name():
+def snapshots_to_unpin_zset_name():
     """
     Generate Redis key for unpinned snapshots zset.
 

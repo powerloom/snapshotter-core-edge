@@ -1,3 +1,4 @@
+import json
 import asyncio
 import multiprocessing
 import queue
@@ -33,11 +34,14 @@ from snapshotter.utils.models.data_models import SnapshotterStates
 from snapshotter.utils.models.data_models import SnapshotterStateUpdate
 from snapshotter.utils.models.message_models import SnapshotBatchSubmittedMessage
 from snapshotter.utils.models.message_models import SnapshotFinalizedMessage
+from snapshotter.utils.models.message_models import SnapshotSubmittedMessage
 from snapshotter.utils.redis.redis_conn import RedisPoolCache
 from snapshotter.utils.redis.redis_keys import epoch_id_project_to_state_mapping
 from snapshotter.utils.redis.redis_keys import project_finalized_data_zset
 from snapshotter.utils.redis.redis_keys import project_last_finalized_epoch_key
 from snapshotter.utils.redis.redis_keys import service_health_timestamps_key
+from snapshotter.utils.redis.redis_keys import snapshots_to_unpin_zset_name
+from snapshotter.utils.redis.redis_keys import last_submitted_snapshot_data_key
 
 # Configure Redis broker with no middleware
 redis_broker = RedisBroker(host=settings.redis.host, port=settings.redis.port)
@@ -193,7 +197,7 @@ class Cacher(multiprocessing.Process):
     # NOTE: Considering SequencerFinalized state as Finalized for now
     # data data is overwritten upon receiving SnapshotFinalized message for the project
     # TODO: Create separate states for SequencerFinalized and SnapshotFinalized
-    async def _cache_submitted_snapshot(self, event_data):
+    async def _process_snapshot_batch_submitted_message(self, event_data):
         """
         Caches the snapshot data and forwards it to the payload commit queue.
 
@@ -205,7 +209,7 @@ class Cacher(multiprocessing.Process):
         """
         self._logger.debug(f'SnapshotBatchSubmittedEvent caught with message {event_data}')
         msg_obj: SnapshotBatchSubmittedMessage = (
-            SnapshotBatchSubmittedMessage.parse_raw(event_data)
+            SnapshotBatchSubmittedMessage.model_validate_json(event_data)
         )
 
         transaction_hash = msg_obj.transactionHash
@@ -242,7 +246,30 @@ class Cacher(multiprocessing.Process):
                 },
             )
 
-    async def _cache_finalized_snapshot(self, event_data):
+    async def _process_snapshot_submitted_message(self, event_data):
+        """
+        Processes the snapshot submitted message.
+        """
+        self._logger.info(f'SnapshotSubmittedEvent caught with message {event_data}')
+        msg_obj: SnapshotSubmittedMessage = (
+            SnapshotSubmittedMessage.model_validate_json(event_data)
+        )
+        self._logger.info("Adding snapshot cid to unpin zset")
+        if settings.ipfs_unpinning.enabled:
+            await self._redis_conn.zadd(
+                name=snapshots_to_unpin_zset_name(),
+                mapping={msg_obj.snapshotCid: int(time.time()) + settings.ipfs_unpinning.unpin_after},
+            )
+        
+        await self._redis_conn.set(
+            name=last_submitted_snapshot_data_key(msg_obj.projectId),
+            value=json.dumps({
+                'snapshotCid': msg_obj.snapshotCid,
+                'epochId': msg_obj.epochId,
+            }),
+        )
+
+    async def _process_snapshot_finalized_message(self, event_data):
         """
         Caches the snapshot data and forwards it to the payload commit queue.
 
@@ -254,7 +281,7 @@ class Cacher(multiprocessing.Process):
         """
         self._logger.debug(f'SnapshotFinalizedEvent caught with message {event_data}')
         msg_obj: SnapshotFinalizedMessage = (
-            SnapshotFinalizedMessage.parse_raw(event_data)
+            SnapshotFinalizedMessage.model_validate_json(event_data)
         )
 
         # set project last finalized epoch in redis
@@ -300,16 +327,18 @@ class Cacher(multiprocessing.Process):
 
         if event_type == 'SnapshotSubmitted':
             self._logger.info(f'SnapshotSubmittedEvent caught with message {event_data}')
-            pass
+            await self._process_snapshot_submitted_message(
+                event_data,
+            )
         elif event_type == 'SnapshotFinalized':
             self._logger.info(f'SnapshotFinalizedEvent caught with message {event_data}')
-            await self._cache_finalized_snapshot(
+            await self._process_snapshot_finalized_message(
                 event_data,
             )
 
         elif event_type == 'SnapshotBatchSubmitted':
             self._logger.info(f'SnapshotBatchSubmittedEvent caught with message {event_data}')
-            await self._cache_submitted_snapshot(
+            await self._process_snapshot_batch_submitted_message(
                 event_data,
             )
 

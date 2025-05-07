@@ -23,7 +23,7 @@ from tenacity import wait_random_exponential
 from snapshotter.settings.config import settings
 from snapshotter.utils.default_logger import default_logger
 from snapshotter.utils.redis.redis_conn import RedisPoolCache
-from snapshotter.utils.redis.redis_keys import unpinned_snapshots_zset_name
+from snapshotter.utils.redis.redis_keys import snapshots_to_unpin_zset_name
 from snapshotter.utils.redis.redis_keys import service_health_timestamps_key
 
 logger = default_logger.bind(module='IPFSUnpinningWorker')
@@ -111,7 +111,7 @@ class IPFSUnpinningWorker(multiprocessing.Process):
         if settings.ipfs_unpinning.enabled:
             # Add to redis zset of unpinned snapshots with a score of current time + unpin delay
             await self._redis_conn.zadd(
-                name=unpinned_snapshots_zset_name(),
+                name=snapshots_to_unpin_zset_name(),
                 mapping={snapshot_cid: time.time() + settings.ipfs_unpinning.unpin_after},
             )
         return snapshot_cid
@@ -133,7 +133,7 @@ class IPFSUnpinningWorker(multiprocessing.Process):
             self._logger.error(f'Error unpinning snapshot {snapshot_cid}: {e}, file may not exist in IPFS')
 
         # Remove the CID from the Redis sorted set tracking unpinned snapshots
-        await self._redis_conn.zrem(unpinned_snapshots_zset_name(), snapshot_cid)
+        await self._redis_conn.zrem(snapshots_to_unpin_zset_name(), snapshot_cid)
         self._logger.info(f'Unpinned snapshot {snapshot_cid}')
 
     async def _unpin_snapshots(self):
@@ -159,7 +159,7 @@ class IPFSUnpinningWorker(multiprocessing.Process):
             # less than or equal to the current time, meaning they're ready to be unpinned
             current_time = int(time.time())
             snapshot_cids = await self._redis_conn.zrange(
-                name=unpinned_snapshots_zset_name(),
+                name=snapshots_to_unpin_zset_name(),
                 start=0,  # Start from the lowest score
                 end=current_time,  # Up to the current time
             )

@@ -57,7 +57,6 @@ from snapshotter.utils.models.proto.snapshot_submission.submission_pb2 import Re
 from snapshotter.utils.models.proto.snapshot_submission.submission_pb2 import SnapshotSubmission
 from snapshotter.utils.redis.redis_conn import RedisPoolCache
 from snapshotter.utils.redis.redis_keys import epoch_id_project_to_state_mapping
-from snapshotter.utils.redis.redis_keys import unpinned_snapshots_zset_name
 from snapshotter.utils.redis.redis_keys import last_submitted_snapshot_data_key
 from snapshotter.utils.data_utils import get_project_last_finalized_epoch
 from snapshotter.utils.data_utils import get_project_finalized_cid
@@ -225,12 +224,6 @@ class GenericAsyncWorker(multiprocessing.Process):
             str: The CID of the uploaded snapshot.
         """
         snapshot_cid = await _ipfs_writer_client.add_bytes(snapshot)
-        if settings.ipfs_unpinning.enabled:
-            # add to redis zset of unpinned snapshots
-            await self._redis_conn.zadd(
-                name=unpinned_snapshots_zset_name(),
-                mapping={snapshot_cid: int(time.time()) + settings.ipfs_unpinning.unpin_after},
-            )
         return snapshot_cid
 
     async def generate_signature(self, snapshot_cid, epoch_id, project_id, slot_id=None, private_key=None):
@@ -317,14 +310,14 @@ class GenericAsyncWorker(multiprocessing.Process):
                     last_submitted_data = json.loads(last_submitted_data)
                     last_snapshot_cid = last_submitted_data['snapshotCid']
                     last_epoch_id = last_submitted_data['epochId']
-                    last_snapshot = last_submitted_data['snapshot']
+                    last_snapshot = await get_submission_data(self._redis_conn, last_snapshot_cid, self._ipfs_reader_client)
                 else:
                     # fetch last finalized snapshot for the project
                     last_epoch_id = await get_project_last_finalized_epoch(self._redis_conn, self._protocol_state_contract, self._anchor_rpc_helper, project_id)
                     if last_epoch_id:
                         last_snapshot_cid = await get_project_finalized_cid(self._redis_conn, self._protocol_state_contract, self._anchor_rpc_helper, last_epoch_id, project_id)
                         if last_snapshot_cid:
-                            last_snapshot = await get_submission_data(self._redis_conn, last_snapshot_cid, self._ipfs_reader_client, project_id)
+                            last_snapshot = await get_submission_data(self._redis_conn, last_snapshot_cid, self._ipfs_reader_client)
                 
                 if last_snapshot and 'previousSnapshots' in last_snapshot:
                     previous_snapshots = last_snapshot['previousSnapshots']
@@ -348,14 +341,6 @@ class GenericAsyncWorker(multiprocessing.Process):
             )
             await self._send_failure_notifications(error=e, epoch_id=epoch.epochId, project_id=project_id)
         else:
-            await self._redis_conn.set(
-                name=last_submitted_snapshot_data_key(project_id),
-                value=json.dumps({
-                    'snapshotCid': snapshot_cid,
-                    'epochId': epoch.epochId,
-                    'snapshot': snapshot.dict(by_alias=True),
-                }),
-            )
             # Publish snapshot submitted event to event detector queue
             snapshot_submitted_message = SnapshotSubmittedMessage(
                 snapshotCid=snapshot_cid,

@@ -569,10 +569,6 @@ class ProcessorDistributor(multiprocessing.Process):
 
         if event_type == 'EpochReleased':
             epoch_msg: EpochBase = EpochBase.model_validate_json(event_data)
-            await self._redis_conn.set(
-                epoch_id_epoch_released_key(epoch_msg.epochId),
-                int(time.time()),
-            )
             current_time = time.time()
             task = asyncio.create_task(
                 self._cleanup_older_epoch_status(epoch_msg.epochId),
