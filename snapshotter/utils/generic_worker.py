@@ -330,6 +330,8 @@ class GenericAsyncWorker(multiprocessing.Process):
                     previous_snapshots = last_snapshot['previousSnapshots']
                     if len(previous_snapshots) > 50:
                         previous_snapshots.pop(0)
+                    # convert previous_snapshots to list of tuples
+                    previous_snapshots = [(int(epoch_id), snapshot_cid) for epoch_id, snapshot_cid in previous_snapshots]
                     previous_snapshots.append((last_epoch_id, last_snapshot_cid))
                     snapshot.previousSnapshots = previous_snapshots
                 else:
@@ -367,7 +369,7 @@ class GenericAsyncWorker(multiprocessing.Process):
                 dramatiq.Message(
                     queue_name=EVENT_DETECTOR_QUEUE_NAME,
                     actor_name='handleEvent',  # Match actor name with event_receiver.py
-                    args=('SnapshotSubmitted', snapshot_submitted_message.json()),
+                    args=('SnapshotSubmitted', snapshot_submitted_message.model_dump_json()),
                     kwargs={},
                     options={},
                 ),
@@ -387,7 +389,7 @@ class GenericAsyncWorker(multiprocessing.Process):
                     mapping={
                         project_id: SnapshotterStateUpdate(
                             status='failed', error=str(e), timestamp=int(time.time()),
-                        ).json(),
+                        ).model_dump_json(),
                     },
                 )
                 await self._send_failure_notifications(error=e, epoch_id=epoch.epochId, project_id=project_id)
@@ -399,7 +401,7 @@ class GenericAsyncWorker(multiprocessing.Process):
                     mapping={
                         project_id: SnapshotterStateUpdate(
                             status='success', timestamp=int(time.time()),
-                        ).json(),
+                        ).model_dump_json(),
                     },
                 )
 

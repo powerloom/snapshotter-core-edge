@@ -9,7 +9,6 @@ import threading
 import time
 import traceback
 from collections import defaultdict
-from functools import lru_cache
 from rpc_helper.rpc import RpcHelper
 from signal import SIGINT
 from signal import signal
@@ -52,18 +51,13 @@ from snapshotter.utils.models.data_models import SnapshotterReportState
 from snapshotter.utils.models.data_models import SnapshotterStates
 from snapshotter.utils.models.data_models import SnapshotterStateUpdate
 from snapshotter.utils.models.data_models import TelegramEpochProcessingReportMessage
-from snapshotter.utils.models.message_models import CalculateAggregateMessage
 from snapshotter.utils.models.message_models import EpochBase
-from snapshotter.utils.models.message_models import SnapshotBatchSubmittedMessage
-from snapshotter.utils.models.message_models import SnapshotFinalizedMessage
 from snapshotter.utils.models.message_models import SnapshotProcessMessage
 from snapshotter.utils.models.message_models import SnapshotSubmittedMessage
 from snapshotter.utils.models.settings_model import AggregateOn
 from snapshotter.utils.redis.redis_conn import RedisPoolCache
 from snapshotter.utils.redis.redis_keys import epoch_id_epoch_released_key
 from snapshotter.utils.redis.redis_keys import epoch_id_project_to_state_mapping
-from snapshotter.utils.redis.redis_keys import project_finalized_data_zset
-from snapshotter.utils.redis.redis_keys import project_last_finalized_epoch_key
 from snapshotter.utils.redis.redis_keys import service_health_timestamps_key
 
 # Configure Redis broker with no middleware
@@ -82,6 +76,7 @@ dramatiq.set_broker(redis_broker)
 EVENT_DETECTOR_QUEUE_NAME = f'powerloom-event-detector_{settings.namespace}_{settings.instance_id}'
 SNAPSHOT_QUEUE_NAME = f'powerloom-snapshotter_{settings.namespace}_{settings.instance_id}'
 AGGREGATION_QUEUE_NAME = f'powerloom-aggregator_{settings.namespace}_{settings.instance_id}'
+CACHER_QUEUE_NAME = f'powerloom-cacher_{settings.namespace}_{settings.instance_id}'
 
 
 class ProcessorDistributor(multiprocessing.Process):
@@ -135,7 +130,7 @@ class ProcessorDistributor(multiprocessing.Process):
         super(ProcessorDistributor, self).__init__(name=name, **kwargs)
         self._unique_id = f'{name}-' + keccak(text=str(uuid4())).hex()[:8]
         self._logger = default_logger.bind(
-            module=f'Callbacks|ProcessDistributor:{settings.namespace}-{settings.instance_id}',
+            module=f'ProcessDistributor:{settings.namespace}-{settings.instance_id}',
         )
         self._q = queue.Queue()
         self._shutdown_initiated = False
@@ -372,7 +367,7 @@ class ProcessorDistributor(multiprocessing.Process):
                     mapping={
                         project_name: SnapshotterStateUpdate(
                             status='success', timestamp=int(time.time()),
-                        ).json(),
+                        ).model_dump_json(),
                     },
                 )
                 await self._distribute_callbacks_snapshotting(project_name, epoch)
@@ -386,7 +381,7 @@ class ProcessorDistributor(multiprocessing.Process):
                     mapping={
                         project_name: SnapshotterStateUpdate(
                             status='failed', timestamp=int(time.time()),
-                        ).json(),
+                        ).model_dump_json(),
                     },
                 )
         # TODO: set separate overall status for failed and successful preloads
@@ -450,7 +445,7 @@ class ProcessorDistributor(multiprocessing.Process):
             message (IncomingMessage): The message containing the epoch information.
         """
         msg_obj: EpochBase = (
-            EpochBase.parse_raw(event_data)
+            EpochBase.model_validate_json(event_data)
         )
 
         self._logger.debug('Pushing epoch release to preloader coroutine: {}', msg_obj)
@@ -500,7 +495,7 @@ class ProcessorDistributor(multiprocessing.Process):
             dramatiq.Message(
                 queue_name=SNAPSHOT_QUEUE_NAME,
                 actor_name='handleEvent',  # Match actor name with event_receiver.py
-                args=(project_name, process_unit.json()),
+                args=(project_name, process_unit.model_dump_json()),
                 kwargs={},
                 options={},
             ),
@@ -510,97 +505,6 @@ class ProcessorDistributor(multiprocessing.Process):
             f' {project_name} : {process_unit}',
         )
 
-    # NOTE: Considering SequencerFinalized state as Finalized for now
-    # data data is overwritten upon receiving SnapshotFinalized message for the project
-    # TODO: Create separate states for SequencerFinalized and SnapshotFinalized
-    async def _cache_submitted_snapshot(self, event_data):
-        """
-        Caches the snapshot data and forwards it to the payload commit queue.
-
-        Args:
-            message (IncomingMessage): The incoming message containing the snapshot data.
-
-        Returns:
-            None
-        """
-        self._logger.debug(f'SnapshotBatchSubmittedEvent caught with message {event_data}')
-        msg_obj: SnapshotBatchSubmittedMessage = (
-            SnapshotBatchSubmittedMessage.parse_raw(event_data)
-        )
-
-        transaction_hash = msg_obj.transactionHash
-
-        tx = await self._anchor_rpc_helper.get_transaction_from_hash(transaction_hash)
-
-        decoded_input = self._protocol_state_contract.decode_function_input(tx.input)
-
-        _, input_params = decoded_input
-
-        # self._logger.info(f'Decoded input: {function_name}, {input_params}')
-        submitted_batch_data = zip(input_params['projectIds'], input_params['snapshotCids'])
-
-        for project_id, snapshot_cid in submitted_batch_data:
-            # update last_finalized_epoch in redis
-            await self._redis_conn.set(
-                name=project_last_finalized_epoch_key(project_id),
-                value=msg_obj.epochId,
-                ex=60,
-            )
-
-            # Add to project finalized data zset
-            await self._redis_conn.zadd(
-                project_finalized_data_zset(project_id=project_id),
-                {snapshot_cid: msg_obj.epochId},
-            )
-
-            await self._redis_conn.hset(
-                name=epoch_id_project_to_state_mapping(msg_obj.epochId, SnapshotterStates.SNAPSHOT_FINALIZE.value),
-                mapping={
-                    project_id: SnapshotterStateUpdate(
-                        status='success', timestamp=int(time.time()), extra={'snapshot_cid': snapshot_cid},
-                    ).json(),
-                },
-            )
-
-    async def _cache_finalized_snapshot(self, event_data):
-        """
-        Caches the snapshot data and forwards it to the payload commit queue.
-
-        Args:
-            message (IncomingMessage): The incoming message containing the snapshot data.
-
-        Returns:
-            None
-        """
-        self._logger.debug(f'SnapshotFinalizedEvent caught with message {event_data}')
-        msg_obj: SnapshotFinalizedMessage = (
-            SnapshotFinalizedMessage.parse_raw(event_data)
-        )
-
-        # set project last finalized epoch in redis
-        await self._redis_conn.set(
-            name=project_last_finalized_epoch_key(msg_obj.projectId),
-            value=msg_obj.epochId,
-            ex=60,
-        )
-
-        # Add to project finalized data zset
-        await self._redis_conn.zadd(
-            project_finalized_data_zset(project_id=msg_obj.projectId),
-            {msg_obj.snapshotCid: msg_obj.epochId},
-        )
-
-        await self._redis_conn.hset(
-            name=epoch_id_project_to_state_mapping(msg_obj.epochId, SnapshotterStates.SNAPSHOT_FINALIZE.value),
-            mapping={
-                msg_obj.projectId: SnapshotterStateUpdate(
-                    status='success', timestamp=int(time.time()), extra={'snapshot_cid': msg_obj.snapshotCid},
-                ).json(),
-            },
-        )
-
-        self._logger.trace(f'Payload Commit Message Distribution time - {int(time.time())}')
-
     async def _distribute_callbacks_aggregate(self, event_data):
         """
         Distributes the callbacks for aggregation.
@@ -608,7 +512,7 @@ class ProcessorDistributor(multiprocessing.Process):
         :param message: IncomingMessage object containing the message to be processed.
         """
         process_unit: SnapshotSubmittedMessage = (
-            SnapshotSubmittedMessage.parse_raw(event_data)
+            SnapshotSubmittedMessage.model_validate_json(event_data)
         )
 
         self._logger.trace(f'Aggregation Task Distribution time - {int(time.time())}')
@@ -625,7 +529,7 @@ class ProcessorDistributor(multiprocessing.Process):
                         dramatiq.Message(
                             queue_name=AGGREGATION_QUEUE_NAME,
                             actor_name='handleEvent',  # Match actor name with event_receiver.py
-                            args=(task_type, process_unit.json()),
+                            args=(task_type, process_unit.model_dump_json()),
                             kwargs={},
                             options={},
                         ),
@@ -664,7 +568,7 @@ class ProcessorDistributor(multiprocessing.Process):
         )
 
         if event_type == 'EpochReleased':
-            epoch_msg: EpochBase = EpochBase.parse_raw(event_data)
+            epoch_msg: EpochBase = EpochBase.model_validate_json(event_data)
             await self._redis_conn.set(
                 epoch_id_epoch_released_key(epoch_msg.epochId),
                 int(time.time()),
@@ -681,18 +585,42 @@ class ProcessorDistributor(multiprocessing.Process):
             await self._epoch_release_processor(event_data)
 
         elif event_type == 'SnapshotSubmitted':
+            # enqueue to cacher
+            dramatiq.broker.get_broker().enqueue(
+                dramatiq.Message(
+                    queue_name=CACHER_QUEUE_NAME,
+                    actor_name='handleEvent',
+                    args=(event_type, event_data),
+                    kwargs={},
+                    options={},
+                ),
+            )
             await self._distribute_callbacks_aggregate(
                 event_data,
             )
 
         elif event_type == 'SnapshotFinalized':
-            await self._cache_finalized_snapshot(
-                event_data,
+            # enqueue to cacher
+            dramatiq.broker.get_broker().enqueue(
+                dramatiq.Message(
+                    queue_name=CACHER_QUEUE_NAME,
+                    actor_name='handleEvent',
+                    args=(event_type, event_data),
+                    kwargs={},
+                    options={},
+                ),
             )
 
         elif event_type == 'SnapshotBatchSubmitted':
-            await self._cache_submitted_snapshot(
-                event_data,
+            # enqueue to cacher
+            dramatiq.broker.get_broker().enqueue(
+                dramatiq.Message(
+                    queue_name=CACHER_QUEUE_NAME,
+                    actor_name='handleEvent',
+                    args=(event_type, event_data),
+                    kwargs={},
+                    options={},
+                ),
             )
 
         else:
@@ -926,7 +854,7 @@ class ProcessorDistributor(multiprocessing.Process):
         # Start a Dramatiq worker in a separate thread
         worker = Worker(redis_broker, queues=[EVENT_DETECTOR_QUEUE_NAME])
         worker_thread = threading.Thread(target=worker.start, daemon=True)
-        self._worker_thread = worker_thread # Store the thread object
+        self._worker_thread = worker_thread  # Store the thread object
         worker_thread.start()
 
         health_reporter_task = ev_loop.create_task(self._periodic_health_reporter())

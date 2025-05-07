@@ -212,7 +212,7 @@ class AggregationAsyncWorker(GenericAsyncWorker):
                 mapping={
                     project_id: SnapshotterStateUpdate(
                         status='failed', error=str(e), timestamp=int(time.time()),
-                    ).json(),
+                    ).model_dump_json(),
                 },
             )
         else:
@@ -225,7 +225,7 @@ class AggregationAsyncWorker(GenericAsyncWorker):
                     mapping={
                         project_id: SnapshotterStateUpdate(
                             status='failed', timestamp=int(time.time()), error='Empty snapshot',
-                        ).json(),
+                        ).model_dump_json(),
                     },
                 )
             else:
@@ -237,7 +237,7 @@ class AggregationAsyncWorker(GenericAsyncWorker):
                     mapping={
                         project_id: SnapshotterStateUpdate(
                             status='success', timestamp=int(time.time()),
-                        ).json(),
+                        ).model_dump_json(),
                     },
                 )
                 await self._commit_payload(

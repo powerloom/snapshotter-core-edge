@@ -312,7 +312,7 @@ class EventDetectorProcess(multiprocessing.Process):
             dramatiq.Message(
                 queue_name=self.queue_name,
                 actor_name='handleEvent',  # Match actor name with event_receiver.py
-                args=(event_type, event.json()),
+                args=(event_type, event.model_dump_json()),
                 kwargs={},
                 options={},
             ),

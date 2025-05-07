@@ -118,6 +118,11 @@ services:
   processor-distributor:
     <<: *snapshotter-base
     command: bash -c "bash snapshotter_autofill.sh &&bash init_processes.sh processor_distributor"
+  cacher:
+    <<: *snapshotter-base
+    command: bash -c "bash init_processes.sh cacher"
+    depends_on:
+      - processor-distributor
   snapshot-worker:
     <<: *snapshotter-base
     command: bash -c "bash init_processes.sh utils.snapshot_worker"
