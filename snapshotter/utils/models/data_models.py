@@ -6,6 +6,16 @@ from typing import Optional
 from pydantic import BaseModel
 
 
+class SnapshotStatus(Enum):
+    """
+    Represents the status of a snapshot.
+    """
+    SUBMITTED = 0
+    SEQUENCER_FINALIZED = 1
+    FINALIZED = 2
+    NULL = -1
+
+
 class SnapshotterReportState(Enum):
     """
     Enumeration of possible states for a snapshotter report.
@@ -28,6 +38,7 @@ class SnapshotterStates(Enum):
     SNAPSHOT_BUILD = 'SNAPSHOT_BUILD'
     SNAPSHOT_SUBMIT_PAYLOAD_COMMIT = 'SNAPSHOT_SUBMIT_PAYLOAD_COMMIT'
     RELAYER_SEND = 'RELAYER_SEND'
+    SNAPSHOT_SEQUENCER_FINALIZE = 'SNAPSHOT_SEQUENCER_FINALIZE'
     SNAPSHOT_FINALIZE = 'SNAPSHOT_FINALIZE'
     SNAPSHOT_SUBMIT_COLLECTOR = 'SNAPSHOT_SUBMIT_COLLECTOR'
 

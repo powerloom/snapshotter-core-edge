@@ -10,17 +10,11 @@ event_detector_last_processed_block = 'SystemEventDetector:lastProcessedBlock'
 service_health_timestamps_key = 'service:health:timestamps'
 
 
-def project_finalized_data_zset(project_id):
+def project_data_hmap(project_id):
     """
-    Generate Redis key for project finalized data zset.
-
-    Args:
-        project_id (str): The ID of the project.
-
-    Returns:
-        str: Redis key for the project's finalized data zset.
+    Generate Redis key for project data hashmap.
     """
-    return f'projectID:{project_id}:finalizedData'
+    return f'projectID:{project_id}:data'
 
 
 def cid_not_found_key(cid):
@@ -154,6 +148,17 @@ def last_epoch_detected_epoch_id_key():
         str: Redis key for the last detected epoch ID.
     """
     return f'lastEpochDetectedEpochID:{settings.namespace}'
+
+
+def project_data_expiry_zset():
+    """
+    Generate Redis key for project data expiry zset.
+    This zset tracks expiration times for individual hash entries in project data hashmaps.
+
+    Returns:
+        str: Redis key for the project data expiry zset.
+    """
+    return f'projectDataExpiry:{settings.namespace}'
 
 
 def callback_last_sent_by_issue(issue_type):

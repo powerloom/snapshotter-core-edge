@@ -16,6 +16,7 @@ from typing import Dict
 from typing import List
 from typing import Set
 from typing import Optional
+from typing import Tuple
 from uuid import uuid4
 
 import dramatiq
@@ -32,16 +33,18 @@ from snapshotter.utils.default_logger import default_logger
 from snapshotter.utils.file_utils import read_json_file
 from snapshotter.utils.models.data_models import SnapshotterStates
 from snapshotter.utils.models.data_models import SnapshotterStateUpdate
+from snapshotter.utils.models.data_models import SnapshotStatus
 from snapshotter.utils.models.message_models import SnapshotBatchSubmittedMessage
 from snapshotter.utils.models.message_models import SnapshotFinalizedMessage
 from snapshotter.utils.models.message_models import SnapshotSubmittedMessage
 from snapshotter.utils.redis.redis_conn import RedisPoolCache
 from snapshotter.utils.redis.redis_keys import epoch_id_project_to_state_mapping
-from snapshotter.utils.redis.redis_keys import project_finalized_data_zset
+from snapshotter.utils.redis.redis_keys import project_data_hmap
 from snapshotter.utils.redis.redis_keys import project_last_finalized_epoch_key
 from snapshotter.utils.redis.redis_keys import service_health_timestamps_key
 from snapshotter.utils.redis.redis_keys import snapshots_to_unpin_zset_name
 from snapshotter.utils.redis.redis_keys import last_submitted_snapshot_data_key
+from snapshotter.utils.redis.redis_keys import project_data_expiry_zset
 
 # Configure Redis broker with no middleware
 redis_broker = RedisBroker(host=settings.redis.host, port=settings.redis.port)
@@ -56,6 +59,7 @@ for m in middleware:
 # redis_broker.middleware.clear()  # Remove ALL middlewares
 dramatiq.set_broker(redis_broker)
 
+# Define queue name for the cacher with namespace and instance ID for isolation
 CACHER_QUEUE_NAME = f'powerloom-cacher_{settings.namespace}_{settings.instance_id}'
 
 
@@ -65,6 +69,12 @@ class Cacher(multiprocessing.Process):
 
     This class handles epoch releases, project updates, snapshot submissions, and aggregations.
     It interacts with Dramatiq for message passing and Redis for state management.
+    
+    The Cacher is responsible for:
+    1. Processing snapshot submission events
+    2. Updating Redis with snapshot status information
+    3. Managing the lifecycle of snapshots from submission to finalization
+    4. Reporting health status to Redis
     """
 
     _aioredis_pool: RedisPoolCache
@@ -79,33 +89,28 @@ class Cacher(multiprocessing.Process):
     _source_chain_epoch_size: int
     _source_chain_id: int
     _event_loop = None  # Class variable to store the event loop
+    _active_tasks: Set[Tuple[float, asyncio.Task]]  # Set of (start_time, task) tuples
 
     def __init__(self, name, **kwargs):
         """
-        Initialize the ProcessorDistributor object.
+        Initialize the Cacher object.
 
         Args:
-            name (str): The name of the ProcessorDistributor.
-            **kwargs: Additional keyword arguments.
+            name (str): The name of the Cacher process.
+            **kwargs: Additional keyword arguments passed to the parent Process class.
 
         Attributes:
-            _unique_id (str): The unique ID of the ProcessorDistributor.
-            _q (queue.Queue): The queue used for processing tasks.
+            _unique_id (str): A unique identifier for this Cacher instance.
+            _logger: Logger instance for this Cacher.
+            _q (queue.Queue): Queue for processing tasks.
             _shutdown_initiated (bool): Flag indicating if shutdown has been initiated.
-            _rpc_helper: The RPC helper object.
-            _source_chain_id: The source chain ID.
-            _projects_list: The list of projects.
-            _initialized (bool): Flag indicating if the ProcessorDistributor has been initialized.
-            _callback_exchange_name (str): The name of the exchange for callbacks.
-            _payload_commit_exchange_name (str): The name of the exchange for payload commits.
-            _payload_commit_routing_key (str): The routing key for payload commits.
-            _upcoming_project_changes (defaultdict): Dictionary of upcoming project changes.
-            _preload_completion_conditions (defaultdict): Dictionary of preload completion conditions.
-            _shutdown_initiated (bool): Flag indicating if shutdown has been initiated.
-            _all_preload_tasks (set): Set of all preload tasks.
-            _project_type_config_mapping (dict): Dictionary mapping project types to their configurations.
-            _last_epoch_processing_health_check (int): Timestamp of the last epoch processing health check.
-            _preloader_compute_mapping (dict): Dictionary mapping preloader tasks to compute resources.
+            _initialized (bool): Flag indicating if the Cacher has been initialized.
+            _active_tasks (Set): Set of active asyncio tasks being tracked.
+            _task_timeout (int): Maximum time in seconds a task can run before being cancelled.
+            _task_cleanup_interval (int): Interval in seconds for checking and cleaning up tasks.
+            _hostname (str): Hostname of the machine running this process.
+            _health_report_interval (int): Interval in seconds for reporting health status.
+            _worker_thread (Optional[threading.Thread]): Thread running the Dramatiq worker.
         """
         super(Cacher, self).__init__(name=name, **kwargs)
         self._unique_id = f'{name}-' + keccak(text=str(uuid4())).hex()[:8]
@@ -123,20 +128,22 @@ class Cacher(multiprocessing.Process):
         self._preloader_compute_mapping = dict()
         self._snapshot_build_awaited_project_ids = dict()
         # Task tracking
-        self._active_tasks: Set[asyncio.Task] = set()
+        self._active_tasks = set()
         self._task_timeout = settings.async_task_config.task_timeout
         self._task_cleanup_interval = settings.async_task_config.task_cleanup_interval
 
+        # Register the handle_event method as a Dramatiq actor
         self._handle_event_actor = dramatiq.actor(
             queue_name=CACHER_QUEUE_NAME,
             actor_name='handleEvent',
         )(self.handle_event)
 
         # Initialize reporting and notification related attributes
-
         self._hostname = gethostname()
         self._health_report_interval = settings.health_report_interval
         self._worker_thread: Optional[threading.Thread] = None
+        # TODO: Move to settings later
+        self._project_data_entry_expiry = 60 * 60 * 24 * 7  # 7 days in seconds
 
     def _signal_handler(self, signum, frame):
         """
@@ -153,14 +160,20 @@ class Cacher(multiprocessing.Process):
     async def _init_redis_pool(self):
         """
         Initializes the Redis connection pool and populates it with connections.
+        
+        This method creates a new RedisPoolCache instance and establishes connections
+        to the Redis server based on the configuration in settings.
         """
         self._aioredis_pool = RedisPoolCache()
         await self._aioredis_pool.populate()
         self._redis_conn = self._aioredis_pool._aioredis_pool
-
+        
     async def _init_rpc_helper(self):
         """
-        Initializes the RpcHelper instance if it is not already initialized.
+        Initializes the RPC helper instances for both main and anchor chains.
+        
+        This method creates and initializes RpcHelper instances for interacting with
+        the blockchain nodes based on the configuration in settings.
         """
         self._rpc_helper = RpcHelper(settings.rpc)
         await self._rpc_helper.init()
@@ -169,7 +182,10 @@ class Cacher(multiprocessing.Process):
 
     async def _init_protocol_meta(self):
         """
-        Initializes the protocol metadata by fetching the source chain epoch size and source chain ID.
+        Initializes the protocol metadata by loading the protocol state contract.
+        
+        This method reads the ABI file for the protocol state contract and creates
+        a contract instance for interacting with the protocol state on the anchor chain.
         """
         protocol_abi = read_json_file(settings.protocol_state.abi, self._logger)
         self._protocol_state_contract = self._anchor_rpc_helper.get_current_node()['web3_client'].eth.contract(
@@ -181,8 +197,11 @@ class Cacher(multiprocessing.Process):
 
     async def init_worker(self):
         """
-        Initializes the worker by initializing the Redis pool, RPC helper, loading project metadata,
-        initializing the preloader compute mapping.
+        Initializes the worker by setting up all required connections and resources.
+        
+        This method initializes the Redis pool, RPC helper, protocol metadata,
+        and starts the task cleanup process. It sets the _initialized flag to True
+        when complete.
         """
         if not self._initialized:
             await self._init_redis_pool()
@@ -194,18 +213,15 @@ class Cacher(multiprocessing.Process):
 
         self._initialized = True
 
-    # NOTE: Considering SequencerFinalized state as Finalized for now
-    # data data is overwritten upon receiving SnapshotFinalized message for the project
-    # TODO: Create separate states for SequencerFinalized and SnapshotFinalized
     async def _process_snapshot_batch_submitted_message(self, event_data):
         """
-        Caches the snapshot data and forwards it to the payload commit queue.
-
+        Processes a batch of submitted snapshots and updates their status in Redis.
+        
+        This method decodes the transaction input to extract the project IDs and snapshot CIDs,
+        then updates the Redis database with the finalized epoch information for each project.
+        
         Args:
-            message (IncomingMessage): The incoming message containing the snapshot data.
-
-        Returns:
-            None
+            event_data (str): JSON string containing the snapshot batch submission data.
         """
         self._logger.debug(f'SnapshotBatchSubmittedEvent caught with message {event_data}')
         msg_obj: SnapshotBatchSubmittedMessage = (
@@ -214,8 +230,10 @@ class Cacher(multiprocessing.Process):
 
         transaction_hash = msg_obj.transactionHash
 
+        # Get the transaction details from the blockchain
         tx = await self._anchor_rpc_helper.get_transaction_from_hash(transaction_hash)
 
+        # Decode the transaction input to extract project IDs and snapshot CIDs
         decoded_input = self._protocol_state_contract.decode_function_input(tx.input)
 
         _, input_params = decoded_input
@@ -223,81 +241,156 @@ class Cacher(multiprocessing.Process):
         # self._logger.info(f'Decoded input: {function_name}, {input_params}')
         submitted_batch_data = zip(input_params['projectIds'], input_params['snapshotCids'])
 
+        # Create a pipeline for batch processing
+        pipeline = self._redis_conn.pipeline()
+        
         for project_id, snapshot_cid in submitted_batch_data:
             # update last_finalized_epoch in redis
-            await self._redis_conn.set(
+            pipeline.set(
                 name=project_last_finalized_epoch_key(project_id),
                 value=msg_obj.epochId,
-                ex=60,
             )
 
-            # Add to project finalized data zset
-            await self._redis_conn.zadd(
-                project_finalized_data_zset(project_id=project_id),
-                {snapshot_cid: msg_obj.epochId},
+            # Add to project data hashmap
+            project_hmap_key = project_data_hmap(project_id=project_id)
+            pipeline.hset(
+                name=project_hmap_key,
+                mapping={
+                    msg_obj.epochId: json.dumps({
+                        'snapshot_cid': snapshot_cid,
+                        'status': SnapshotStatus.SEQUENCER_FINALIZED.value,
+                    }),
+                },
+            )
+            
+            # Add to expiry tracking sorted set with TTL
+            expiry_time = int(time.time()) + self._project_data_entry_expiry
+            expiry_key = f"{project_id}|{msg_obj.epochId}"
+            pipeline.zadd(
+                name=project_data_expiry_zset(),
+                mapping={expiry_key: expiry_time}
             )
 
-            await self._redis_conn.hset(
-                name=epoch_id_project_to_state_mapping(msg_obj.epochId, SnapshotterStates.SNAPSHOT_FINALIZE.value),
+            # Get state mapping key - breaking up long line
+            state_id = SnapshotterStates.SNAPSHOT_SEQUENCER_FINALIZE.value
+            mapping_key = epoch_id_project_to_state_mapping(msg_obj.epochId, state_id)
+            
+            pipeline.hset(
+                name=mapping_key,
                 mapping={
                     project_id: SnapshotterStateUpdate(
                         status='success', timestamp=int(time.time()), extra={'snapshot_cid': snapshot_cid},
                     ).model_dump_json(),
                 },
             )
+        
+        # Execute all commands in a single network round-trip
+        await pipeline.execute()
 
     async def _process_snapshot_submitted_message(self, event_data):
         """
-        Processes the snapshot submitted message.
+        Processes a snapshot submission event and updates Redis with the snapshot information.
+        
+        This method updates the Redis database with the submitted snapshot information,
+        adds the snapshot CID to the unpin zset if IPFS unpinning is enabled, and
+        updates the last submitted snapshot data for the project.
+        
+        Args:
+            event_data (str): JSON string containing the snapshot submission data.
         """
         self._logger.info(f'SnapshotSubmittedEvent caught with message {event_data}')
         msg_obj: SnapshotSubmittedMessage = (
             SnapshotSubmittedMessage.model_validate_json(event_data)
         )
-        self._logger.info("Adding snapshot cid to unpin zset")
+
+        # Create a pipeline for batch processing
+        pipeline = self._redis_conn.pipeline()
+        
+        # Add snapshot cid to unpin zset if enabled
         if settings.ipfs_unpinning.enabled:
-            await self._redis_conn.zadd(
+            self._logger.info("Adding snapshot cid to unpin zset")
+            pipeline.zadd(
                 name=snapshots_to_unpin_zset_name(),
                 mapping={msg_obj.snapshotCid: int(time.time()) + settings.ipfs_unpinning.unpin_after},
             )
         
-        await self._redis_conn.set(
+        # Add to project data hashmap
+        project_hmap_key = project_data_hmap(project_id=msg_obj.projectId)
+        pipeline.hset(
+            name=project_hmap_key,
+            mapping={
+                msg_obj.epochId: json.dumps({
+                    'snapshot_cid': msg_obj.snapshotCid,
+                    'status': SnapshotStatus.SUBMITTED.value,
+                }),
+            },
+        )
+        
+        # Add to expiry tracking sorted set with TTL
+        expiry_time = int(time.time()) + self._project_data_entry_expiry
+        expiry_key = f"{msg_obj.projectId}|{msg_obj.epochId}"
+        pipeline.zadd(
+            name=project_data_expiry_zset(),
+            mapping={expiry_key: expiry_time}
+        )
+        
+        # Set last submitted snapshot data
+        pipeline.set(
             name=last_submitted_snapshot_data_key(msg_obj.projectId),
             value=json.dumps({
                 'snapshotCid': msg_obj.snapshotCid,
                 'epochId': msg_obj.epochId,
             }),
         )
+        
+        # Execute all commands in a single network round-trip
+        await pipeline.execute()
 
     async def _process_snapshot_finalized_message(self, event_data):
         """
-        Caches the snapshot data and forwards it to the payload commit queue.
-
+        Processes a snapshot finalization event and updates Redis with the finalized status.
+        
+        This method updates the Redis database with the finalized snapshot information,
+        sets the last finalized epoch for the project, and updates the snapshot state.
+        
         Args:
-            message (IncomingMessage): The incoming message containing the snapshot data.
-
-        Returns:
-            None
+            event_data (str): JSON string containing the snapshot finalization data.
         """
         self._logger.debug(f'SnapshotFinalizedEvent caught with message {event_data}')
         msg_obj: SnapshotFinalizedMessage = (
             SnapshotFinalizedMessage.model_validate_json(event_data)
         )
 
+        # Create a pipeline for batch processing
+        pipeline = self._redis_conn.pipeline()
+        
         # set project last finalized epoch in redis
-        await self._redis_conn.set(
+        pipeline.set(
             name=project_last_finalized_epoch_key(msg_obj.projectId),
             value=msg_obj.epochId,
-            ex=60,
         )
 
-        # Add to project finalized data zset
-        await self._redis_conn.zadd(
-            project_finalized_data_zset(project_id=msg_obj.projectId),
-            {msg_obj.snapshotCid: msg_obj.epochId},
+        # Add to project data hashmap
+        project_hmap_key = project_data_hmap(project_id=msg_obj.projectId)
+        pipeline.hset(
+            name=project_hmap_key,
+            mapping={
+                msg_obj.epochId: json.dumps({
+                    'snapshot_cid': msg_obj.snapshotCid,
+                    'status': SnapshotStatus.FINALIZED.value,
+                }),
+            },
+        )
+        
+        # Add to expiry tracking sorted set with TTL
+        expiry_time = int(time.time()) + self._project_data_entry_expiry
+        expiry_key = f"{msg_obj.projectId}|{msg_obj.epochId}"
+        pipeline.zadd(
+            name=project_data_expiry_zset(),
+            mapping={expiry_key: expiry_time}
         )
 
-        await self._redis_conn.hset(
+        pipeline.hset(
             name=epoch_id_project_to_state_mapping(msg_obj.epochId, SnapshotterStates.SNAPSHOT_FINALIZE.value),
             mapping={
                 msg_obj.projectId: SnapshotterStateUpdate(
@@ -305,16 +398,23 @@ class Cacher(multiprocessing.Process):
                 ).model_dump_json(),
             },
         )
+        
+        # Execute all commands in a single network round-trip
+        await pipeline.execute()
 
         self._logger.trace(f'Payload Commit Message Distribution time - {int(time.time())}')
 
     async def process_event(self, event_type, event_data):
         """
-        Callback function to handle incoming Dramatiq messages.
-
+        Processes events based on their type by calling the appropriate handler method.
+        
+        This method routes the event to the appropriate handler based on the event_type,
+        and handles any errors that occur during processing.
+        
         Args:
-            message (IncomingMessage): The incoming Dramatiq message.
-
+            event_type (str): The type of event to process.
+            event_data (str): JSON string containing the event data.
+            
         Returns:
             None
         """
@@ -355,8 +455,17 @@ class Cacher(multiprocessing.Process):
 
     def handle_event(self, *args):
         """
-        Handle event without being an async function directly.
-        This allows Dramatiq to call it normally while still using your async code.
+        Dramatiq actor method that handles incoming events.
+        
+        This method is called by Dramatiq when a message is received. It extracts the
+        event type and data from the arguments and runs the async process_event method
+        in the event loop.
+        
+        Args:
+            *args: Arguments passed by Dramatiq, expected to be [event_type, event_data].
+            
+        Returns:
+            None
         """
         try:
             self._logger.warning(f'Handling event: {args}')
@@ -386,6 +495,10 @@ class Cacher(multiprocessing.Process):
     async def _cleanup_tasks(self):
         """
         Periodically clean up completed or timed-out tasks.
+        
+        This method runs in a loop, checking for tasks that have completed or
+        timed out, and removing them from the active tasks set. It also cancels
+        tasks that have exceeded the timeout period.
         """
         while True:
             await asyncio.sleep(self._task_cleanup_interval)
@@ -404,7 +517,13 @@ class Cacher(multiprocessing.Process):
                     self._active_tasks.discard((task_start_time, task))
 
     async def report_health_status(self):
-        """Reports the current timestamp for this container's hostname to Redis."""
+        """
+        Reports the current health status of this Cacher instance to Redis.
+        
+        This method updates a Redis hash with the current timestamp for this
+        instance's hostname, allowing monitoring systems to detect if the
+        Cacher is alive and responsive.
+        """
         if not hasattr(self, '_redis_conn') or self._redis_conn is None:
             self._logger.warning('Redis connection not initialized, skipping health report.')
             return
@@ -420,7 +539,13 @@ class Cacher(multiprocessing.Process):
             self._logger.error(f'Failed to report health status for hostname {self._hostname}: {e}')
 
     async def _periodic_health_reporter(self):
-        """Periodically reports health status."""
+        """
+        Periodically reports health status to Redis.
+        
+        This method runs in a loop, reporting the health status of this Cacher
+        instance to Redis at regular intervals. It also checks if the worker
+        thread is still alive, and stops reporting if it's not.
+        """
         self._logger.info(
             f'Starting periodic health reporter task for {self._hostname} (Interval: {self._health_report_interval}s)',
         )
@@ -451,18 +576,72 @@ class Cacher(multiprocessing.Process):
                 self._logger.error(f'Error in periodic health reporter loop: {e}')
                 await asyncio.sleep(self._health_report_interval)
 
+    async def _cleanup_expired_project_data(self):
+        """
+        Periodically checks for and removes expired project data entries.
+        
+        This method runs in the background to clean up project data hash entries
+        that have exceeded their TTL as recorded in the expiry sorted set.
+        """
+        cleanup_interval = 60 * 60
+        while not self._shutdown_initiated:
+            try:
+                current_time = int(time.time())
+                # Get all entries that have expired
+                expired_entries = await self._redis_conn.zrangebyscore(
+                    project_data_expiry_zset(),
+                    0,
+                    current_time,
+                    withscores=True
+                )
+                
+                if expired_entries:
+                    self._logger.info(f"Cleaning up {len(expired_entries)} expired project data entries")
+                    
+                    # Group by project_id for efficient deletion
+                    entries_by_project = {}
+                    for entry, _ in expired_entries:
+                        project_id, epoch_id = entry.decode('utf-8').split('|')
+                        if project_id not in entries_by_project:
+                            entries_by_project[project_id] = []
+                        entries_by_project[project_id].append(int(epoch_id))
+                    
+                    # Remove the entries from the hashmaps and the expiry set
+                    pipeline = self._redis_conn.pipeline()
+                    for project_id, epoch_ids in entries_by_project.items():
+                        project_hmap_key = project_data_hmap(project_id=project_id)
+                        pipeline.hdel(project_hmap_key, *epoch_ids)
+                    
+                    # Remove from expiry tracking
+                    pipeline.zrem(project_data_expiry_zset(), *[entry for entry, _ in expired_entries])
+                    
+                    await pipeline.execute()
+            except Exception as e:
+                self._logger.error(f"Error cleaning up expired project data: {e}")
+            
+            await asyncio.sleep(cleanup_interval)
+
     def run(self) -> None:
         """
-        Runs the ProcessorDistributor by setting resource limits, registering signal handlers,
-        initializing the worker, starting the Dramatiq worker, and running the event loop.
+        Main entry point for the Cacher process.
+        
+        This method sets up resource limits, registers signal handlers,
+        initializes the worker, starts the Dramatiq worker in a separate thread,
+        and runs the event loop. It also handles cleanup when the process is
+        shutting down.
         """
+        # Set resource limits for file descriptors
         soft, hard = resource.getrlimit(resource.RLIMIT_NOFILE)
         resource.setrlimit(
             resource.RLIMIT_NOFILE,
             (settings.rlimit.file_descriptors, hard),
         )
+        
+        # Register signal handlers for graceful shutdown
         for signame in [SIGINT, SIGTERM, SIGQUIT]:
             signal(signame, self._signal_handler)
+            
+        # Use uvloop for better performance
         asyncio.set_event_loop_policy(uvloop.EventLoopPolicy())
 
         ev_loop = asyncio.get_event_loop()
@@ -472,6 +651,7 @@ class Cacher(multiprocessing.Process):
             if isinstance(middleware, dramatiq.middleware.AsyncIO):
                 middleware.event_loop = ev_loop
 
+        # Initialize the worker
         ev_loop.run_until_complete(self.init_worker())
 
         # Start a Dramatiq worker in a separate thread
@@ -480,14 +660,24 @@ class Cacher(multiprocessing.Process):
         self._worker_thread = worker_thread  # Store the thread object
         worker_thread.start()
 
+        # Start the health reporter task
         health_reporter_task = ev_loop.create_task(self._periodic_health_reporter())
 
+        cleanup_expired_project_data_task = ev_loop.create_task(self._cleanup_expired_project_data())
+
         try:
+            # Run the event loop until shutdown is requested
             ev_loop.run_forever()
         finally:
+            # Clean up tasks and close the event loop
             if health_reporter_task and not health_reporter_task.done():
                 health_reporter_task.cancel()
                 ev_loop.run_until_complete(asyncio.sleep(2))
+            
+            if cleanup_expired_project_data_task and not cleanup_expired_project_data_task.done():
+                cleanup_expired_project_data_task.cancel()
+                ev_loop.run_until_complete(asyncio.sleep(2))
+
             ev_loop.close()
 
 

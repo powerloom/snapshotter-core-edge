@@ -1,7 +1,7 @@
 import asyncio
 import json
 from typing import List
-
+import time
 import tenacity
 from redis import asyncio as aioredis
 from rpc_helper.rpc import RpcHelper
@@ -14,14 +14,16 @@ from web3 import Web3
 from snapshotter.settings.config import settings
 from snapshotter.utils.default_logger import default_logger
 from snapshotter.utils.redis.redis_keys import cid_not_found_key
-from snapshotter.utils.redis.redis_keys import project_finalized_data_zset
 from snapshotter.utils.redis.redis_keys import project_first_epoch_hmap
+from snapshotter.utils.redis.redis_keys import project_data_hmap
 from snapshotter.utils.redis.redis_keys import source_chain_block_time_key
 from snapshotter.utils.redis.redis_keys import source_chain_epoch_size_key
 from snapshotter.utils.redis.redis_keys import source_chain_id_key
+from snapshotter.utils.redis.redis_keys import project_data_expiry_zset
 
 logger = default_logger.bind(module='data_helper')
 BATCH_SIZE = 50
+PROJECT_DATA_ENTRY_EXPIRY = 60 * 60 * 24 * 7  # 7 days in seconds
 
 
 def retry_state_callback(retry_state: tenacity.RetryCallState):
@@ -65,13 +67,15 @@ async def get_project_finalized_cid(redis_conn: aioredis.Redis, state_contract_o
         return None
 
     # Try to get the CID from Redis cache
-    cid_data = await redis_conn.zrangebyscore(
-        project_finalized_data_zset(project_id),
-        epoch_id,
+    cid_data_raw = await redis_conn.hget(
+        project_data_hmap(project_id=project_id),
         epoch_id,
     )
+
+    cid_data = json.loads(cid_data_raw) if cid_data_raw else None
+
     if cid_data:
-        cid = cid_data[0].decode('utf-8')
+        cid = cid_data["snapshot_cid"]
     else:
         # If not in cache, fetch from blockchain and cache it
         cid, _ = await w3_get_and_cache_finalized_cid(redis_conn, state_contract_obj, rpc_helper, epoch_id, project_id)
@@ -141,13 +145,18 @@ async def get_project_finalized_cids_bulk(
     epoch_ids_set = set(range(epoch_id_min, epoch_id_max + 1))
 
     # Check Redis cache for existing CIDs
-    cid_data_with_epochs = await redis_conn.zrangebyscore(
-        project_finalized_data_zset(project_id),
-        min=epoch_id_min,
-        max=epoch_id_max,
-        withscores=True,
+    epoch_ids_to_fetch = range(epoch_id_min, epoch_id_max + 1)
+    data_raws = await redis_conn.hgetall(
+        project_data_hmap(project_id=project_id),
+        epoch_ids_to_fetch,
     )
-    cid_data_with_epochs = [(cid.decode('utf-8'), int(epoch_id)) for cid, epoch_id in cid_data_with_epochs]
+    data = [json.loads(data_raw) for data_raw in data_raws]
+
+    cid_data_with_epochs = []
+    for data, epoch_id in zip(data, epoch_ids_to_fetch):
+        if "snapshot_cid" in data:
+            cid_data_with_epochs.append((data["snapshot_cid"], epoch_id))
+
     existing_epochs = set([epoch_id for _, epoch_id in cid_data_with_epochs])
     missing_epochs = list(epoch_ids_set.difference(existing_epochs))
 
@@ -215,29 +224,49 @@ async def w3_get_and_cache_finalized_cid(
 
     # Extract status and CID from the ConsensusStatus struct
     status, cid, timestamp = consensus_status
+    null_cid = f'null_{epoch_id}'
 
     # If timestamp is 0, consensus status is not yet available
     if timestamp == 0:
         logger.debug(f'Consensus status not yet available for project {project_id} and epoch {epoch_id}')
-        return None, epoch_id
+        return null_cid, epoch_id
 
     # Process and cache the result only if we have a valid timestamp
     if cid:
-        null_cid = f'null_{epoch_id}'
         if use_pending or status > 0:
-            await redis_conn.zadd(
-                project_finalized_data_zset(project_id),
-                {cid: epoch_id},
+            await redis_conn.hset(
+                project_data_hmap(project_id=project_id),
+                epoch_id,
+                json.dumps({"snapshot_cid": cid, "status": status}),
             )
+
+            # Add to expiry tracking sorted set with TTL
+            expiry_time = int(time.time()) + PROJECT_DATA_ENTRY_EXPIRY
+            expiry_key = f"{project_id}|{epoch_id}"
+            await redis_conn.zadd(
+                name=project_data_expiry_zset(),
+                mapping={expiry_key: expiry_time},
+            )
+
             return cid, epoch_id
         else:
             return null_cid, epoch_id
     else:
         # Only cache null if we're sure there's no CID (timestamp > 0 but no CID)
-        await redis_conn.zadd(
-            project_finalized_data_zset(project_id),
-            {null_cid: epoch_id},
+        await redis_conn.hset(
+            project_data_hmap(project_id=project_id),
+            epoch_id,
+            json.dumps({"snapshot_cid": null_cid, "status": -1}),
         )
+
+        # Add to expiry tracking sorted set with TTL
+        expiry_time = int(time.time()) + PROJECT_DATA_ENTRY_EXPIRY
+        expiry_key = f"{project_id}|{epoch_id}"
+        await redis_conn.zadd(
+            name=project_data_expiry_zset(),
+            mapping={expiry_key: expiry_time},
+        )
+
         return null_cid, epoch_id
 
 
@@ -310,19 +339,27 @@ async def w3_get_and_cache_finalized_cid_bulk(
 
             if cid:
                 if use_pending or status > 0:
-                    redis_mapping[cid] = epoch_id
+                    redis_mapping[epoch_id] = json.dumps({"snapshot_cid": cid, "status": status})
                     cids_with_epochs.append((cid, epoch_id))
                 else:
                     cids_with_epochs.append((null_cid, epoch_id))
             else:
                 # Only cache null if we're sure there's no CID (timestamp > 0 but no CID)
-                redis_mapping[null_cid] = epoch_id
+                redis_mapping[epoch_id] = json.dumps({"snapshot_cid": null_cid, "status": -1})
                 cids_with_epochs.append((null_cid, epoch_id))
 
         if redis_mapping:
-            await redis_conn.zadd(
-                project_finalized_data_zset(project_id),
+            await redis_conn.hset(
+                project_data_hmap(project_id=project_id),
                 redis_mapping,
+            )
+
+            # Add to expiry tracking sorted set with TTL
+            expiry_time = int(time.time()) + PROJECT_DATA_ENTRY_EXPIRY
+            expiry_key = f"{project_id}|{epoch_id}"
+            await redis_conn.zadd(
+                name=project_data_expiry_zset(),
+                mapping={expiry_key: expiry_time},
             )
 
         return cids_with_epochs

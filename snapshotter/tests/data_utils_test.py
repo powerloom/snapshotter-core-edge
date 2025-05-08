@@ -19,7 +19,7 @@ from snapshotter.utils.data_utils import get_project_finalized_cid
 from snapshotter.utils.data_utils import get_project_finalized_cids_bulk
 from snapshotter.utils.data_utils import get_submission_data_bulk
 from snapshotter.utils.redis.redis_keys import cid_not_found_key
-from snapshotter.utils.redis.redis_keys import project_finalized_data_zset
+from snapshotter.utils.redis.redis_keys import project_data_hmap
 
 """
 Data Utils Test Suite
@@ -278,7 +278,7 @@ async def test_get_project_finalized_cid_success(proxy_contract, data_market_con
     new_data_market_address = data_market_contract.address
 
     # Mock Redis data
-    await mock_redis.zadd(f'project_finalized_data_zset:{project_id}', {expected_cid: epoch_id})
+    await mock_redis.hset(project_data_hmap(project_id=project_id), epoch_id, json.dumps({"snapshot_cid": expected_cid, "status": 1}))
 
     with patch('snapshotter.utils.data_utils.settings.data_market', new_data_market_address):
         cid = await get_project_finalized_cid(
@@ -305,13 +305,12 @@ async def test_get_project_finalized_cid_not_found(proxy_contract, data_market_c
     expected_cid = f'CID{project_id}{epoch_id}'
     new_data_market_address = data_market_contract.address
 
-    cid_data = await mock_redis.zrangebyscore(
-        project_finalized_data_zset(project_id),
-        epoch_id,
+    raw_data = await mock_redis.hget(
+        project_data_hmap(project_id=project_id),
         epoch_id,
     )
-
-    assert not cid_data, 'Data should not be cached in Redis'
+    data = json.loads(raw_data) if raw_data else None
+    assert not data, 'Data should not be cached in Redis'
 
     with patch('snapshotter.utils.data_utils.settings.data_market', new_data_market_address):
         cid = await get_project_finalized_cid(
@@ -325,12 +324,13 @@ async def test_get_project_finalized_cid_not_found(proxy_contract, data_market_c
         assert cid == expected_cid
 
         # Verify that the CID was added to Redis
-        [stored_cid] = await mock_redis.zrangebyscore(
-            project_finalized_data_zset(project_id),
-            epoch_id,
+        raw_data = await mock_redis.hget(
+            project_data_hmap(project_id=project_id),
             epoch_id,
         )
-        assert stored_cid and stored_cid.decode('utf-8') == expected_cid
+        data = json.loads(raw_data) if raw_data else None
+        assert data, 'Data should be cached in Redis'
+        assert data['snapshot_cid'] == expected_cid
 
     # clean slate redis
     await mock_redis.flushall()
@@ -352,7 +352,7 @@ async def test_get_project_finalized_cids_bulk_success(
 
     # Populate Redis with cached CIDs
     for cid, epoch_id in zip(expected_cids, epoch_ids):
-        await mock_redis.zadd(project_finalized_data_zset(project_id), {cid: epoch_id})
+        await mock_redis.hset(project_data_hmap(project_id=project_id), epoch_id, json.dumps({"snapshot_cid": cid, "status": 1}))
 
     new_data_market_address = data_market_contract.address
 
@@ -369,14 +369,11 @@ async def test_get_project_finalized_cids_bulk_success(
         assert cids == expected_cids
 
     # Verify that all CIDs are now in Redis
-    stored_cids = await mock_redis.zrange(
-        project_finalized_data_zset(project_id),
-        0,
-        -1,
-        withscores=True,
-    )
-    assert len(stored_cids) == len(expected_cids)
-    assert all(cid.decode('utf-8') in expected_cids for cid, _ in stored_cids)
+    epochs_to_fetch = epoch_ids
+    stored_data_raws = await mock_redis.hgetall(project_data_hmap(project_id=project_id), epochs_to_fetch)
+    stored_data = [json.loads(data) for data in stored_data_raws]
+    assert len(stored_data) == len(expected_cids)
+    assert all(data['snapshot_cid'] in expected_cids for data in stored_data)
 
     # Clean slate Redis
     await mock_redis.flushall()
@@ -397,15 +394,11 @@ async def test_get_project_finalized_cids_bulk_not_found(
     """
     expected_cids = [f'CID{project_id}{epoch_id}' for epoch_id in epoch_ids]
     new_data_market_address = data_market_contract.address
-
+    epochs_to_fetch = epoch_ids
     # Verify that the CIDs are not in Redis
-    cached_cids = await mock_redis.zrange(
-        project_finalized_data_zset(project_id),
-        0,
-        -1,
-        withscores=True,
-    )
-    assert not cached_cids, 'No CIDs should be cached in Redis initially'
+    stored_data_raws = await mock_redis.hgetall(project_data_hmap(project_id=project_id), epochs_to_fetch)
+    stored_data = [json.loads(data) for data in stored_data_raws]
+    assert not stored_data, 'No CIDs should be cached in Redis initially'
 
     with patch('snapshotter.utils.data_utils.settings.data_market', new_data_market_address):
         cids = await get_project_finalized_cids_bulk(
@@ -420,15 +413,11 @@ async def test_get_project_finalized_cids_bulk_not_found(
         assert cids == expected_cids
 
         # Verify that all CIDs were added to Redis
-        stored_cids = await mock_redis.zrangebyscore(
-            project_finalized_data_zset(project_id),
-            min(epoch_ids),
-            max(epoch_ids),
-            withscores=True,
-        )
-        assert len(stored_cids) == len(expected_cids)
-        assert all(cid.decode('utf-8') in expected_cids for cid, _ in stored_cids)
-        assert all(int(epoch) in epoch_ids for _, epoch in stored_cids)
+        stored_data_raws = await mock_redis.hgetall(project_data_hmap(project_id=project_id), epochs_to_fetch)
+        stored_data = [json.loads(data) for data in stored_data_raws]
+        assert len(stored_data) == len(expected_cids)
+        assert all(data['snapshot_cid'] in expected_cids for data in stored_data)
+        assert all(int(epoch) in epoch_ids for _, epoch in stored_data)
 
     # Clean slate Redis
     await mock_redis.flushall()
@@ -451,20 +440,13 @@ async def test_get_project_finalized_cids_bulk_partial(
     new_data_market_address = data_market_contract.address
 
     # Populate Redis with CIDs for every other epoch_id
-    redis_mapping = {
-        expected_cids[i]: epoch_ids[i]
-        for i in range(0, len(epoch_ids), 2)
-    }
-    await mock_redis.zadd(project_finalized_data_zset(project_id), redis_mapping)
+    for epoch_id in epoch_ids:
+        await mock_redis.hset(project_data_hmap(project_id=project_id), epoch_id, json.dumps({"snapshot_cid": expected_cids[epoch_id], "status": 1}))
 
     # Verify that only partial data is in Redis
-    cached_cids = await mock_redis.zrange(
-        project_finalized_data_zset(project_id),
-        0,
-        -1,
-        withscores=True,
-    )
-    assert len(cached_cids) == len(redis_mapping), 'Only some of the CIDs should be cached in Redis initially'
+    cached_data_raws = await mock_redis.hgetall(project_data_hmap(project_id=project_id), epoch_ids)
+    cached_data = [json.loads(data) for data in cached_data_raws]
+    assert len(cached_data) == len(expected_cids), 'Only some of the CIDs should be cached in Redis initially'
 
     with patch('snapshotter.utils.data_utils.settings.data_market', new_data_market_address):
         cids = await get_project_finalized_cids_bulk(
@@ -479,15 +461,11 @@ async def test_get_project_finalized_cids_bulk_partial(
         assert cids == expected_cids
 
         # Verify that all CIDs were added to Redis
-        stored_cids = await mock_redis.zrangebyscore(
-            project_finalized_data_zset(project_id),
-            min(epoch_ids),
-            max(epoch_ids),
-            withscores=True,
-        )
-        assert len(stored_cids) == len(expected_cids)
-        assert all(cid.decode('utf-8') in expected_cids for cid, _ in stored_cids)
-        assert all(int(epoch) in epoch_ids for _, epoch in stored_cids)
+        stored_data_raws = await mock_redis.hgetall(project_data_hmap(project_id=project_id), epoch_ids)
+        stored_data = [json.loads(data) for data in stored_data_raws]
+        assert len(stored_data) == len(expected_cids)
+        assert all(data['snapshot_cid'] in expected_cids for data in stored_data)
+        assert all(int(epoch) in epoch_ids for _, epoch in stored_data)
 
     # Clean slate Redis
     await mock_redis.flushall()
