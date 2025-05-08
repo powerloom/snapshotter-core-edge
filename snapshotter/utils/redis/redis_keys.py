@@ -6,9 +6,6 @@ cached_block_details_at_height = f'block_cache:{settings.namespace}x'
 # Redis key for the last processed block by the event detector
 event_detector_last_processed_block = 'SystemEventDetector:lastProcessedBlock'
 
-# Redis key for service health timestamps
-service_health_timestamps_key = 'service:health:timestamps'
-
 
 def project_data_hmap(project_id):
     """
@@ -169,3 +166,7 @@ def callback_last_sent_by_issue(issue_type):
         str: Redis key for the callback last sent timestamp.
     """
     return f'callbackLastSentTimestamp:{settings.namespace}:{issue_type}'
+
+
+def service_health_timestamps_key():
+    return f'{settings.namespace}:service_health_timestamps'

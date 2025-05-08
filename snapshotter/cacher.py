@@ -45,6 +45,7 @@ from snapshotter.utils.redis.redis_keys import service_health_timestamps_key
 from snapshotter.utils.redis.redis_keys import snapshots_to_unpin_zset_name
 from snapshotter.utils.redis.redis_keys import last_submitted_snapshot_data_key
 from snapshotter.utils.redis.redis_keys import project_data_expiry_zset
+from snapshotter.utils.dramatiq_queues import CACHER_QUEUE_NAME
 
 # Configure Redis broker with no middleware
 redis_broker = RedisBroker(host=settings.redis.host, port=settings.redis.port)
@@ -58,9 +59,6 @@ for m in middleware:
 
 # redis_broker.middleware.clear()  # Remove ALL middlewares
 dramatiq.set_broker(redis_broker)
-
-# Define queue name for the cacher with namespace and instance ID for isolation
-CACHER_QUEUE_NAME = f'powerloom-cacher_{settings.namespace}_{settings.instance_id}'
 
 
 class Cacher(multiprocessing.Process):

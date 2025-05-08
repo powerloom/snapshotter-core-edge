@@ -1,14 +1,12 @@
 import asyncio
 import importlib
 import resource
-import threading
 import time
 from signal import SIGINT
 from signal import signal
 from signal import SIGQUIT
 from signal import SIGTERM
 from socket import gethostname
-from typing import Optional
 
 import dramatiq
 import uvloop
@@ -17,6 +15,8 @@ from dramatiq.middleware import AsyncIO
 from dramatiq.worker import Worker
 from pydantic import ValidationError
 
+from snapshotter.health_ping import create_health_ping_actor
+from snapshotter.health_ping import run_periodic_broker_health_check
 from snapshotter.settings.config import projects_config
 from snapshotter.settings.config import settings
 from snapshotter.utils.default_logger import default_logger
@@ -26,9 +26,8 @@ from snapshotter.utils.models.data_models import SnapshotterStateUpdate
 from snapshotter.utils.models.message_models import SnapshotProcessMessage
 from snapshotter.utils.redis.redis_keys import epoch_id_project_to_state_mapping
 from snapshotter.utils.redis.redis_keys import last_snapshot_processing_complete_timestamp_key
-from snapshotter.utils.redis.redis_keys import service_health_timestamps_key
+from snapshotter.utils.dramatiq_queues import SNAPSHOT_QUEUE_NAME, SNAPSHOT_HEALTH_QUEUE_NAME
 
-SNAPSHOT_QUEUE_NAME = f'powerloom-snapshotter_{settings.namespace}_{settings.instance_id}'
 logger = default_logger.bind(module='SnapshotWorker')
 
 # Configure Redis broker with no middleware
@@ -62,6 +61,7 @@ class SnapshotAsyncWorker(GenericAsyncWorker):
             **kwargs: Additional keyword arguments to be passed to the GenericAsyncWorker constructor.
         """
         super(SnapshotAsyncWorker, self).__init__(name=name, **kwargs)
+        self._logger = default_logger.bind(module='SnapshotWorker')
         self._project_calculation_mapping = None
         self._task_types = []
         for project_config in projects_config:
@@ -71,9 +71,14 @@ class SnapshotAsyncWorker(GenericAsyncWorker):
             queue_name=SNAPSHOT_QUEUE_NAME,
             actor_name='handleEvent',
         )(self.handle_event)
-        self._worker_thread: Optional[threading.Thread] = None
         self._hostname = gethostname()
         self._health_report_interval = settings.health_report_interval
+        self._health_ping_actor = create_health_ping_actor(
+            broker=redis_broker,
+            queue_name=SNAPSHOT_HEALTH_QUEUE_NAME,
+            actor_name='healthPingSnapshot',
+            logger=self._logger # Pass the instance logger
+        )
 
     async def _process(self, msg_obj: SnapshotProcessMessage, task_type: str):
         """
@@ -266,60 +271,11 @@ class SnapshotAsyncWorker(GenericAsyncWorker):
             await self._init_project_calculation_mapping()
             await self.init()
 
-    async def report_health_status(self):
-        """Reports the current timestamp for this container's hostname to Redis."""
-        if not hasattr(self, '_redis_conn') or self._redis_conn is None:
-            self._logger.warning('Redis connection not initialized, skipping health report.')
-            return
-        try:
-            current_timestamp = int(time.time())
-            await self._redis_conn.hset(
-                service_health_timestamps_key,
-                self._hostname,
-                current_timestamp,
-            )
-            self._logger.debug(f'Reported health for {self._hostname} at {current_timestamp}')
-        except Exception as e:
-            self._logger.error(f'Failed to report health status for hostname {self._hostname}: {e}')
-
-    async def _periodic_health_reporter(self):
-        """Periodically reports health status."""
-        self._logger.info(
-            f'Starting periodic health reporter task for {self._hostname} (Interval: {self._health_report_interval}s)',
-        )
-        while True:
-            should_report = True
-            if not self._worker_thread or not self._worker_thread.is_alive():
-                should_report = False
-                if self._worker_thread:
-                    # Worker thread is no longer alive
-                    self._logger.critical(
-                        'Main Dramatiq worker thread has died. Halting health reports.'
-                    )
-                    # Halt the health reporter
-                    break
-                else:
-                    # Worker thread hasn't been initialized yet
-                    self._logger.warning('Worker thread not found. Skipping health report for now.')
-
-            try:
-                if should_report:
-                    await self.report_health_status()
-
-                await asyncio.sleep(self._health_report_interval)
-            except asyncio.CancelledError:
-                self._logger.info(f'Periodic health reporter task for {self._hostname} cancelled.')
-                break
-            except Exception as e:
-                self._logger.error(f'Error in periodic health reporter loop: {e}')
-                await asyncio.sleep(self._health_report_interval)
-
     def run(self) -> None:
         """
-        Runs the worker by setting resource limits, registering signal handlers, starting the Dramatiq worker, and
-        running the event loop until it is stopped.
+        Runs the worker by setting resource limits, registering signal handlers, starting the Dramatiq worker's
+        internal threads, and running the main event loop until it is stopped.
         """
-        self._logger = logger
         soft, hard = resource.getrlimit(resource.RLIMIT_NOFILE)
         resource.setrlimit(
             resource.RLIMIT_NOFILE,
@@ -344,28 +300,51 @@ class SnapshotAsyncWorker(GenericAsyncWorker):
             f'Starting asynchronous callback worker {self._unique_id}...',
         )
 
-        # init worker
+        # init worker components
         self._event_loop.run_until_complete(self.init_worker())
+        
+        worker = Worker(redis_broker, queues=[SNAPSHOT_QUEUE_NAME, SNAPSHOT_HEALTH_QUEUE_NAME])
 
-        # Start a Dramatiq worker in a separate thread
-        worker = Worker(redis_broker, queues=[SNAPSHOT_QUEUE_NAME])
-        worker_thread = threading.Thread(target=worker.start, daemon=True)
-        self._worker_thread = worker_thread # Store the thread object
-        worker_thread.start()
+        # Start the worker's internal threads
+        self._logger.info("Starting Dramatiq worker internal threads...")
+        worker.start()
 
-        health_reporter_task = self._event_loop.create_task(self._periodic_health_reporter())
+        health_reporter_task = self._event_loop.create_task(
+            run_periodic_broker_health_check(
+                logger=self._logger,
+                redis_conn=self._redis_conn,
+                hostname=self._hostname,
+                health_report_interval=self._health_report_interval,
+                health_actor_send=self._health_ping_actor.send,
+                worker_type="SnapshotWorker",
+                health_queue_name=SNAPSHOT_HEALTH_QUEUE_NAME
+            )
+        )
 
         try:
-            ev_loop.run_forever()
+            self._logger.info("Running main event loop...")
+            self._event_loop.run_forever()
         finally:
+            self._logger.info("Main event loop stopped. Shutting down...")
             if health_reporter_task and not health_reporter_task.done():
                 health_reporter_task.cancel()
                 try:
-                    ev_loop.run_until_complete(asyncio.sleep(1))
+                    self._event_loop.run_until_complete(asyncio.sleep(1))
                 except RuntimeError as e:
                     self._logger.warning(f"Could not fully await health reporter cancellation on loop close: {e}")
 
-            ev_loop.close()
+            # Stop the Dramatiq worker's internal threads
+            try:
+                self._logger.info("Stopping Dramatiq worker internal threads...")
+                worker.stop()
+                self._logger.info("Dramatiq worker stopped.")
+            except Exception as e:
+                self._logger.error(f"Error stopping Dramatiq worker: {e}")
+
+            # Close the event loop
+            self._logger.info("Closing event loop...")
+            self._event_loop.close()
+            self._logger.info("Event loop closed.")
 
 
 if __name__ == '__main__':
