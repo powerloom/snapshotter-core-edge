@@ -543,8 +543,9 @@ class EventDetectorProcess(multiprocessing.Process):
         This method initializes the necessary components, sets up signal handlers,
         initializes RPC connections, and begins the event detection loop.
         """
-        # Initialize the event loop
-        self.ev_loop = asyncio.get_event_loop()
+        # Initialize the event loop  
+        self.ev_loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(self.ev_loop)
 
         self._logger = default_logger.bind(
             module='SystemEventDetector',

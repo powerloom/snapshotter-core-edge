@@ -204,8 +204,8 @@ class AggregationConfig(BaseModel):
     """Aggregation configuration model."""
     project_type: str
     aggregate_on: AggregateOn
-    base_project_type: Optional[str]
-    project_types_to_wait_for: Optional[List[str]]
+    base_project_type: Optional[str] = ""
+    project_types_to_wait_for: Optional[List[str]] = []
     processor: ProcessorConfig
 
 

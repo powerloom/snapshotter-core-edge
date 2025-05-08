@@ -12,17 +12,13 @@ from typing import Union
 from uuid import uuid4
 import dramatiq
 import grpclib
-import sha3
+import hashlib
 import tenacity
 from coincurve import PrivateKey
 from dramatiq.brokers.redis import RedisBroker
 from dramatiq.middleware import AsyncIO
-from eip712_structs import EIP712Struct
-from eip712_structs import make_domain
-from eip712_structs import String
-from eip712_structs import Uint
+from eth_account.messages import encode_structured_data
 from eth_utils.crypto import keccak
-from eth_utils.encoding import big_endian_to_int
 from grpclib.client import Channel
 from httpx import AsyncClient
 from httpx import AsyncHTTPTransport
@@ -43,6 +39,8 @@ from snapshotter.settings.config import settings
 from snapshotter.utils.callback_helpers import send_telegram_notification_async
 from snapshotter.utils.default_logger import default_logger
 from snapshotter.utils.file_utils import read_json_file
+from snapshotter.utils.models.data_models import EIP712Domain
+from snapshotter.utils.models.data_models import EIPRequest
 from snapshotter.utils.models.data_models import SnapshotterIssue
 from snapshotter.utils.models.data_models import SnapshotterReportState
 from snapshotter.utils.models.data_models import SnapshotterStates
@@ -79,15 +77,33 @@ dramatiq.set_broker(redis_broker)
 EVENT_DETECTOR_QUEUE_NAME = f'powerloom-event-detector_{settings.namespace}_{settings.instance_id}'
 
 
-class EIPRequest(EIP712Struct):
-    """
-    Represents an EIP712 structured request for snapshot submission.
-    """
-    slotId = Uint()
-    deadline = Uint()
-    snapshotCid = String()
-    epochId = Uint()
-    projectId = String()
+def get_eip712_typed_data_dict(domain: EIP712Domain, message: EIPRequest) -> Dict[str, any]:
+    """Constructs the full EIP-712 typed data dictionary for eth-account."""
+    # Pydantic v2 uses model_dump, v1 used dict()
+
+    domain_dict = domain.model_dump()
+    message_dict = message.model_dump()
+
+    return {
+        'types': {
+            'EIP712Domain': [
+                {'name': 'name', 'type': 'string'},
+                {'name': 'version', 'type': 'string'},
+                {'name': 'chainId', 'type': 'uint256'},
+                {'name': 'verifyingContract', 'type': 'address'},
+            ],
+            'EIPRequest': [
+                {'name': 'slotId', 'type': 'uint256'},
+                {'name': 'deadline', 'type': 'uint256'},
+                {'name': 'snapshotCid', 'type': 'string'},
+                {'name': 'epochId', 'type': 'uint256'},
+                {'name': 'projectId', 'type': 'string'},
+            ]
+        },
+        'primaryType': 'EIPRequest',
+        'domain': domain_dict,
+        'message': message_dict,
+    }
 
 
 def submit_snapshot_retry_callback(retry_state: tenacity.RetryCallState):
@@ -170,7 +186,7 @@ class GenericAsyncWorker(multiprocessing.Process):
 
         self.protocol_state_contract_address = Web3.to_checksum_address(settings.protocol_state.address)
 
-        self._keccak_hash = lambda x: sha3.keccak_256(x).digest()
+        self._keccak_hash = lambda x: hashlib.sha3_256(x).digest()
         self._private_key = settings.signer_private_key
         if self._private_key.startswith('0x'):
             self._private_key = self._private_key[2:]
@@ -245,7 +261,7 @@ class GenericAsyncWorker(multiprocessing.Process):
         current_block_hash = current_block['hash']
         deadline = current_block_number + settings.protocol_state.deadline_buffer
         request_slot_id = settings.slot_id if not slot_id else slot_id
-        request = EIPRequest(
+        request_message = EIPRequest(
             slotId=request_slot_id,
             deadline=deadline,
             snapshotCid=snapshot_cid,
@@ -253,24 +269,36 @@ class GenericAsyncWorker(multiprocessing.Process):
             projectId=project_id,
         )
 
-        signable_bytes = request.signable_bytes(self._domain_separator)
+        eip712_typed_data = get_eip712_typed_data_dict(
+            domain=self._domain_model,
+            message=request_message,
+        )
+
+
+        signable_message = encode_structured_data(eip712_typed_data)
+        message_hash_bytes = keccak(b'\x19\x01' + signable_message.header + signable_message.body)
+
         if not private_key:  # self signing
-            signature = self._identity_private_key.sign_recoverable(signable_bytes, hasher=self._keccak_hash)
+            signer_private_key_obj = self._identity_private_key
         else:
             if private_key.startswith('0x'):
-                private_key = private_key[2:]
-            signer_private_key = PrivateKey.from_hex(private_key)
-            signature = signer_private_key.sign_recoverable(signable_bytes, hasher=self._keccak_hash)
-        v = signature[64] + 27
-        r = big_endian_to_int(signature[0:32])
-        s = big_endian_to_int(signature[32:64])
+                private_key_hex = private_key[2:]
+            else:
+                private_key_hex = private_key
+            signer_private_key_obj = PrivateKey.from_hex(private_key_hex)
+        
+        recoverable_sig_bytes = signer_private_key_obj.sign_recoverable(message_hash_bytes, hasher=None) # hasher=None as we sign the hash directly
 
-        final_sig = r.to_bytes(32, 'big') + s.to_bytes(32, 'big') + v.to_bytes(1, 'big')
-        request_ = {
-            'slotId': request_slot_id, 'deadline': deadline,
-            'snapshotCid': snapshot_cid, 'epochId': epoch_id, 'projectId': project_id,
-        }
-        return request_, final_sig, current_block_hash
+        v = recoverable_sig_bytes[64]
+        normalized_v = v + 27
+
+        r_bytes = recoverable_sig_bytes[0:32]
+        s_bytes = recoverable_sig_bytes[32:64]
+        final_sig_bytes = r_bytes + s_bytes + normalized_v.to_bytes(1, 'big')
+
+        request_ = request_message.model_dump()
+
+        return request_, final_sig_bytes.hex(), current_block_hash
 
     async def _commit_payload(
             self,
@@ -419,8 +447,10 @@ class GenericAsyncWorker(multiprocessing.Process):
         self._w3 = self._anchor_rpc_helper._nodes[0]['web3_client']
         self._chain_id = await self._w3.eth.chain_id
         self._logger.debug('Set anchor chain ID to {}', self._chain_id)
-        self._domain_separator = make_domain(
-            name='PowerloomProtocolContract', version='0.1', chainId=self._chain_id,
+        self._domain_model = EIP712Domain(
+            name='PowerloomProtocolContract',
+            version='0.1',
+            chainId=self._chain_id,
             verifyingContract=self.protocol_state_contract_address,
         )
 
@@ -530,7 +560,7 @@ class GenericAsyncWorker(multiprocessing.Process):
         )
 
         msg = SnapshotSubmission(
-            request=request_msg, signature=signature.hex(),
+            request=request_msg, signature=signature,
             header=current_block_hash, dataMarket=settings.data_market,
         )
         self._logger.info(

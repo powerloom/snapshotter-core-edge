@@ -129,3 +129,18 @@ class TelegramEpochProcessingReportMessage(TelegramMessage):
 
 class TelegramSnapshotterCoreReportMessage(TelegramMessage):
     issue: SnapshotterIssue
+
+
+# --- EIP-712 related models ---
+class EIP712Domain(BaseModel):
+    name: str
+    version: str
+    chainId: int
+    verifyingContract: str # Should be checksummed address
+
+class EIPRequest(BaseModel):
+    slotId: int
+    deadline: int
+    snapshotCid: str
+    epochId: int
+    projectId: str

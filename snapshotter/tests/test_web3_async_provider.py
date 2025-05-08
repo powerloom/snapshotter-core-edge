@@ -56,7 +56,9 @@ async def test_web3_async_call():
 if __name__ == '__main__':
     try:
         # Run the test function in the event loop
-        asyncio.get_event_loop().run_until_complete(test_web3_async_call())
+        ev_loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(ev_loop)
+        ev_loop.run_until_complete(test_web3_async_call())
     except Exception as e:
         # Log any exceptions that occur during execution
         test_logger.opt(exception=settings.logs.debug_mode).error('exception: {}', e)
