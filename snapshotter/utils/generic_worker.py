@@ -343,7 +343,7 @@ class GenericAsyncWorker(multiprocessing.Process):
                     # fetch last finalized snapshot for the project
                     last_epoch_id = await get_project_last_finalized_epoch(self._redis_conn, self._protocol_state_contract, self._anchor_rpc_helper, project_id)
                     if last_epoch_id:
-                        last_snapshot_cid = await get_project_finalized_cid(self._redis_conn, self._protocol_state_contract, self._anchor_rpc_helper, last_epoch_id, project_id)
+                        last_snapshot_cid = await get_project_finalized_cid(self._redis_conn, self._protocol_state_contract, self._anchor_rpc_helper, self._ipfs_reader_client, last_epoch_id, project_id)
                         if last_snapshot_cid:
                             last_snapshot = await get_submission_data(self._redis_conn, last_snapshot_cid, self._ipfs_reader_client)
                 

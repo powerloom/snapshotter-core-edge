@@ -40,7 +40,7 @@ from snapshotter.utils.models.message_models import SnapshotSubmittedMessage
 from snapshotter.utils.redis.redis_conn import RedisPoolCache
 from snapshotter.utils.redis.redis_keys import epoch_id_project_to_state_mapping
 from snapshotter.utils.redis.redis_keys import project_data_hmap
-from snapshotter.utils.redis.redis_keys import project_last_finalized_epoch_key
+from snapshotter.utils.redis.redis_keys import project_last_finalized_epoch_hmap
 from snapshotter.utils.redis.redis_keys import service_health_timestamps_key
 from snapshotter.utils.redis.redis_keys import snapshots_to_unpin_zset_name
 from snapshotter.utils.redis.redis_keys import last_submitted_snapshot_data_key
@@ -243,11 +243,23 @@ class Cacher(multiprocessing.Process):
         pipeline = self._redis_conn.pipeline()
         
         for project_id, snapshot_cid in submitted_batch_data:
-            # update last_finalized_epoch in redis
-            pipeline.set(
-                name=project_last_finalized_epoch_key(project_id),
-                value=msg_obj.epochId,
-            )
+            # update last_finalized_epoch in redis - use max of current and new
+            last_finalized_hmap = project_last_finalized_epoch_hmap()
+            # Get current value first
+            current_epoch = await self._redis_conn.hget(last_finalized_hmap, project_id)
+            if current_epoch is not None:
+                current_epoch = int(current_epoch)
+                pipeline.hset(
+                    name=last_finalized_hmap,
+                    key=project_id,
+                    value=max(current_epoch, msg_obj.epochId),
+                )
+            else:
+                pipeline.hset(
+                    name=last_finalized_hmap,
+                    key=project_id,
+                    value=msg_obj.epochId,
+                )
 
             # Add to project data hashmap
             project_hmap_key = project_data_hmap(project_id=project_id)
@@ -362,11 +374,23 @@ class Cacher(multiprocessing.Process):
         # Create a pipeline for batch processing
         pipeline = self._redis_conn.pipeline()
         
-        # set project last finalized epoch in redis
-        pipeline.set(
-            name=project_last_finalized_epoch_key(msg_obj.projectId),
-            value=msg_obj.epochId,
-        )
+        # set project last finalized epoch in redis - use max of current and new
+        last_finalized_hmap = project_last_finalized_epoch_hmap()
+        # Get current value first
+        current_epoch = await self._redis_conn.hget(last_finalized_hmap, msg_obj.projectId)
+        if current_epoch is not None:
+            current_epoch = int(current_epoch)
+            pipeline.hset(
+                name=last_finalized_hmap,
+                key=msg_obj.projectId,
+                value=max(current_epoch, msg_obj.epochId),
+            )
+        else:
+            pipeline.hset(
+                name=last_finalized_hmap,
+                key=msg_obj.projectId,
+                value=msg_obj.epochId,
+            )
 
         # Add to project data hashmap
         project_hmap_key = project_data_hmap(project_id=msg_obj.projectId)
@@ -528,7 +552,7 @@ class Cacher(multiprocessing.Process):
         try:
             current_timestamp = int(time.time())
             await self._redis_conn.hset(
-                service_health_timestamps_key,
+                service_health_timestamps_key(),
                 self._hostname,
                 current_timestamp,
             )

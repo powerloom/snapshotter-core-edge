@@ -15,6 +15,8 @@ fi
 rm -rf redis-data
 rm -rf ipfs-data
 rm -rf ipfs-export
+rm -rf logs
+mkdir logs
 
 echo "testing before build..."
 

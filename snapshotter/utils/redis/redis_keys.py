@@ -67,17 +67,11 @@ def source_chain_epoch_size_key():
     return 'sourceChainEpochSize'
 
 
-def project_last_finalized_epoch_key(project_id):
+def project_last_finalized_epoch_hmap():
     """
-    Generate Redis key for project's last finalized epoch.
-
-    Args:
-        project_id (str): The ID of the project.
-
-    Returns:
-        str: Redis key for the project's last finalized epoch.
+    Generate Redis key for project's last finalized epoch hashmap.
     """
-    return f'projectID:{project_id}:lastFinalizedEpoch'
+    return 'projectLastFinalizedEpoch'
 
 
 def snapshots_to_unpin_zset_name():
