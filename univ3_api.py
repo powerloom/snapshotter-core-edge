@@ -22,8 +22,7 @@ from snapshotter.utils.default_logger import default_logger
 from snapshotter.utils.file_utils import read_json_file
 from snapshotter.utils.models.data_models import TaskStatusRequest
 from snapshotter.utils.redis.redis_conn import RedisPoolCache
-
-from snapshotter.compu
+from snapshotter.utils.data_utils import get_uniswap_v3_pool_metadata
 
 
 rest_logger = default_logger.bind(module='UniswapV3API')
@@ -89,11 +88,24 @@ async def startup_boilerplate():
 @app.get('/pool/{pool_address}/metadata')
 async def get_pool_metadata(
     pool_address: str,
+    request: Request,
+    response: Response,
 ):
     """
     Get the metadata for a specific pool.
     """
     pool_address = Web3.to_checksum_address(pool_address)
     # TODO: integrate pool metadata fetch logic from compute module
-    pool_metadata = dict()
-    return pool_metadata
+    pool_metadata = await get_uniswap_v3_pool_metadata(
+        redis_conn=app.state.redis_conn,
+        protocol_state_contract=app.state.protocol_state_contract,
+        anchor_rpc_helper=app.state.anchor_rpc_helper,
+        ipfs_reader=app.state.ipfs_reader_client,
+        pool_address=pool_address,
+    )
+    if not pool_metadata:
+        response.status_code = 404
+        return {"error": "Pool metadata not found"}
+    else:
+        response.status_code = 200
+        return pool_metadata

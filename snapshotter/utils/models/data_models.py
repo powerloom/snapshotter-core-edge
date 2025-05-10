@@ -144,3 +144,26 @@ class EIPRequest(BaseModel):
     snapshotCid: str
     epochId: int
     projectId: str
+
+
+### Uniswap V3 related models ###
+
+class UniswapTokenMetadata(BaseModel):
+    """
+    Metadata for a Uniswap token.
+    """
+    address: str  # Contract address of the token
+    name: str  # Name of the token
+    symbol: str  # Symbol of the token
+    decimals: int  # Number of decimals for the token
+
+
+class UniswapPoolMetadata(BaseModel):
+    """
+    Metadata for a Uniswap pair.
+    """
+    address: str  # Contract address of the pair
+    token0: UniswapTokenMetadata  # Metadata for token0
+    token1: UniswapTokenMetadata  # Metadata for token1
+    fee: int  # Fee for the pair
+    factory: str  # Factory address for the pair

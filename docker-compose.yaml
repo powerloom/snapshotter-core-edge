@@ -158,6 +158,16 @@ services:
       interval: 30s
       timeout: 10s
       retries: 3
+  univ3_api:
+    <<: *snapshotter-base
+    command: bash -c "bash init_processes.sh gunicorn_univ3_api_launcher"
+    depends_on:
+      - processor-distributor
+    expose:
+      - ${UNIV3_API_PORT:-9003}
+    ports:
+      - ${UNIV3_API_PORT:-9003}:${UNIV3_API_PORT:-9003}
+    
   block_fetcher:
     # Build context pointing to the parent directory and then BlockFetcher
     build:
