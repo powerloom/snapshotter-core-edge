@@ -15,7 +15,7 @@ from rpc_helper.rpc import RpcHelper
 from web3 import Web3
 
 from snapshotter.settings.config import settings
-from snapshotter.utils.data_utils import get_project_epoch_snapshot
+from snapshotter.utils.data_utils import get_project_epoch_snapshot, get_uniswap_v3_token_pools_snapshot
 from snapshotter.utils.data_utils import get_project_finalized_cid
 from snapshotter.utils.data_utils import get_project_time_series_data
 from snapshotter.utils.default_logger import default_logger
@@ -96,16 +96,52 @@ async def get_pool_metadata(
     """
     pool_address = Web3.to_checksum_address(pool_address)
     # TODO: integrate pool metadata fetch logic from compute module
-    pool_metadata = await get_uniswap_v3_pool_metadata(
-        redis_conn=app.state.redis_conn,
-        protocol_state_contract=app.state.protocol_state_contract,
-        anchor_rpc_helper=app.state.anchor_rpc_helper,
-        ipfs_reader=app.state.ipfs_reader_client,
-        pool_address=pool_address,
-    )
-    if not pool_metadata:
-        response.status_code = 404
+    try:
+        pool_metadata = await get_uniswap_v3_pool_metadata(
+            redis_conn=app.state.redis_conn,
+            protocol_state_contract=app.state.protocol_state_contract,
+            anchor_rpc_helper=app.state.anchor_rpc_helper,
+            ipfs_reader=app.state.ipfs_reader_client,
+            pool_address=pool_address,
+        )
+        if not pool_metadata:
+            response.status_code = 404
+            return {"error": "Pool metadata not found"}
+        else:
+            response.status_code = 200
+            return pool_metadata
+    except Exception as e:
+        rest_logger.error(f"Error getting pool metadata for {pool_address}: {e}")
+        response.status_code = 500
         return {"error": "Pool metadata not found"}
-    else:
-        response.status_code = 200
-        return pool_metadata
+
+
+@app.get('/token/{token_address}/pools')
+async def get_token_pools(
+    token_address: str,
+    request: Request,
+    response: Response,
+):
+    """
+    Get the token pools for a specific token.
+    """
+    token_address = Web3.to_checksum_address(token_address)
+    # TODO: integrate token pools fetch logic from compute module
+    try:
+        token_pools_snapshot = await get_uniswap_v3_token_pools_snapshot(
+            redis_conn=app.state.redis_conn,
+            protocol_state_contract=app.state.protocol_state_contract,
+            anchor_rpc_helper=app.state.anchor_rpc_helper,
+            ipfs_reader=app.state.ipfs_reader_client,
+            token_address=token_address,
+        )
+        if not token_pools_snapshot:
+            response.status_code = 404
+            return {"error": "Token pools not found"}
+        else:
+            response.status_code = 200
+            return token_pools_snapshot
+    except Exception as e:
+        rest_logger.error(f"Error getting token pools for {token_address}: {e}")
+        response.status_code = 500
+        return {"error": "Token pools not found"}

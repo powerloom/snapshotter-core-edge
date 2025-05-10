@@ -11,7 +11,7 @@ from tenacity import stop_after_attempt
 from tenacity import wait_random_exponential
 from web3 import Web3
 from ipfs_client.main import AsyncIPFSClient
-from snapshotter.utils.models.data_models import UniswapPoolMetadata
+from snapshotter.utils.models.data_models import UniswapPoolMetadata, UniswapTokenPoolsSnapshot
 from snapshotter.settings.config import settings
 from snapshotter.utils.default_logger import default_logger
 from snapshotter.utils.redis.redis_keys import cid_not_found_key
@@ -982,3 +982,30 @@ async def get_uniswap_v3_pool_metadata(
             logger.error(f"No snapshot data found for pool {pool_address} against epoch {last_finalized_epoch} while processing metadata")
             return None
         return UniswapPoolMetadata(**data)
+
+
+async def get_uniswap_v3_token_pools_snapshot(
+    redis_conn: aioredis.Redis,
+    anchor_rpc_helper: RpcHelper,
+    ipfs_reader: AsyncIPFSClient,
+    protocol_state_contract,
+    token_address: str,
+):
+    """
+    Get the snapshot of token pools for a Uniswap pair.
+    """
+
+    project_id = f"tokenPools:{token_address}:{settings.namespace}"
+    # get the last finalized epoch
+    last_finalized_epoch = await get_project_last_finalized_epoch(
+        redis_conn, protocol_state_contract, anchor_rpc_helper, project_id,
+    )
+    # get the snapshot for the last finalized epoch
+    snapshot = await get_project_epoch_snapshot(
+        redis_conn, protocol_state_contract, anchor_rpc_helper, ipfs_reader, last_finalized_epoch, project_id,
+    )
+    if snapshot:
+        parsed_snapshot = UniswapTokenPoolsSnapshot(**snapshot)
+        return parsed_snapshot
+    else:
+        return None

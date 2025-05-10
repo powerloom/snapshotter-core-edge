@@ -164,3 +164,12 @@ def callback_last_sent_by_issue(issue_type):
 
 def service_health_timestamps_key():
     return f'{settings.namespace}:service_health_timestamps'
+
+### Uniswap V3 related keys ###
+
+active_pools_key_prefix = f"active_pools:{settings.namespace}"
+
+def active_pools_key(block_number):
+    return f"{active_pools_key_prefix}:{block_number}"
+
+

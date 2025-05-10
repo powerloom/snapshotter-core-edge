@@ -167,3 +167,11 @@ class UniswapPoolMetadata(BaseModel):
     token1: UniswapTokenMetadata  # Metadata for token1
     fee: int  # Fee for the pair
     factory: str  # Factory address for the pair
+
+
+class UniswapTokenPoolsSnapshot(BaseModel):
+    """
+    Snapshot of token pools for a Uniswap pair.
+    """
+    pools: Dict[str, UniswapPoolMetadata]  # Dictionary mapping token addresses to pool metadata
+
