@@ -12,12 +12,14 @@ from fastapi_pagination import Page
 from ipfs_client.main import AsyncIPFSClientSingleton
 from pydantic import Field
 from rpc_helper.rpc import RpcHelper
+from typing import Optional
 from web3 import Web3
 
 from snapshotter.settings.config import settings
 from snapshotter.utils.data_utils import get_project_epoch_snapshot, get_uniswap_v3_token_pools_snapshot
 from snapshotter.utils.data_utils import get_project_finalized_cid
 from snapshotter.utils.data_utils import get_project_time_series_data
+from snapshotter.utils.data_utils import get_uniswap_v3_eth_price_snapshot
 from snapshotter.utils.default_logger import default_logger
 from snapshotter.utils.file_utils import read_json_file
 from snapshotter.utils.models.data_models import TaskStatusRequest
@@ -145,3 +147,24 @@ async def get_token_pools(
         rest_logger.error(f"Error getting token pools for {token_address}: {e}")
         response.status_code = 500
         return {"error": "Token pools not found"}
+
+
+@app.get('/ethprice')
+async def get_ethprice(
+    request: Request,
+    response: Response,
+    block_number: Optional[int] = None,
+):
+    eth_price_snapshot = await get_uniswap_v3_eth_price_snapshot(
+        redis_conn=app.state.redis_conn,
+        protocol_state_contract=app.state.protocol_state_contract,
+        anchor_rpc_helper=app.state.anchor_rpc_helper,
+        ipfs_reader=app.state.ipfs_reader_client,
+        block_number=block_number,
+    )
+    if not eth_price_snapshot:
+        response.status_code = 404
+        return {"error": "ETH price snapshot not found"}
+    else:
+        response.status_code = 200
+        return eth_price_snapshot

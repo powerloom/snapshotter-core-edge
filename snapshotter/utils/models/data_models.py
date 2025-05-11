@@ -1,7 +1,9 @@
 from enum import Enum
 from typing import Any
 from typing import Dict
+from typing import List
 from typing import Optional
+from typing import Tuple
 
 from pydantic import BaseModel
 
@@ -148,6 +150,13 @@ class EIPRequest(BaseModel):
 
 ### Uniswap V3 related models ###
 
+
+class EpochBaseSnapshot(BaseModel):
+    """Represents a block range for an epoch."""
+    begin: int  # Start of the epoch 
+    end: int    # End of the epoch 
+
+
 class UniswapTokenMetadata(BaseModel):
     """
     Metadata for a Uniswap token.
@@ -174,4 +183,13 @@ class UniswapTokenPoolsSnapshot(BaseModel):
     Snapshot of token pools for a Uniswap pair.
     """
     pools: Dict[str, UniswapPoolMetadata]  # Dictionary mapping token addresses to pool metadata
+
+
+class UniswapEthPriceSnapshot(BaseModel):
+    """
+    Snapshot of ETH price for a Uniswap pair.
+    """
+    epoch: EpochBaseSnapshot  # Range of blocks for this snapshot
+    ethPrice: Dict[int, float]  # Block number to corresponding ETH price
+    previousSnapshots: List[Tuple[int, str]] = []  # Will be filled by snapshot worker
 

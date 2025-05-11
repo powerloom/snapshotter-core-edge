@@ -1,6 +1,6 @@
 import asyncio
 import json
-from typing import List, Optional
+from typing import List, Optional, Callable, Any
 import time
 import tenacity
 from redis import asyncio as aioredis
@@ -11,7 +11,7 @@ from tenacity import stop_after_attempt
 from tenacity import wait_random_exponential
 from web3 import Web3
 from ipfs_client.main import AsyncIPFSClient
-from snapshotter.utils.models.data_models import UniswapPoolMetadata, UniswapTokenPoolsSnapshot
+from snapshotter.utils.models.data_models import UniswapPoolMetadata, UniswapTokenPoolsSnapshot, UniswapEthPriceSnapshot
 from snapshotter.settings.config import settings
 from snapshotter.utils.default_logger import default_logger
 from snapshotter.utils.redis.redis_keys import cid_not_found_key
@@ -22,7 +22,6 @@ from snapshotter.utils.redis.redis_keys import source_chain_block_time_key
 from snapshotter.utils.redis.redis_keys import source_chain_epoch_size_key
 from snapshotter.utils.redis.redis_keys import source_chain_id_key
 from snapshotter.utils.redis.redis_keys import project_data_expiry_zset
-
 logger = default_logger.bind(module='data_helper')
 BATCH_SIZE = 50
 PROJECT_DATA_ENTRY_EXPIRY = 60 * 60 * 24 * 7  # 7 days in seconds
@@ -1036,4 +1035,35 @@ async def get_uniswap_v3_token_pools_snapshot(
         parsed_snapshot = UniswapTokenPoolsSnapshot(**snapshot)
         return parsed_snapshot
     else:
+        return None
+
+
+async def get_uniswap_v3_eth_price_snapshot(
+    redis_conn: aioredis.Redis,
+    anchor_rpc_helper: RpcHelper,
+    ipfs_reader: AsyncIPFSClient,
+    protocol_state_contract,
+    block_number: Optional[int] = None,
+):
+    project_id = f'price:ETH:{settings.namespace}'
+
+    # if block_number is not provided, get the last finalized epoch and use that
+    if not block_number:
+        target_epoch = await get_project_last_finalized_epoch(
+            redis_conn, protocol_state_contract, anchor_rpc_helper, project_id,
+        )
+        if not target_epoch:
+            logger.error(f"No last finalized epoch found for project {project_id}")
+            return None
+    else:
+        target_epoch = block_number
+
+    snapshot = await get_project_epoch_snapshot(
+        redis_conn, protocol_state_contract, anchor_rpc_helper, ipfs_reader, target_epoch, project_id,
+    )
+    if snapshot:
+        parsed_snapshot = UniswapEthPriceSnapshot(**snapshot)
+        return parsed_snapshot
+    else:
+        logger.error(f"No snapshot data found for project {project_id} against epoch {target_epoch}")
         return None
