@@ -769,6 +769,34 @@ async def get_tail_epoch_id(
     return tail_epoch_id, False
 
 
+async def get_project_latest_snapshot(
+    redis_conn: aioredis.Redis,
+    state_contract_obj,
+    rpc_helper,
+    ipfs_reader,
+    project_id,
+):
+    """
+    Retrieves the latest snapshot for a given project.
+
+    This function first gets the latest epoch ID for the project, then fetches the snapshot data for that epoch.
+
+    Args:
+        redis_conn (aioredis.Redis): Redis connection object.
+        state_contract_obj: State contract object.
+        rpc_helper: RPC helper object.
+        ipfs_reader: IPFS reader object.
+        project_id: ID of the project to fetch snapshot data for.
+
+    Returns:
+        dict: The latest snapshot data for the given project.
+    """
+    last_finalized_epoch = await get_project_last_finalized_epoch(redis_conn, state_contract_obj, rpc_helper, project_id)
+    if not last_finalized_epoch:
+        return dict()
+    return await get_project_epoch_snapshot(redis_conn, state_contract_obj, rpc_helper, ipfs_reader, last_finalized_epoch, project_id)
+
+
 async def get_project_epoch_snapshot_bulk(
         redis_conn: aioredis.Redis,
         state_contract_obj,
