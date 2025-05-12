@@ -150,11 +150,20 @@ async def get_token_pools(
 
 
 @app.get('/ethPrice/{block_number}')
+@app.get('/ethPrice')
 async def get_ethprice(
     request: Request,
     response: Response,
     block_number: Optional[int] = None,
 ):
+    """
+    Get ETH price snapshot for a specific block number or latest finalized epoch.
+    
+    Args:
+        request: FastAPI request object
+        response: FastAPI response object
+        block_number: Optional block number to get ETH price for. If not provided, uses latest finalized epoch.
+    """
     eth_price_snapshot = await get_uniswap_v3_eth_price_snapshot(
         redis_conn=app.state.redis_conn,
         protocol_state_contract=app.state.protocol_state_contract,
