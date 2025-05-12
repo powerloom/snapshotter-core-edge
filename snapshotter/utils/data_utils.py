@@ -244,6 +244,7 @@ async def w3_get_and_cache_finalized_cid(
     # Add to expiry tracking sorted set with TTL
     expiry_time = int(time.time()) + PROJECT_DATA_ENTRY_EXPIRY
     pipeline = redis_conn.pipeline()
+    expiry_keys = []
 
     # Fetch consensus status and CID from the blockchain
     [consensus_status, current_epoch] = await rpc_helper.web3_call(
@@ -278,22 +279,16 @@ async def w3_get_and_cache_finalized_cid(
             json.dumps({"snapshot_cid": cid, "status": status + 1}),
         )
 
-        expiry_key = f"{project_id}|{epoch_id}"
-        pipeline.zadd(
-            name=project_data_expiry_zset(),
-            mapping={expiry_key: expiry_time},
-        )
+        expiry_keys.append(f"{project_id}|{epoch_id}")
 
         # Process previousSnapshots if available
         try:
             snapshot_data = await fetch_file_from_ipfs(redis_conn, ipfs_reader, cid)
             if snapshot_data and "previousSnapshots" in snapshot_data:
                 data_to_cache = {}
-                expiry_keys = []
                 all_previous_snapshot_keys = snapshot_data["previousSnapshots"].keys()
                 min_previous_snapshot_key = min(all_previous_snapshot_keys)
-                max_previous_snapshot_key = max(all_previous_snapshot_keys)
-                all_previous_snapshot_keys = set(range(min_previous_snapshot_key, max_previous_snapshot_key + 1))
+                all_previous_snapshot_keys = set(range(min_previous_snapshot_key, epoch_id + 1))
                 # Process each previous snapshot
                 for (epoch_id, snapshot_cid) in snapshot_data["previousSnapshots"]:
                     epoch_id = int(epoch_id)
@@ -311,19 +306,21 @@ async def w3_get_and_cache_finalized_cid(
                             mapping=data_to_cache,
                         )
 
-                    if expiry_keys:
-                        expiry_data = {key: expiry_time for key in expiry_keys}
-                        pipeline.zadd(
-                            name=project_data_expiry_zset(),
-                            mapping=expiry_data,
-                        )
                 for epoch_id in all_previous_snapshot_keys:
                     pipeline.hset(
                         project_hmap_key,
                         epoch_id,
                         json.dumps({"snapshot_cid": null_cid, "status": -1}),
                     )
-                    
+                    expiry_keys.append(f"{project_id}|{epoch_id}")
+
+            if expiry_keys:
+                expiry_data = {key: expiry_time for key in expiry_keys}
+                pipeline.zadd(
+                    name=project_data_expiry_zset(),
+                    mapping=expiry_data,
+                )
+        
         except Exception as e:
             logger.opt(exception=True).error(f'Error while fetching data from IPFS | CID {cid} | Error: {e}')
             pipeline.set(cid_not_found_key(cid), 'true', ex=86400)
