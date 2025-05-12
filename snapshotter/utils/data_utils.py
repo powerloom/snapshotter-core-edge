@@ -315,6 +315,67 @@ async def w3_get_and_cache_finalized_cid(
     wait=wait_random_exponential(multiplier=1, max=10),
     stop=stop_after_attempt(3),
 )
+async def w3_get_and_cache_finalized_cid_bulk_using_previous_snapshots(
+    redis_conn: aioredis.Redis,
+    state_contract_obj,
+    rpc_helper: RpcHelper,
+    epoch_ids: List[int],
+    project_id: str,
+):
+    """
+    Retrieves and caches the consensus status and snapshot CID for multiple epochs of a given project.
+
+    This function interacts with the blockchain to get the snapshot status for multiple epochs,
+    then caches the results in Redis.
+
+    Args:
+        redis_conn (aioredis.Redis): Redis connection object
+        state_contract_obj: Contract object for the protocol state contract
+        rpc_helper (RpcHelper): Helper object for making web3 calls
+        epoch_ids (List[int]): List of epoch IDs to fetch
+        project_id (str): Project ID
+
+    Returns:
+        List[Tuple[str, int]]: List of tuples containing (CID, epoch_id) for each epoch
+    """
+    try:
+
+        missing_epochs = set(epoch_ids)
+        cid_data_with_epochs = []
+        # Get the project hashmap key
+        project_hmap_key = project_data_hmap(project_id=project_id)
+
+        while True:
+            if len(missing_epochs) == 0:
+                break
+            sorted_missing_epochs = sorted(list(missing_epochs))
+            epoch_to_fetch = sorted_missing_epochs[-1]
+            cid, epoch_id = await w3_get_and_cache_finalized_cid(redis_conn, state_contract_obj, rpc_helper, ipfs_reader, epoch_to_fetch, project_id)
+            cid_data_with_epochs.append((cid, epoch_id))
+            missing_epochs.remove(epoch_to_fetch)
+            if cid and "null" not in cid:
+                missing_epoch_list = list(missing_epochs)
+                redis_cache_data = await redis_conn.hgetall(project_hmap_key, missing_epoch_list)
+                data = [json.loads(data_raw) for data_raw in redis_cache_data]
+
+                for snapshot_data, epoch_id in zip(data, missing_epochs):
+                    if "snapshot_cid" in snapshot_data:
+                        cid_data_with_epochs.append((snapshot_data["snapshot_cid"], epoch_id))
+                        missing_epochs.remove(epoch_id)
+
+        return cid_data_with_epochs
+
+    except Exception as e:
+        logger.error(f'Error in w3_get_and_cache_finalized_cid_bulk_using_previous_snapshots: {str(e)}')
+        raise
+
+
+@retry(
+    reraise=True,
+    retry=retry_if_exception_type(Exception),
+    wait=wait_random_exponential(multiplier=1, max=10),
+    stop=stop_after_attempt(3),
+)
 async def w3_get_and_cache_finalized_cid_bulk(
     redis_conn: aioredis.Redis,
     state_contract_obj,
