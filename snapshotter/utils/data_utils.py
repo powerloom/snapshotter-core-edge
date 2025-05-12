@@ -166,7 +166,12 @@ async def get_project_finalized_cids_bulk(
         epoch_ids_to_fetch
     )
     logger.error(f'data_raw: {data_raw}')
-    data = [json.loads(data_raw) for data_raw in data_raw if data_raw]
+    data = []
+    for data_raw in data_raw:
+        if data_raw:
+            data.append(json.loads(data_raw))
+        else:
+            data.append(dict())
 
     cid_data_with_epochs = []
     for data, epoch_id in zip(data, epoch_ids_to_fetch):
@@ -381,9 +386,14 @@ async def w3_get_and_cache_finalized_cid_bulk_using_previous_snapshots(
             if cid and "null" not in cid:
                 missing_epoch_list = list(missing_epochs)
                 redis_cache_data = await redis_conn.hmget(project_hmap_key, missing_epoch_list)
-                data = [json.loads(data_raw) for data_raw in redis_cache_data if data_raw]
+                data = []
+                for data_raw in redis_cache_data:
+                    if data_raw:
+                        data.append(json.loads(data_raw))
+                    else:
+                        data.append(dict())
 
-                for snapshot_data, epoch_id in zip(data, missing_epochs):
+                for snapshot_data, epoch_id in zip(data, missing_epoch_list):
                     if "snapshot_cid" in snapshot_data:
                         cid_data_with_epochs.append((snapshot_data["snapshot_cid"], epoch_id))
                         missing_epochs.remove(epoch_id)
