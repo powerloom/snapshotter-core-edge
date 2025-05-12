@@ -165,7 +165,6 @@ async def get_project_finalized_cids_bulk(
         project_data_hmap(project_id=project_id),
         epoch_ids_to_fetch
     )
-    logger.error(f'data_raw: {data_raw}')
     data = []
     for data_raw in data_raw:
         if data_raw:
@@ -241,11 +240,13 @@ async def w3_get_and_cache_finalized_cid(
 
     # Add to expiry tracking sorted set with TTL
     expiry_time = int(time.time()) + PROJECT_DATA_ENTRY_EXPIRY
+    pipeline = redis_conn.pipeline()
 
     # Fetch consensus status and CID from the blockchain
-    [consensus_status] = await rpc_helper.web3_call(
+    [consensus_status, current_epoch] = await rpc_helper.web3_call(
         tasks=[
             ('snapshotStatus', [Web3.to_checksum_address(settings.data_market), project_id, epoch_id]),
+            ('currentEpoch', [Web3.to_checksum_address(settings.data_market)]),
         ],
         contract_addr=state_contract_obj.address,
         abi=state_contract_obj.abi,
@@ -256,8 +257,8 @@ async def w3_get_and_cache_finalized_cid(
     status, cid, timestamp = consensus_status
     null_cid = f'null_{epoch_id}'
 
-    # If timestamp is 0, consensus status is not yet available
-    if timestamp == 0:
+    # Only return without caching if the epoch is less than 10 epochs behind the current epoch
+    if epoch_id > current_epoch[2] - 10 and timestamp == 0:
         logger.debug(f'Consensus status not yet available for project {project_id} and epoch {epoch_id}')
         return null_cid, epoch_id
 
@@ -267,7 +268,6 @@ async def w3_get_and_cache_finalized_cid(
         project_hmap_key = project_data_hmap(project_id=project_id)
 
         # Create a pipeline for batch operations
-        pipeline = redis_conn.pipeline()
 
         pipeline.hset(
             project_hmap_key,
@@ -287,6 +287,10 @@ async def w3_get_and_cache_finalized_cid(
             if snapshot_data and "previousSnapshots" in snapshot_data:
                 data_to_cache = {}
                 expiry_keys = []
+                all_previous_snapshot_keys = snapshot_data["previousSnapshots"].keys()
+                min_previous_snapshot_key = min(all_previous_snapshot_keys)
+                max_previous_snapshot_key = max(all_previous_snapshot_keys)
+                all_previous_snapshot_keys = set(range(min_previous_snapshot_key, max_previous_snapshot_key + 1))
                 # Process each previous snapshot
                 for (epoch_id, snapshot_cid) in snapshot_data["previousSnapshots"]:
                     epoch_id = int(epoch_id)
@@ -294,6 +298,7 @@ async def w3_get_and_cache_finalized_cid(
                         "snapshot_cid": snapshot_cid,
                         "status": status + 1
                     })
+                    all_previous_snapshot_keys.remove(epoch_id)
                     expiry_keys.append(f"{project_id}|{epoch_id}")
 
                     # Add to pipeline if we have data to cache
@@ -309,6 +314,13 @@ async def w3_get_and_cache_finalized_cid(
                             name=project_data_expiry_zset(),
                             mapping=expiry_data,
                         )
+                for epoch_id in all_previous_snapshot_keys:
+                    pipeline.hset(
+                        project_hmap_key,
+                        epoch_id,
+                        json.dumps({"snapshot_cid": null_cid, "status": -1}),
+                    )
+                    
         except Exception as e:
             logger.opt(exception=True).error(f'Error while fetching data from IPFS | CID {cid} | Error: {e}')
             pipeline.set(cid_not_found_key(cid), 'true', ex=86400)
@@ -319,7 +331,6 @@ async def w3_get_and_cache_finalized_cid(
         await pipeline.execute()
         return cid, epoch_id
     else:
-        # Only cache null if we're sure there's no CID (timestamp > 0 but no CID)
         pipeline = redis_conn.pipeline()
 
         pipeline.hset(
