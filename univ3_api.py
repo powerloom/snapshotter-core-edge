@@ -16,7 +16,7 @@ from typing import Optional
 from web3 import Web3
 
 from snapshotter.settings.config import settings
-from snapshotter.utils.data_utils import get_project_epoch_snapshot, get_uniswap_v3_token_pools_snapshot, get_uniswap_trade_volume_agg
+from snapshotter.utils.data_utils import get_project_epoch_snapshot, get_uniswap_v3_token_pools_snapshot, get_uniswap_v3_token_price_pool_snapshot, get_uniswap_v3_token_prices_all_snapshot, get_uniswap_trade_volume_agg
 from snapshotter.utils.data_utils import get_project_finalized_cid
 from snapshotter.utils.data_utils import get_project_time_series_data
 from snapshotter.utils.data_utils import get_uniswap_v3_eth_price_snapshot
@@ -164,19 +164,84 @@ async def get_ethprice(
         response: FastAPI response object
         block_number: Optional block number to get ETH price for. If not provided, uses latest finalized epoch.
     """
-    eth_price_snapshot = await get_uniswap_v3_eth_price_snapshot(
-        redis_conn=app.state.redis_conn,
-        protocol_state_contract=app.state.protocol_state_contract,
-        anchor_rpc_helper=app.state.anchor_rpc_helper,
-        ipfs_reader=app.state.ipfs_reader_client,
-        block_number=block_number,
-    )
-    if not eth_price_snapshot:
-        response.status_code = 404
+    try:
+        eth_price_snapshot = await get_uniswap_v3_eth_price_snapshot(
+            redis_conn=app.state.redis_conn,
+            protocol_state_contract=app.state.protocol_state_contract,
+            anchor_rpc_helper=app.state.anchor_rpc_helper,
+            ipfs_reader=app.state.ipfs_reader_client,
+            block_number=block_number,
+        )
+        if not eth_price_snapshot:
+            response.status_code = 404
+            return {"error": "ETH price snapshot not found"}
+        else:
+            response.status_code = 200
+            return eth_price_snapshot
+    except Exception as e:
+        rest_logger.error(f"Error getting ETH price snapshot: {e}")
+        response.status_code = 500
         return {"error": "ETH price snapshot not found"}
-    else:
-        response.status_code = 200
-        return eth_price_snapshot
+
+
+@app.get('/token/price/{token_address}/{pool_address}')
+@app.get('/token/price/{token_address}/{pool_address}/{block_number}')
+async def get_token_price_pool(
+    request: Request,
+    response: Response,
+    token_address: str,
+    pool_address: Optional[str] = None,
+    block_number: Optional[int] = None,
+):
+    try:
+        token_price = await get_uniswap_v3_token_price_pool_snapshot(
+            redis_conn=app.state.redis_conn,
+            protocol_state_contract=app.state.protocol_state_contract,
+            anchor_rpc_helper=app.state.anchor_rpc_helper,
+            ipfs_reader=app.state.ipfs_reader_client,
+            token_address=token_address,
+            pool_address=pool_address,
+            block_number=block_number,
+        )
+        if not token_price:
+            response.status_code = 404
+            return {"error": "Token price snapshot not found"}
+        else:
+            response.status_code = 200
+            return token_price
+    except Exception as e:
+        rest_logger.error(f"Error getting token price snapshot for {token_address} in pool {pool_address} at block {block_number}: {e}")
+        response.status_code = 500
+        return {"error": "Token price snapshot not found"}
+    
+
+@app.get('/token/price/{token_address}')
+@app.get('/token/price/{token_address}/{block_number}')
+async def get_token_price_all(
+    request: Request,
+    response: Response,
+    token_address: str,
+    block_number: Optional[int] = None,
+):
+    try:
+        token_prices = await get_uniswap_v3_token_prices_all_snapshot(
+            redis_conn=app.state.redis_conn,
+            protocol_state_contract=app.state.protocol_state_contract,
+            anchor_rpc_helper=app.state.anchor_rpc_helper,
+            ipfs_reader=app.state.ipfs_reader_client,
+            token_address=token_address,
+            block_number=block_number,
+        )
+        if not token_prices:
+            response.status_code = 404
+            return {"error": "Token price snapshot not found"}
+        else:
+            response.status_code = 200
+            return token_prices
+    except Exception as e:
+        rest_logger.error(f"Error getting token price snapshot for {token_address} at block {block_number}: {e}")
+        response.status_code = 500
+        return {"error": "Token price snapshot not found"}
 
 
 @app.get('/tradeVolume/{pool_address}/{time_interval}')
