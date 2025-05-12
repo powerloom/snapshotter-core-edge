@@ -1,6 +1,6 @@
 import asyncio
 import json
-from typing import List, Optional, Callable, Any
+from typing import List, Optional
 import time
 import tenacity
 from redis import asyncio as aioredis
@@ -22,6 +22,8 @@ from snapshotter.utils.redis.redis_keys import source_chain_block_time_key
 from snapshotter.utils.redis.redis_keys import source_chain_epoch_size_key
 from snapshotter.utils.redis.redis_keys import source_chain_id_key
 from snapshotter.utils.redis.redis_keys import project_data_expiry_zset
+from snapshotter.settings.config import projects_config
+
 logger = default_logger.bind(module='data_helper')
 BATCH_SIZE = 50
 PROJECT_DATA_ENTRY_EXPIRY = 60 * 60 * 24 * 7  # 7 days in seconds
@@ -40,6 +42,17 @@ def retry_state_callback(retry_state: tenacity.RetryCallState):
         None
     """
     logger.warning(f'Encountered IPFS cat exception: {retry_state.outcome.exception()}')
+
+
+def get_project_config(project_id: str):
+    """
+    Get the project config for a given project ID.
+    """
+    primary_identifier = project_id.split(':')[0]
+    for config in projects_config:
+        if config.project_name.startswith(primary_identifier):
+            return config
+    return None
 
 
 async def get_project_finalized_cid(redis_conn: aioredis.Redis, state_contract_obj, rpc_helper, ipfs_reader, epoch_id, project_id):
@@ -128,6 +141,12 @@ async def get_project_finalized_cids_bulk(
     Returns:
         List[str]: List of CIDs.
     """
+    project_config = get_project_config(project_id)
+    if project_config.keep_previous_snapshot_data:
+        return await w3_get_and_cache_finalized_cid_bulk_using_previous_snapshots(
+            redis_conn, state_contract_obj, rpc_helper, epoch_id_min, epoch_id_max, project_id,
+        )
+
     # Adjust epoch_id_min if it's less than the project's first epoch
     project_first_epoch = await get_project_first_epoch(
         redis_conn, state_contract_obj, rpc_helper, project_id,
