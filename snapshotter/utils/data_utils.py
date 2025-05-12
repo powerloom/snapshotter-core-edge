@@ -1210,7 +1210,7 @@ async def get_uniswap_v3_eth_price_snapshot(
         return None
 
 
-async def get_uniswap_v3_token_price_pool_snapshot(
+async def get_uniswap_v3_token_price_pool(
     redis_conn: aioredis.Redis,
     anchor_rpc_helper: RpcHelper,
     ipfs_reader: AsyncIPFSClient,
@@ -1295,7 +1295,7 @@ async def get_uniswap_v3_token_prices_all_snapshot(
         
         # Create tasks for each pool in the batch
         tasks = [
-            get_uniswap_v3_token_price_pool_snapshot(
+            get_uniswap_v3_token_price_pool(
                 redis_conn=redis_conn,
                 anchor_rpc_helper=anchor_rpc_helper,
                 ipfs_reader=ipfs_reader,

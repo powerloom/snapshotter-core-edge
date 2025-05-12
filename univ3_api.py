@@ -16,7 +16,7 @@ from typing import Optional
 from web3 import Web3
 
 from snapshotter.settings.config import settings
-from snapshotter.utils.data_utils import get_project_epoch_snapshot, get_uniswap_v3_token_pools_snapshot, get_uniswap_v3_token_price_pool_snapshot, get_uniswap_v3_token_prices_all_snapshot, get_uniswap_trade_volume_agg
+from snapshotter.utils.data_utils import get_project_epoch_snapshot, get_uniswap_v3_token_pools_snapshot, get_uniswap_v3_token_price_pool, get_uniswap_v3_token_prices_all_snapshot, get_uniswap_trade_volume_agg
 from snapshotter.utils.data_utils import get_project_finalized_cid
 from snapshotter.utils.data_utils import get_project_time_series_data
 from snapshotter.utils.data_utils import get_uniswap_v3_eth_price_snapshot
@@ -194,7 +194,7 @@ async def get_token_price_pool(
     block_number: Optional[int] = None,
 ):
     try:
-        token_price = await get_uniswap_v3_token_price_pool_snapshot(
+        token_price = await get_uniswap_v3_token_price_pool(
             redis_conn=app.state.redis_conn,
             protocol_state_contract=app.state.protocol_state_contract,
             anchor_rpc_helper=app.state.anchor_rpc_helper,
