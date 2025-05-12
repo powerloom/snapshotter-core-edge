@@ -124,6 +124,7 @@ async def get_project_finalized_cids_bulk(
     redis_conn: aioredis.Redis,
     state_contract_obj,
     rpc_helper: RpcHelper,
+    ipfs_reader,
     epoch_id_min: int,
     epoch_id_max: int,
     project_id: str,
@@ -142,10 +143,6 @@ async def get_project_finalized_cids_bulk(
         List[str]: List of CIDs.
     """
     project_config = get_project_config(project_id)
-    if project_config.keep_previous_snapshot_data:
-        return await w3_get_and_cache_finalized_cid_bulk_using_previous_snapshots(
-            redis_conn, state_contract_obj, rpc_helper, epoch_id_min, epoch_id_max, project_id,
-        )
 
     # Adjust epoch_id_min if it's less than the project's first epoch
     project_first_epoch = await get_project_first_epoch(
@@ -162,12 +159,14 @@ async def get_project_finalized_cids_bulk(
     epoch_ids_set = set(range(epoch_id_min, epoch_id_max + 1))
 
     # Check Redis cache for existing CIDs
-    epoch_ids_to_fetch = range(epoch_id_min, epoch_id_max + 1)
-    data_raws = await redis_conn.hgetall(
+    epoch_ids_to_fetch = list(range(epoch_id_min, epoch_id_max + 1))
+    logger.info(f'Fetching CIDs for epochs {epoch_ids_to_fetch} for project {project_id}')
+    data_raw = await redis_conn.hmget(
         project_data_hmap(project_id=project_id),
-        epoch_ids_to_fetch,
+        epoch_ids_to_fetch
     )
-    data = [json.loads(data_raw) for data_raw in data_raws]
+    logger.error(f'data_raw: {data_raw}')
+    data = [json.loads(data_raw) for data_raw in data_raw if data_raw]
 
     cid_data_with_epochs = []
     for data, epoch_id in zip(data, epoch_ids_to_fetch):
@@ -179,14 +178,20 @@ async def get_project_finalized_cids_bulk(
 
     # batch_web3_contract_calls
     if missing_epochs:
-        # Batch fetch CIDs from the blockchain
-        missing_cids_with_epochs = await w3_get_and_cache_finalized_cid_bulk(
-            redis_conn=redis_conn,
-            state_contract_obj=state_contract_obj,
-            rpc_helper=rpc_helper,
-            epoch_ids=missing_epochs,
-            project_id=project_id,
-        )
+        if project_config.keep_previous_snapshot_data:
+            logger.info(f'Fetching CIDs for epochs {missing_epochs} for project {project_id}')
+            missing_cids_with_epochs = await w3_get_and_cache_finalized_cid_bulk_using_previous_snapshots(
+                redis_conn, state_contract_obj, rpc_helper, ipfs_reader, missing_epochs, project_id,
+            )
+        else:
+            # Batch fetch CIDs from the blockchain
+            missing_cids_with_epochs = await w3_get_and_cache_finalized_cid_bulk(
+                redis_conn=redis_conn,
+                state_contract_obj=state_contract_obj,
+                rpc_helper=rpc_helper,
+                epoch_ids=missing_epochs,
+                project_id=project_id,
+            )
 
         # Merge existing and missing CIDs
         all_cids_with_epochs = cid_data_with_epochs + missing_cids_with_epochs
@@ -252,7 +257,7 @@ async def w3_get_and_cache_finalized_cid(
         return null_cid, epoch_id
 
     # Process and cache the result only if we have a valid timestamp
-    if cid:
+    if cid and "null" not in cid:
         # First check if the key already exists
         project_hmap_key = project_data_hmap(project_id=project_id)
 
@@ -300,7 +305,7 @@ async def w3_get_and_cache_finalized_cid(
                             mapping=expiry_data,
                         )
         except Exception as e:
-            logger.error(f'Error while fetching data from IPFS | CID {cid} | Error: {e}')
+            logger.opt(exception=True).error(f'Error while fetching data from IPFS | CID {cid} | Error: {e}')
             pipeline.set(cid_not_found_key(cid), 'true', ex=86400)
             await pipeline.execute()
             return null_cid, epoch_id
@@ -338,6 +343,7 @@ async def w3_get_and_cache_finalized_cid_bulk_using_previous_snapshots(
     redis_conn: aioredis.Redis,
     state_contract_obj,
     rpc_helper: RpcHelper,
+    ipfs_reader,
     epoch_ids: List[int],
     project_id: str,
 ):
@@ -374,8 +380,8 @@ async def w3_get_and_cache_finalized_cid_bulk_using_previous_snapshots(
             missing_epochs.remove(epoch_to_fetch)
             if cid and "null" not in cid:
                 missing_epoch_list = list(missing_epochs)
-                redis_cache_data = await redis_conn.hgetall(project_hmap_key, missing_epoch_list)
-                data = [json.loads(data_raw) for data_raw in redis_cache_data]
+                redis_cache_data = await redis_conn.hmget(project_hmap_key, missing_epoch_list)
+                data = [json.loads(data_raw) for data_raw in redis_cache_data if data_raw]
 
                 for snapshot_data, epoch_id in zip(data, missing_epochs):
                     if "snapshot_cid" in snapshot_data:
@@ -581,12 +587,12 @@ async def fetch_file_from_ipfs(redis_conn: aioredis.Redis, ipfs_reader, cid):
         data = await _fetch_file_from_ipfs(ipfs_reader, cid)
         return json.loads(data)
     except Exception as e:
-        logger.error(f'Error while fetching data from IPFS | CID {cid} | Error: {e}')
+        logger.opt(exception=True).error(f'Error while fetching data from IPFS | CID {cid} | Error: {e}')
         await redis_conn.set(cid_not_found_key(cid), 'true', ex=86400)
         return dict()
 
 
-async def get_submission_data(redis_conn: aioredis.Redis, cid, ipfs_reader) -> dict:
+async def get_submission_data(redis_conn: aioredis.Redis, cid, ipfs_reader, cleanup_previous_snapshots: bool = True) -> dict:
     """
     Fetches submission data from cache or IPFS.
 
@@ -606,9 +612,10 @@ async def get_submission_data(redis_conn: aioredis.Redis, cid, ipfs_reader) -> d
         return dict()
 
     data = await fetch_file_from_ipfs(redis_conn, ipfs_reader, cid)
+    if isinstance(data, str):
+        data = json.loads(data)
     if data:
-        # cleanup previousSnapshots
-        if "previousSnapshots" in data:
+        if cleanup_previous_snapshots and "previousSnapshots" in data:
             data["previousSnapshots"] = []
         return data
     else:
@@ -906,7 +913,7 @@ async def get_project_epoch_snapshot_bulk(
         A list of snapshot data for the given project and epoch range.
     """
     cid_data = await get_project_finalized_cids_bulk(
-        redis_conn, state_contract_obj, rpc_helper, epoch_id_min, epoch_id_max, project_id,
+        redis_conn, state_contract_obj, rpc_helper, ipfs_reader, epoch_id_min, epoch_id_max, project_id,
     )
 
     cid_data_with_epochs = zip(cid_data, range(epoch_id_min, epoch_id_max + 1))
@@ -1147,3 +1154,38 @@ async def get_uniswap_v3_eth_price_snapshot(
     else:
         logger.error(f"No snapshot data found for project {project_id} against epoch {target_epoch}")
         return None
+
+
+async def get_uniswap_trade_volume_agg(
+    redis_conn: aioredis.Redis,
+    anchor_rpc_helper: RpcHelper,
+    ipfs_reader: AsyncIPFSClient,
+    protocol_state_contract,
+    time_interval: int,
+    project_id: str,
+):
+    [current_epoch_data] = await anchor_rpc_helper.web3_call(
+        tasks=[
+            ('currentEpoch', [Web3.to_checksum_address(settings.data_market)]),
+        ],
+        contract_addr=protocol_state_contract.address,
+        abi=protocol_state_contract.abi,
+    )
+
+    current_epoch = current_epoch_data[2]
+
+    tail_epoch_id, _ = await get_tail_epoch_id(
+        redis_conn, protocol_state_contract, anchor_rpc_helper, current_epoch, time_interval, project_id,
+    )
+
+    snapshots = await get_project_epoch_snapshot_bulk(
+        redis_conn, protocol_state_contract, anchor_rpc_helper, ipfs_reader, tail_epoch_id, current_epoch, project_id,
+    )
+    total_trade_volume = 0
+    for snapshot in snapshots:
+        if snapshot:
+            total_trade_volume += snapshot['totalTrade']
+    return {
+        'totalTradeVolume': total_trade_volume,
+        'timeInterval': time_interval,
+    }

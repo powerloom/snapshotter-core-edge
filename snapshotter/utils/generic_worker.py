@@ -338,17 +338,17 @@ class GenericAsyncWorker(multiprocessing.Process):
                     last_submitted_data = json.loads(last_submitted_data)
                     last_snapshot_cid = last_submitted_data['snapshotCid']
                     last_epoch_id = last_submitted_data['epochId']
-                    last_snapshot = await get_submission_data(self._redis_conn, last_snapshot_cid, self._ipfs_reader_client)
+                    last_snapshot = await get_submission_data(self._redis_conn, last_snapshot_cid, self._ipfs_reader_client, False)
                 else:
                     # fetch last finalized snapshot for the project
                     last_epoch_id = await get_project_last_finalized_epoch(self._redis_conn, self._protocol_state_contract, self._anchor_rpc_helper, project_id)
                     if last_epoch_id:
                         last_snapshot_cid = await get_project_finalized_cid(self._redis_conn, self._protocol_state_contract, self._anchor_rpc_helper, self._ipfs_reader_client, last_epoch_id, project_id)
                         if last_snapshot_cid:
-                            last_snapshot = await get_submission_data(self._redis_conn, last_snapshot_cid, self._ipfs_reader_client)
+                            last_snapshot = await get_submission_data(self._redis_conn, last_snapshot_cid, self._ipfs_reader_client, False)
                 
-                if last_snapshot and 'previousSnapshots' in last_snapshot:
-                    previous_snapshots = last_snapshot['previousSnapshots']
+                previous_snapshots = last_snapshot.get('previousSnapshots', [])
+                if previous_snapshots:
                     if len(previous_snapshots) > 50:
                         previous_snapshots.pop(0)
                     # convert previous_snapshots to list of tuples
@@ -356,9 +356,9 @@ class GenericAsyncWorker(multiprocessing.Process):
                     previous_snapshots.append((last_epoch_id, last_snapshot_cid))
                     snapshot.previousSnapshots = previous_snapshots
                 else:
-                    snapshot.previousSnapshots = []
+                    snapshot.previousSnapshots = [(last_epoch_id, last_snapshot_cid)]
 
-        snapshot_json = json.dumps(snapshot.dict(by_alias=True), sort_keys=True, separators=(',', ':'))
+        snapshot_json = json.dumps(snapshot.model_dump(by_alias=True), sort_keys=True, separators=(',', ':'))
         snapshot_bytes = snapshot_json.encode('utf-8')
         try:
             snapshot_cid = await self._upload_to_ipfs(snapshot_bytes, _ipfs_writer_client)

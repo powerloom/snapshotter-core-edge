@@ -16,7 +16,7 @@ from typing import Optional
 from web3 import Web3
 
 from snapshotter.settings.config import settings
-from snapshotter.utils.data_utils import get_project_epoch_snapshot, get_uniswap_v3_token_pools_snapshot
+from snapshotter.utils.data_utils import get_project_epoch_snapshot, get_uniswap_v3_token_pools_snapshot, get_uniswap_trade_volume_agg
 from snapshotter.utils.data_utils import get_project_finalized_cid
 from snapshotter.utils.data_utils import get_project_time_series_data
 from snapshotter.utils.data_utils import get_uniswap_v3_eth_price_snapshot
@@ -177,3 +177,33 @@ async def get_ethprice(
     else:
         response.status_code = 200
         return eth_price_snapshot
+
+
+@app.get('/tradeVolume/{pool_address}/{time_interval}')
+async def get_trade_volume_agg(
+    request: Request,
+    response: Response,
+    pool_address: str,
+    time_interval: int,
+):
+    pool_address = Web3.to_checksum_address(pool_address)
+    project_id = f"baseSnapshot:{pool_address.lower()}:{settings.namespace}"
+    try:
+        trade_volume_agg = await get_uniswap_trade_volume_agg(
+            redis_conn=app.state.redis_conn,
+            protocol_state_contract=app.state.protocol_state_contract,
+            anchor_rpc_helper=app.state.anchor_rpc_helper,
+            ipfs_reader=app.state.ipfs_reader_client,
+            project_id=project_id,
+            time_interval=time_interval,
+        )
+    except Exception as e:
+        rest_logger.opt(exception=True).error(f"Error getting trade volume agg for {pool_address}: {e}")
+        response.status_code = 500
+        return {"error": "Trade volume agg not found"}
+    if not trade_volume_agg:
+        response.status_code = 404
+        return {"error": "Trade volume agg not found"}
+    else:
+        response.status_code = 200
+        return trade_volume_agg
