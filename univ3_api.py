@@ -14,6 +14,7 @@ from pydantic import Field
 from rpc_helper.rpc import RpcHelper
 from typing import Optional
 from web3 import Web3
+from fastapi import Query
 
 from snapshotter.settings.config import settings
 from snapshotter.utils.data_utils import get_project_epoch_snapshot, get_uniswap_v3_token_pools_snapshot, get_uniswap_v3_token_price_pool, get_uniswap_v3_token_prices_all_snapshot, get_uniswap_trade_volume_agg
@@ -272,3 +273,93 @@ async def get_trade_volume_agg(
     else:
         response.status_code = 200
         return trade_volume_agg
+    
+
+@app.get('/dailyActiveTokens', 
+    summary="Get daily active tokens with pagination",
+    description="Retrieves a paginated list of active tokens for the current day, sorted by frequency. Use page and size parameters to control pagination.",
+    response_description="Returns a paginated list of active tokens with their frequencies"
+)
+async def get_daily_active_tokens(
+    request: Request,
+    response: Response,
+    page: int = Query(
+        default=1,
+        ge=1,
+        description="Page number to retrieve (starts at 1)",
+        example=1
+    ),
+    size: int = Query(
+        default=50,
+        ge=1,
+        le=100,
+        description="Number of items per page (max 100)",
+        example=50
+    ),
+):
+    """
+    Get a paginated list of active tokens for the current day.
+    
+    Parameters:
+    - page: The page number to retrieve (starts at 1)
+    - size: Number of items per page (default: 50, max: 100)
+    
+    Returns:
+    - List of active tokens with their frequencies
+    - Pagination metadata including total count and pages
+    """
+    current_day = await app.state.redis_conn.get("current_day")
+    if not current_day:
+        response.status_code = 404
+        return {"error": "Current day not found"}
+    
+    try:
+        # Decode current_day if it's bytes
+        if isinstance(current_day, bytes):
+            current_day = current_day.decode('utf-8')
+        
+        redis_key = f"active_tokens:day_{current_day}"
+        
+        # Calculate start and end indices for pagination
+        start_idx = (page - 1) * size
+        end_idx = start_idx + size - 1
+        
+        # Get total count of tokens
+        total_tokens = await app.state.redis_conn.zcard(redis_key)
+        
+        # Get paginated tokens from the sorted set
+        active_tokens = await app.state.redis_conn.zrange(
+            redis_key,
+            start_idx,
+            end_idx,
+            withscores=True,
+            desc=True  # Get highest frequency tokens first
+        )
+        
+        # Format the response
+        tokens_data = [
+            {
+                "token_address": token.decode('utf-8'),
+                "frequency": int(score)
+            }
+            for token, score in active_tokens
+        ]
+        
+        response.status_code = 200
+        return {
+            "day": int(current_day),
+            "active_tokens": tokens_data,
+            "pagination": {
+                "page": page,
+                "size": size,
+                "total": total_tokens,
+                "total_pages": (total_tokens + size - 1) // size
+            }
+        }
+    except Exception as e:
+        rest_logger.error(f"Error getting daily active tokens: {e}")
+        response.status_code = 500
+        return {"error": "Failed to retrieve daily active tokens"}
+
+
+    
