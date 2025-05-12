@@ -149,7 +149,7 @@ async def get_token_pools(
         return {"error": "Token pools not found"}
 
 
-@app.get('/ethprice')
+@app.get('/ethPrice/{block_number}')
 async def get_ethprice(
     request: Request,
     response: Response,
