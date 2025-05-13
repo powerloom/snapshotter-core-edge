@@ -17,13 +17,17 @@ from web3 import Web3
 from fastapi import Query
 
 from snapshotter.settings.config import settings
-from snapshotter.utils.data_utils import get_project_epoch_snapshot, get_uniswap_v3_token_pools_snapshot, get_uniswap_v3_token_price_pool, get_uniswap_v3_token_prices_all_snapshot, get_uniswap_trade_volume_agg, get_uniswap_v3_base_snapshot
-from snapshotter.utils.data_utils import get_project_finalized_cid
-from snapshotter.utils.data_utils import get_project_time_series_data
-from snapshotter.utils.data_utils import get_uniswap_v3_eth_price_snapshot
+from snapshotter.utils.data_utils import (
+    get_uniswap_trade_volume_agg,
+    get_uniswap_v3_base_snapshot,
+    get_uniswap_v3_eth_price_snapshot,
+    get_uniswap_v3_token_pools_snapshot, 
+    get_uniswap_v3_token_price_pool, 
+    get_uniswap_v3_token_prices_all_snapshot, 
+    get_uniswap_v3_trades_snapshot,
+)
 from snapshotter.utils.default_logger import default_logger
 from snapshotter.utils.file_utils import read_json_file
-from snapshotter.utils.models.data_models import TaskStatusRequest
 from snapshotter.utils.redis.redis_conn import RedisPoolCache
 from snapshotter.utils.data_utils import get_uniswap_v3_pool_metadata
 
