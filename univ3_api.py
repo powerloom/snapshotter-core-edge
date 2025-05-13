@@ -360,6 +360,93 @@ async def get_daily_active_tokens(
         rest_logger.error(f"Error getting daily active tokens: {e}")
         response.status_code = 500
         return {"error": "Failed to retrieve daily active tokens"}
+    
+
+@app.get('/dailyActivePools', 
+    summary="Get daily active pools with pagination",
+    description="Retrieves a paginated list of active pools for the current day, sorted by frequency. Use page and size parameters to control pagination.",
+    response_description="Returns a paginated list of active pools with their frequencies"
+)
+async def get_daily_active_pools(
+    request: Request,
+    response: Response,
+    page: int = Query(
+        default=1,
+        ge=1,
+        description="Page number to retrieve (starts at 1)",
+        example=1
+    ),
+    size: int = Query(
+        default=50,
+        ge=1,
+        le=100,
+        description="Number of items per page (max 100)",
+        example=50
+    ),
+):
+    """
+    Get a paginated list of active pools for the current day.
+    
+    Parameters:
+    - page: The page number to retrieve (starts at 1)
+    - size: Number of items per page (default: 50, max: 100)
+    
+    Returns:
+    - List of active pools with their frequencies
+    - Pagination metadata including total count and pages
+    """
+    current_day = await app.state.redis_conn.get("current_day")
+    if not current_day:
+        response.status_code = 404
+        return {"error": "Current day not found"}
+    
+    try:
+        # Decode current_day if it's bytes
+        if isinstance(current_day, bytes):
+            current_day = current_day.decode('utf-8')
+        
+        redis_key = f"active_pools:day_{current_day}"
+        
+        # Calculate start and end indices for pagination
+        start_idx = (page - 1) * size
+        end_idx = start_idx + size - 1
+        
+        # Get total count of tokens
+        total_pools = await app.state.redis_conn.zcard(redis_key)
+        
+        # Get paginated tokens from the sorted set
+        active_pools = await app.state.redis_conn.zrange(
+            redis_key,
+            start_idx,
+            end_idx,
+            withscores=True,
+            desc=True  # Get highest frequency tokens first
+        )
+        
+        # Format the response
+        pools_data = [
+            {
+                "pool_address": pool.decode('utf-8'),
+                "frequency": int(score)
+            }
+            for pool, score in active_pools
+        ]
+        
+        response.status_code = 200
+        return {
+            "day": int(current_day),
+            "active_pools": pools_data,
+            "pagination": {
+                "page": page,
+                "size": size,
+                "total": total_pools,
+                "total_pages": (total_pools + size - 1) // size
+            }
+        }
+    except Exception as e:
+        rest_logger.error(f"Error getting daily active pools: {e}")
+        response.status_code = 500
+        return {"error": "Failed to retrieve daily active pools"}
 
 
     
