@@ -1,6 +1,6 @@
 import asyncio
 import json
-from typing import List, Optional
+from typing import List, Optional, Type
 import time
 import tenacity
 from pydantic import BaseModel
@@ -1125,7 +1125,7 @@ async def get_uniswapv3_snapshot(
     ipfs_reader: AsyncIPFSClient,
     protocol_state_contract,
     project_id: str,
-    message_model: BaseModel,
+    message_model: Type[BaseModel],
     block_number: Optional[int] = None,
 ):
     # if block_number is not provided, get the last finalized epoch and use that

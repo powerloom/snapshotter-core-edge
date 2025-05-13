@@ -16,6 +16,7 @@ from typing import Optional
 from web3 import Web3
 from fastapi import Query
 
+from computes.utils.models.message_models import UniswapBaseSnapshot
 from snapshotter.settings.config import settings
 from snapshotter.utils.data_utils import (
     get_uniswap_trade_volume_agg,
@@ -25,11 +26,12 @@ from snapshotter.utils.data_utils import (
     get_uniswap_v3_token_price_pool, 
     get_uniswap_v3_token_prices_all_snapshot, 
     get_uniswap_v3_trades_snapshot,
+    get_uniswapv3_snapshot,
+    get_uniswap_v3_pool_metadata
 )
 from snapshotter.utils.default_logger import default_logger
 from snapshotter.utils.file_utils import read_json_file
 from snapshotter.utils.redis.redis_conn import RedisPoolCache
-from snapshotter.utils.data_utils import get_uniswap_v3_pool_metadata
 
 
 rest_logger = default_logger.bind(module='UniswapV3API')
@@ -513,4 +515,28 @@ async def get_daily_active_pools(
         return {"error": "Failed to retrieve daily active pools"}
 
 
+    
+@app.get('/poolData/{pool_address}/{block_number}')
+async def get_pool_data(
+    request: Request,
+    response: Response,
+    pool_address: str,
+    block_number: Optional[int] = None,
+):
+    pool_address = Web3.to_checksum_address(pool_address)
+    base_snapshot = await get_uniswapv3_snapshot(
+        redis_conn=app.state.redis_conn,
+        anchor_rpc_helper=app.state.anchor_rpc_helper,
+        ipfs_reader=app.state.ipfs_reader_client,
+        protocol_state_contract=app.state.protocol_state_contract,
+        project_id=f"baseSnapshot:{pool_address.lower()}:{settings.namespace}",
+        message_model=UniswapBaseSnapshot,
+        block_number=block_number,
+    )
+    if not base_snapshot:
+        response.status_code = 404
+        return {"error": "Base snapshot not found"}
+    else:
+        response.status_code = 200
+        return base_snapshot
     
