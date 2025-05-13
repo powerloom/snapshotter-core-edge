@@ -1,6 +1,6 @@
 import asyncio
 import json
-from typing import List, Optional, Type
+from typing import List, Optional, Tuple, Type
 import time
 import tenacity
 from pydantic import BaseModel
@@ -1131,7 +1131,7 @@ async def get_uniswapv3_snapshot(
     project_id: str,
     message_model: Type[BaseModel],
     block_number: Optional[int] = None,
-):
+) -> Optional[Tuple[int, BaseModel]]:
     # if block_number is not provided, get the last finalized epoch and use that
     if not block_number:
         target_epoch = await get_project_last_finalized_epoch(

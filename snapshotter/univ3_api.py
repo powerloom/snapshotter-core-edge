@@ -525,7 +525,7 @@ async def get_pool_data(
     block_number: Optional[int] = None,
 ):
     pool_address = Web3.to_checksum_address(pool_address)
-    base_snapshot = await get_uniswapv3_snapshot(
+    result = await get_uniswapv3_snapshot(
         redis_conn=app.state.redis_conn,
         anchor_rpc_helper=app.state.anchor_rpc_helper,
         ipfs_reader=app.state.ipfs_reader_client,
@@ -534,10 +534,11 @@ async def get_pool_data(
         message_model=UniswapBaseSnapshot,
         block_number=block_number,
     )
-    if not base_snapshot:
+    if not result:
         response.status_code = 404
         return {"error": "Base snapshot not found"}
     else:
+        base_snapshot = result[1]
         response.status_code = 200
         return base_snapshot
     
