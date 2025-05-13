@@ -319,7 +319,7 @@ async def get_trade_volume_agg(
     time_interval: int,
 ):
     pool_address = Web3.to_checksum_address(pool_address)
-    project_id = f"baseSnapshot:{pool_address.lower()}:{settings.namespace}"
+    project_id = f"baseSnapshot:{pool_address}:{settings.namespace}"
     try:
         trade_volume_agg = await get_uniswap_trade_volume_agg(
             redis_conn=app.state.redis_conn,

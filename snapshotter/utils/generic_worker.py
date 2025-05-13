@@ -347,16 +347,17 @@ class GenericAsyncWorker(multiprocessing.Process):
                         if last_snapshot_cid:
                             last_snapshot = await get_submission_data(self._redis_conn, last_snapshot_cid, self._ipfs_reader_client, False)
                 
-                previous_snapshots = last_snapshot.get('previousSnapshots', [])
-                if previous_snapshots:
-                    if len(previous_snapshots) > 50:
-                        previous_snapshots.pop(0)
-                    # convert previous_snapshots to list of tuples
-                    previous_snapshots = [(int(epoch_id), snapshot_cid) for epoch_id, snapshot_cid in previous_snapshots]
-                    previous_snapshots.append((last_epoch_id, last_snapshot_cid))
-                    snapshot.previousSnapshots = previous_snapshots
-                else:
-                    snapshot.previousSnapshots = [(last_epoch_id, last_snapshot_cid)]
+                if last_snapshot:
+                    previous_snapshots = last_snapshot.get('previousSnapshots', [])
+                    if previous_snapshots:
+                        if len(previous_snapshots) > 50:
+                            previous_snapshots.pop(0)
+                        # convert previous_snapshots to list of tuples
+                        previous_snapshots = [(int(epoch_id), snapshot_cid) for epoch_id, snapshot_cid in previous_snapshots]
+                        previous_snapshots.append((last_epoch_id, last_snapshot_cid))
+                        snapshot.previousSnapshots = previous_snapshots
+                    else:
+                        snapshot.previousSnapshots = [(last_epoch_id, last_snapshot_cid)]
 
         snapshot_json = json.dumps(snapshot.model_dump(by_alias=True), sort_keys=True, separators=(',', ':'))
         snapshot_bytes = snapshot_json.encode('utf-8')

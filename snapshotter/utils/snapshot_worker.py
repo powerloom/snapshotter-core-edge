@@ -145,7 +145,8 @@ class SnapshotAsyncWorker(GenericAsyncWorker):
                 )
                 return
 
-            self._logger.info('Sending snapshots to commit service: {}', snapshots)
+            if "tokenPools" not in task_type:
+                self._logger.info('Sending snapshots to commit service: {}', snapshots)
 
             # Process each snapshot in the bulk result
             for project_id, snapshot in snapshots:
