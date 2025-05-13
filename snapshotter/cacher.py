@@ -331,7 +331,7 @@ class Cacher(multiprocessing.Process):
 
             if snapshot_data and "previousSnapshots" in snapshot_data and len(snapshot_data["previousSnapshots"]) > 0:
                 data_to_cache = {}
-                min_previous_snapshot_key = max(snapshot_data["previousSnapshots"][0][0], last_processed_epoch)
+                min_previous_snapshot_key = max(snapshot_data["previousSnapshots"][0][0], last_processed_epoch + 1)
                 all_previous_snapshot_keys = set(range(min_previous_snapshot_key, epoch_id))
                 # Process each previous snapshot
                 for (epoch_id, snapshot_cid) in snapshot_data["previousSnapshots"][::-1]:
@@ -342,7 +342,7 @@ class Cacher(multiprocessing.Process):
                         "snapshot_cid": snapshot_cid,
                         "status": SnapshotStatus.SUBMITTED.value
                     })
-                    all_previous_snapshot_keys.remove(epoch_id)
+                    all_previous_snapshot_keys.discard(epoch_id)
                     expiry_keys.append(f"{project_id}|{epoch_id}")
 
                     # Add to pipeline if we have data to cache
