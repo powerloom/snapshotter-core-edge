@@ -1302,7 +1302,7 @@ async def get_uniswap_v3_token_price_pool(
         # NOTE: assumes snapshot_epoch is the block number
         token_price = snapshot_data.token0PricesUSD[snapshot_epoch]
     elif Web3.to_checksum_address(token_address) == snapshot_data.token1:
-        token_price = snapshot_data.token0PricesUSD[snapshot_epoch]
+        token_price = snapshot_data.token1PricesUSD[snapshot_epoch]
     else:
         logger.error(f"Token address {token_address} not found in base snapshot data for project {base_project_id} against epoch {snapshot_epoch}")
         return None
@@ -1417,5 +1417,95 @@ async def get_uniswap_trade_volume_agg(
             total_trade_volume += snapshot['totalTrade']
     return {
         'totalTradeVolume': total_trade_volume,
+        'timeInterval': time_interval,
+    }
+
+
+async def get_uniswap_price_series_agg(
+    redis_conn: aioredis.Redis,
+    anchor_rpc_helper: RpcHelper,
+    ipfs_reader: AsyncIPFSClient,
+    protocol_state_contract,
+    time_interval: int,
+    project_id: str,
+    token_address: str,
+):
+    [current_epoch_data] = await anchor_rpc_helper.web3_call(
+        tasks=[
+            ('currentEpoch', [Web3.to_checksum_address(settings.data_market)]),
+        ],
+        contract_addr=protocol_state_contract.address,
+        abi=protocol_state_contract.abi,
+    )
+
+    current_epoch = current_epoch_data[2]
+
+    tail_epoch_id, _ = await get_tail_epoch_id(
+        redis_conn, protocol_state_contract, anchor_rpc_helper, current_epoch, time_interval, project_id,
+    )
+
+    snapshots = await get_project_epoch_snapshot_bulk(
+        redis_conn, protocol_state_contract, anchor_rpc_helper, ipfs_reader, tail_epoch_id, current_epoch, project_id,
+    )
+    price_data = []
+    target_token_address = Web3.to_checksum_address(token_address)
+    tarket_token_price_key = None  # Will store 'token0PricesUSD' or 'token1PricesUSD'
+
+    for snapshot in snapshots:
+        if not snapshot:
+            logger.warning("Empty snapshot encountered in get_uniswap_price_series_agg")
+            continue
+
+        if not tarket_token_price_key:
+            token0 = snapshot.get('token0')
+            token1 = snapshot.get('token1')
+            if target_token_address == token0:
+                tarket_token_price_key = 'token0PricesUSD'
+            elif target_token_address == token1:
+                tarket_token_price_key = 'token1PricesUSD'
+            else:
+                logger.error(
+                    f"Target token address {token_address} not found in snapshot's tokens "
+                    f"({token0}, {token1}) for epoch {snapshot.get('epoch', {}).get('end')}. "
+                    f"Cannot determine price series key from this snapshot."
+                )
+                continue
+
+        if not tarket_token_price_key:
+            logger.warning(f"Could not determine tarket_token_price_key for {target_token_address} from available snapshots up to epoch {snapshot.get('epoch', {}).get('end')}")
+            continue
+
+        prices_for_current_snapshot = snapshot.get(tarket_token_price_key)
+
+        if isinstance(prices_for_current_snapshot, dict):
+            for block_num_str, price_val in prices_for_current_snapshot.items():
+                try:
+                    block_num = int(block_num_str)
+                    price_data.append({
+                        'blockNumber': block_num,
+                        'price': float(price_val)
+                    })
+                except ValueError:
+                    logger.warning(
+                        f"Could not parse block number '{block_num_str}' or price '{price_val}' "
+                        f"from snapshot for epoch {snapshot.get('epoch')}. Key: {tarket_token_price_key}"
+                    )
+        elif prices_for_current_snapshot is not None:
+            logger.warning(
+                f"Price data for {tarket_token_price_key} in snapshot for epoch {snapshot.get('epoch')} "
+                f"is not a dictionary: {prices_for_current_snapshot}"
+            )
+
+    if not tarket_token_price_key and snapshots:
+        msg = f"Failed to determine the correct price key ('token0PricesUSD' or 'token1PricesUSD') "
+        msg += f"for token {target_token_address} from any of the provided snapshots."
+        logger.error(msg)
+        raise Exception(msg)
+
+    # Sort the collected price data by block number
+    price_data.sort(key=lambda x: x['blockNumber'])
+                
+    return {
+        'priceSeries': price_data,
         'timeInterval': time_interval,
     }

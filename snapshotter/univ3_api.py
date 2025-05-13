@@ -22,12 +22,14 @@ from snapshotter.utils.data_utils import (
     get_uniswap_trade_volume_agg,
     get_uniswap_v3_base_snapshot,
     get_uniswap_v3_eth_price_snapshot,
+    get_uniswap_price_series_agg,
     get_uniswap_v3_token_pools_snapshot, 
     get_uniswap_v3_token_price_pool, 
     get_uniswap_v3_token_prices_all_snapshot, 
     get_uniswap_v3_trades_snapshot,
     get_uniswapv3_snapshot,
-    get_uniswap_v3_pool_metadata
+    get_uniswap_v3_pool_metadata,
+    
 )
 from snapshotter.utils.default_logger import default_logger
 from snapshotter.utils.file_utils import read_json_file
@@ -340,6 +342,39 @@ async def get_trade_volume_agg(
         response.status_code = 200
         return trade_volume_agg
     
+
+@app.get('/token/price/{token_address}/{pool_address}/series/{time_interval}')
+async def get_token_price_series(
+    request: Request,
+    response: Response,
+    token_address: str,
+    pool_address: str,
+    time_interval: int,
+):
+    token_address = Web3.to_checksum_address(token_address)
+    pool_address = Web3.to_checksum_address(pool_address)
+    project_id = f"baseSnapshot:{pool_address}:{settings.namespace}"
+    try:
+        token_price_series = await get_uniswap_price_series_agg(
+            redis_conn=app.state.redis_conn,
+            protocol_state_contract=app.state.protocol_state_contract,
+            anchor_rpc_helper=app.state.anchor_rpc_helper,
+            ipfs_reader=app.state.ipfs_reader_client,
+            token_address=token_address,
+            time_interval=time_interval,
+            project_id=project_id,
+        )
+        if not token_price_series:
+            response.status_code = 404
+            return {"error": "Token price series not found"}
+        else:
+            response.status_code = 200
+            return token_price_series
+    except Exception as e:
+        rest_logger.error(f"Error getting token price series for {token_address}: {e}")
+        response.status_code = 500
+        return {"error": "Token price series not found"}
+
 
 @app.get('/dailyActiveTokens', 
     summary="Get daily active tokens with pagination",
