@@ -152,6 +152,8 @@ async def get_project_finalized_cids_bulk(
         redis_conn, state_contract_obj, rpc_helper, project_id,
     )
 
+    logger.info(f'Project first epoch: {project_first_epoch}')
+
     if epoch_id_min < project_first_epoch:
         logger.warning(
             f'Min. Epoch ID: {epoch_id_min} is less than the project first epoch {project_first_epoch}.',
@@ -182,6 +184,8 @@ async def get_project_finalized_cids_bulk(
 
     existing_epochs = set([epoch_id for _, epoch_id in cid_data_with_epochs])
     missing_epochs = list(epoch_ids_set.difference(existing_epochs))
+
+    
 
     # batch_web3_contract_calls
     if missing_epochs:
@@ -283,11 +287,10 @@ async def w3_get_and_cache_finalized_cid(
 
         # Process previousSnapshots if available
         try:
-            snapshot_data = await fetch_file_from_ipfs(redis_conn, ipfs_reader, cid)
+            snapshot_data = await get_submission_data(redis_conn, cid, ipfs_reader)
             if snapshot_data and "previousSnapshots" in snapshot_data:
                 data_to_cache = {}
-                all_previous_snapshot_keys = snapshot_data["previousSnapshots"].keys()
-                min_previous_snapshot_key = min(all_previous_snapshot_keys)
+                min_previous_snapshot_key = snapshot_data["previousSnapshots"][0][0]
                 all_previous_snapshot_keys = set(range(min_previous_snapshot_key, epoch_id + 1))
                 # Process each previous snapshot
                 for (epoch_id, snapshot_cid) in snapshot_data["previousSnapshots"]:
@@ -307,6 +310,7 @@ async def w3_get_and_cache_finalized_cid(
                         )
 
                 for epoch_id in all_previous_snapshot_keys:
+                    null_cid = f'null_{epoch_id}'
                     pipeline.hset(
                         project_hmap_key,
                         epoch_id,

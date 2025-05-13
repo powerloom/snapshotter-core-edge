@@ -18,6 +18,9 @@ from typing import Set
 from typing import Optional
 from typing import Tuple
 from uuid import uuid4
+from ipfs_client.dag import IPFSAsyncClientError
+from ipfs_client.main import AsyncIPFSClient
+from ipfs_client.main import AsyncIPFSClientSingleton
 
 import dramatiq
 import uvloop
@@ -46,6 +49,10 @@ from snapshotter.utils.redis.redis_keys import snapshots_to_unpin_zset_name
 from snapshotter.utils.redis.redis_keys import last_submitted_snapshot_data_key
 from snapshotter.utils.redis.redis_keys import project_data_expiry_zset
 from snapshotter.utils.dramatiq_queues import CACHER_QUEUE_NAME
+from snapshotter.utils.data_utils import get_submission_data
+from snapshotter.utils.data_utils import get_project_config
+
+PROJECT_DATA_ENTRY_EXPIRY = 60 * 60 * 24 * 7  # 7 days in seconds
 
 # Configure Redis broker with no middleware
 redis_broker = RedisBroker(host=settings.redis.host, port=settings.redis.port)
@@ -166,6 +173,18 @@ class Cacher(multiprocessing.Process):
         await self._aioredis_pool.populate()
         self._redis_conn = self._aioredis_pool._aioredis_pool
         
+    async def _init_ipfs_client(self):
+        """
+        Initialize the IPFS client.
+
+        This method creates a singleton instance of AsyncIPFSClientSingleton,
+        initializes its sessions, and assigns the write and read clients to instance variables.
+        """
+        self._ipfs_singleton = AsyncIPFSClientSingleton(settings.ipfs)
+        await self._ipfs_singleton.init_sessions()
+        self._ipfs_writer_client = self._ipfs_singleton._ipfs_write_client
+        self._ipfs_reader_client = self._ipfs_singleton._ipfs_read_client
+
     async def _init_rpc_helper(self):
         """
         Initializes the RPC helper instances for both main and anchor chains.
@@ -207,6 +226,7 @@ class Cacher(multiprocessing.Process):
             await self._init_rpc_helper()
             self._logger.debug('Initialized RPC helper in Processor Distributor init_worker')
             await self._init_protocol_meta()
+            await self._init_ipfs_client()
             asyncio.create_task(self._cleanup_tasks())
 
         self._initialized = True
@@ -297,6 +317,63 @@ class Cacher(multiprocessing.Process):
         # Execute all commands in a single network round-trip
         await pipeline.execute()
 
+    async def process_snapshot_cid(self, redis_conn: aioredis.Redis, project_id: str, snapshot_cid: str, epoch_id: int, last_processed_epoch: int = 0):
+        try:
+
+            project_config = get_project_config(project_id)
+            if not project_config.keep_previous_snapshot_data:
+                return
+            snapshot_data = await get_submission_data(redis_conn, snapshot_cid, self._ipfs_reader_client, False)
+            pipeline = redis_conn.pipeline()
+            expiry_keys = []
+            project_hmap_key = project_data_hmap(project_id=project_id)
+            expiry_time = int(time.time()) + PROJECT_DATA_ENTRY_EXPIRY
+
+            if snapshot_data and "previousSnapshots" in snapshot_data and len(snapshot_data["previousSnapshots"]) > 0:
+                data_to_cache = {}
+                min_previous_snapshot_key = max(snapshot_data["previousSnapshots"][0][0], last_processed_epoch)
+                all_previous_snapshot_keys = set(range(min_previous_snapshot_key, epoch_id))
+                # Process each previous snapshot
+                for (epoch_id, snapshot_cid) in snapshot_data["previousSnapshots"][::-1]:
+                    if epoch_id < min_previous_snapshot_key:
+                        break
+                    epoch_id = int(epoch_id)
+                    data_to_cache[epoch_id] = json.dumps({
+                        "snapshot_cid": snapshot_cid,
+                        "status": SnapshotStatus.SUBMITTED.value
+                    })
+                    all_previous_snapshot_keys.remove(epoch_id)
+                    expiry_keys.append(f"{project_id}|{epoch_id}")
+
+                    # Add to pipeline if we have data to cache
+                    if data_to_cache:
+                        pipeline.hset(
+                            project_hmap_key,
+                            mapping=data_to_cache,
+                        )
+
+                for epoch_id in all_previous_snapshot_keys:
+                    null_cid = f'null_{epoch_id}'
+                    pipeline.hset(
+                        project_hmap_key,
+                        epoch_id,
+                        json.dumps({"snapshot_cid": null_cid, "status": SnapshotStatus.NULL.value}),
+                    )
+                    expiry_keys.append(f"{project_id}|{epoch_id}")
+
+            if expiry_keys:
+                expiry_data = {key: expiry_time for key in expiry_keys}
+                pipeline.zadd(
+                    name=project_data_expiry_zset(),
+                    mapping=expiry_data,
+                )
+
+            await pipeline.execute()
+        except Exception as e:
+            self._logger.error(f'Error processing snapshot cid: {e}')
+            self._logger.error(f'Detailed traceback:\n{traceback.format_exc()}')
+            self._logger.error(f'Snapshot cid: {snapshot_cid}')
+
     async def _process_snapshot_submitted_message(self, event_data):
         """
         Processes a snapshot submission event and updates Redis with the snapshot information.
@@ -323,6 +400,15 @@ class Cacher(multiprocessing.Process):
                 name=snapshots_to_unpin_zset_name(),
                 mapping={msg_obj.snapshotCid: int(time.time()) + settings.ipfs_unpinning.unpin_after},
             )
+        
+        last_snapshot_submitted_data = await self._redis_conn.get(last_submitted_snapshot_data_key(msg_obj.projectId))
+        if last_snapshot_submitted_data:
+            last_snapshot_submitted_data = json.loads(last_snapshot_submitted_data)
+            last_snapshot_submitted_epoch = last_snapshot_submitted_data['epochId']
+        else:
+            last_snapshot_submitted_epoch = 0
+            
+        await self.process_snapshot_cid(self._redis_conn, msg_obj.projectId, msg_obj.snapshotCid, msg_obj.epochId, last_snapshot_submitted_epoch)
         
         # Add to project data hashmap
         project_hmap_key = project_data_hmap(project_id=msg_obj.projectId)

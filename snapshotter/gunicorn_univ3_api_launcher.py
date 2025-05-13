@@ -1,7 +1,7 @@
 import os
 import logging
 
-from univ3_api import app
+from snapshotter.univ3_api import app
 from snapshotter.settings.config import settings
 from snapshotter.utils.gunicorn import StandaloneApplication
 from snapshotter.utils.gunicorn import InterceptHandler
