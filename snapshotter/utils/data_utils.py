@@ -1140,6 +1140,8 @@ async def get_uniswapv3_snapshot(
         if not target_epoch:
             logger.error(f"No last finalized epoch found for project {project_id}")
             return None
+        else:
+            logger.info(f"Using last finalized epoch {target_epoch} for fetch against project {project_id}")
     else:
         # TODO: assumes epoch is set to block number in data market contract, may need to add config flag for this and derive epoch from block number if false
         target_epoch = block_number

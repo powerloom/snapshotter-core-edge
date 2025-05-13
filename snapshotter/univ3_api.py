@@ -516,8 +516,8 @@ async def get_daily_active_pools(
 
 
     
-@app.get('/poolData/{pool_address}/{block_number}', response_model=UniswapBaseSnapshot, summary='Returns the base snapshot for a given pool address and block number')
-@app.get('/poolData/{pool_address}', response_model=UniswapBaseSnapshot, summary='Returns the base snapshot for a given pool address and last finalized epoch/block numbrt')
+@app.get('/poolData/{pool_address}/{block_number}', summary='Returns the base snapshot for a given pool address and block number')
+@app.get('/poolData/{pool_address}', summary='Returns the base snapshot for a given pool address and last finalized epoch/block number')
 async def get_pool_data(
     request: Request,
     response: Response,
