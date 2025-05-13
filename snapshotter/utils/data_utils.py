@@ -13,7 +13,7 @@ from tenacity import wait_random_exponential
 from web3 import Web3
 from ipfs_client.main import AsyncIPFSClient
 
-from computes.utils.models.message_models import UniswapBaseSnapshot
+from computes.utils.models.message_models import UniswapBaseSnapshot, UniswapTradesSnapshot
 from snapshotter.utils.models.data_models import UniswapPoolMetadata, UniswapTokenPoolsSnapshot, UniswapEthPriceSnapshot
 from snapshotter.settings.config import settings
 from snapshotter.utils.default_logger import default_logger
@@ -1182,6 +1182,59 @@ async def get_uniswap_v3_token_pools_snapshot(
         return None
 
 
+async def get_uniswap_v3_base_snapshot(
+    redis_conn: aioredis.Redis,
+    anchor_rpc_helper: RpcHelper,
+    ipfs_reader: AsyncIPFSClient,
+    protocol_state_contract,
+    pool_address: str,
+    block_number: Optional[int] = None,
+):
+    project_id = f"baseSnapshot:{pool_address}:{settings.namespace}"
+    result = await get_uniswapv3_snapshot(
+        redis_conn,
+        anchor_rpc_helper,
+        ipfs_reader,
+        protocol_state_contract,
+        project_id,
+        UniswapBaseSnapshot,
+        block_number,
+    )
+    if not result:
+        logger.error(f"No snapshot data found for project {project_id}")
+        return None
+        
+    snapshot_epoch, snapshot_data = result
+    return snapshot_data
+
+
+async def get_uniswap_v3_trades_snapshot(
+    redis_conn: aioredis.Redis,
+    anchor_rpc_helper: RpcHelper,
+    ipfs_reader: AsyncIPFSClient,
+    protocol_state_contract,
+    pool_address: str,
+    block_number: Optional[int] = None,
+):
+    project_id = f"tradesSnapshot:{pool_address}:{settings.namespace}"
+    result = await get_uniswapv3_snapshot(
+        redis_conn,
+        anchor_rpc_helper,
+        ipfs_reader,
+        protocol_state_contract,
+        project_id,
+        UniswapTradesSnapshot,
+        block_number,
+    )
+    if not result:
+        logger.error(f"No snapshot data found for project {project_id}")
+        return None
+        
+    snapshot_epoch, snapshot_data = result
+    return snapshot_data
+
+
+
 async def get_uniswap_v3_eth_price_snapshot(
     redis_conn: aioredis.Redis,
     anchor_rpc_helper: RpcHelper,
@@ -1219,7 +1272,7 @@ async def get_uniswap_v3_token_price_pool(
     pool_address: str,
     block_number: Optional[int] = None,
 ):
-    base_project_id = f"baseSnapshot:{pool_address.lower()}:{settings.namespace}"
+    base_project_id = f"baseSnapshot:{pool_address}:{settings.namespace}"
 
     result = await get_uniswapv3_snapshot(
         redis_conn,
