@@ -288,7 +288,7 @@ async def w3_get_and_cache_finalized_cid(
         # Process previousSnapshots if available
         try:
             snapshot_data = await get_submission_data(redis_conn, cid, ipfs_reader, False)
-            if snapshot_data and "previousSnapshots" in snapshot_data:
+            if snapshot_data and "previousSnapshots" in snapshot_data and len(snapshot_data["previousSnapshots"]) > 0:
                 data_to_cache = {}
                 min_previous_snapshot_key = snapshot_data["previousSnapshots"][0][0]
                 all_previous_snapshot_keys = set(range(min_previous_snapshot_key, epoch_id + 1))
