@@ -1,6 +1,6 @@
 import asyncio
 import json
-from typing import List, Optional, Tuple, Type
+from typing import List, Optional, Tuple, Type, Dict, Any
 import time
 import tenacity
 from pydantic import BaseModel
@@ -14,7 +14,7 @@ from web3 import Web3
 from ipfs_client.main import AsyncIPFSClient
 
 from computes.utils.models.message_models import UniswapBaseSnapshot, UniswapTradesSnapshot
-from snapshotter.utils.models.data_models import UniswapPoolMetadata, UniswapTokenPoolsSnapshot, UniswapEthPriceSnapshot
+from snapshotter.utils.models.data_models import UniswapPoolMetadata, UniswapTokenPoolsSnapshot, UniswapEthPriceSnapshot, EpochSnapshotResponse, ExactEpochSnapshot, ClosestEpochs, EpochIdentifier
 from snapshotter.settings.config import settings
 from snapshotter.utils.default_logger import default_logger
 from snapshotter.utils.redis.redis_keys import cached_block_details_at_height
@@ -695,13 +695,14 @@ async def get_submission_data_bulk(
 
 
 async def get_project_epoch_snapshot(
-    redis_conn: aioredis.Redis, state_contract_obj, rpc_helper, ipfs_reader, epoch_id, project_id,
-) -> dict:
+    redis_conn: aioredis.Redis, state_contract_obj, rpc_helper, ipfs_reader, epoch_id, project_id, seek=False
+) -> EpochSnapshotResponse:
     """
     Retrieves the epoch snapshot for a given project.
 
     This function first gets the finalized CID for the given epoch and project,
-    then fetches the corresponding submission data.
+    then fetches the corresponding submission data. If no CID is found for the exact epoch,
+    it will find the closest epochs before and after the requested epoch if seek=True.
 
     Args:
         redis_conn (aioredis.Redis): Redis connection object.
@@ -710,16 +711,82 @@ async def get_project_epoch_snapshot(
         ipfs_reader: IPFS reader object.
         epoch_id (int): Epoch ID.
         project_id (str): Project ID.
+        seek (bool): If True and no exact match found, find closest epochs.
 
     Returns:
-        dict: The epoch snapshot data.
+        EpochSnapshotResponse: A response object containing either:
+            1. An exact match for the requested epoch
+            2. The closest epochs when seek=True and no exact match exists
+            3. No data (empty response)
     """
     cid = await get_project_finalized_cid(redis_conn, state_contract_obj, rpc_helper, ipfs_reader, epoch_id, project_id)
-    if cid:
+    if cid and 'null' not in cid:
         data = await get_submission_data(redis_conn, cid, ipfs_reader)
-        return data
+        return EpochSnapshotResponse(
+            exact_match=ExactEpochSnapshot(
+                epoch_id=epoch_id,
+                snapshot_cid=cid,
+                data=data
+            )
+        )
+    elif seek:
+        # Get all finalized epoch IDs for this project
+        project_hmap_key = project_data_hmap(project_id=project_id)
+        keys = await redis_conn.hkeys(project_hmap_key)
+        epoch_ids = []
+        for key in keys:
+            try:
+                epoch_ids.append(int(key.decode('utf-8')))
+            except (ValueError, AttributeError) as e:
+                logger.warning(f"Invalid epoch ID in Redis: {key}, Error: {e}")
+                continue
+        
+        if not epoch_ids:
+            logger.info(f"No finalized epochs found for project {project_id}")
+            return EpochSnapshotResponse()
+
+        # Sort epoch IDs to find closest ones
+        epoch_ids.sort()
+        
+        # Find closest epochs before and after the requested epoch_id
+        prev_epoch = None
+        next_epoch = None
+        
+        for e_id in epoch_ids:
+            if e_id <= epoch_id:
+                prev_epoch = e_id
+            else:
+                next_epoch = e_id
+                break
+
+        closest_epochs = ClosestEpochs()
+        
+        # If we found closest epochs, get their CIDs and data
+        if prev_epoch is not None:
+            prev_data_raw = await redis_conn.hget(project_hmap_key, str(prev_epoch))
+            if prev_data_raw:
+                prev_data = json.loads(prev_data_raw)
+                prev_cid = prev_data.get("snapshot_cid")
+                if prev_cid and 'null' not in prev_cid:
+                    closest_epochs.previous = EpochIdentifier(
+                        epoch_id=prev_epoch,
+                        snapshot_cid=prev_cid
+                    )
+        
+        if next_epoch is not None:
+            next_data_raw = await redis_conn.hget(project_hmap_key, str(next_epoch))
+            if next_data_raw:
+                next_data = json.loads(next_data_raw)
+                next_cid = next_data.get("snapshot_cid")
+                if next_cid and 'null' not in next_cid:
+                    closest_epochs.next = EpochIdentifier(
+                        epoch_id=next_epoch,
+                        snapshot_cid=next_cid
+                    )
+        
+        return EpochSnapshotResponse(closest_epochs=closest_epochs)
     else:
-        return dict()
+        return EpochSnapshotResponse()
 
 
 async def get_source_chain_id(redis_conn: aioredis.Redis, state_contract_obj, rpc_helper: RpcHelper):
@@ -889,7 +956,7 @@ async def get_project_latest_snapshot(
     rpc_helper,
     ipfs_reader,
     project_id,
-):
+) -> Optional[Dict[str, Any]]:
     """
     Retrieves the latest snapshot for a given project.
 
@@ -903,12 +970,19 @@ async def get_project_latest_snapshot(
         project_id: ID of the project to fetch snapshot data for.
 
     Returns:
-        dict: The latest snapshot data for the given project.
+        Optional[Dict[str, Any]]: The latest snapshot data for the given project, or None if not found.
     """
     last_finalized_epoch = await get_project_last_finalized_epoch(redis_conn, state_contract_obj, rpc_helper, project_id)
     if not last_finalized_epoch:
-        return dict()
-    return await get_project_epoch_snapshot(redis_conn, state_contract_obj, rpc_helper, ipfs_reader, last_finalized_epoch, project_id)
+        return None
+    
+    snapshot_response = await get_project_epoch_snapshot(
+        redis_conn, state_contract_obj, rpc_helper, ipfs_reader, last_finalized_epoch, project_id
+    )
+    
+    if snapshot_response.exact_match:
+        return snapshot_response.exact_match.data
+    return None
 
 
 async def get_project_epoch_snapshot_bulk(
@@ -975,26 +1049,25 @@ async def get_project_time_series_data(
         rpc_helper,
         ipfs_reader,
         project_id,
-):
+) -> List[Dict[str, Any]]:
     """
     Returns a list of snapshot data containing equally spaced observations starting with the start_epoch id
     for the given project_id, and including epochs spaced step_seconds apart until the maximum observations has been reached.
 
     Args:
-        observations: Total number of data points to gather
-        step_seconds: Time in seconds between each obsveration
-        project_last_finalized_epoch: Epoch ID of the last finalized epoch for'project_id'
+        start_time: Start time in seconds
+        end_time: End time in seconds
+        step_seconds: Time in seconds between each observation
+        end_epoch_id: End epoch ID
         redis_conn (aioredis.Redis): Redis connection object.
         state_contract_obj: State contract object.
         rpc_helper: RPC helper object.
         ipfs_reader: IPFS reader object.
         project_id: ID of the project to fetch snapshot data for.
 
-
     Returns:
-        A list of snapshot data objects for the given project_id with a maximum length of the observations param.
+        List[Dict[str, Any]]: A list of snapshot data objects for the given project_id.
     """
-
     # get metadata for building steps
     [
         source_chain_epoch_size,
@@ -1135,6 +1208,7 @@ async def get_uniswapv3_snapshot(
     block_number: Optional[int] = None,
 ) -> Optional[Tuple[int, BaseModel]]:
     # if block_number is not provided, get the last finalized epoch and use that
+    seek = False
     if not block_number:
         target_epoch = await get_project_last_finalized_epoch(
             redis_conn, protocol_state_contract, anchor_rpc_helper, project_id,
@@ -1144,16 +1218,21 @@ async def get_uniswapv3_snapshot(
             return None
         else:
             logger.info(f"Using last finalized epoch {target_epoch} for fetch against project {project_id}")
+    # if block_number is provided, use that as the target epoch and seek around it if needed
     else:
         # TODO: assumes epoch is set to block number in data market contract, may need to add config flag for this and derive epoch from block number if false
         target_epoch = block_number
-    
-    snapshot = await get_project_epoch_snapshot(
-        redis_conn, protocol_state_contract, anchor_rpc_helper, ipfs_reader, target_epoch, project_id,
+        seek = True
+    snapshot_response = await get_project_epoch_snapshot(
+        redis_conn, protocol_state_contract, anchor_rpc_helper, ipfs_reader, target_epoch, project_id, seek=seek
     )
-    if snapshot:
-        parsed_snapshot = message_model(**snapshot)
-        return target_epoch, parsed_snapshot
+    if snapshot_response.exact_match:
+        try:
+            parsed_snapshot = message_model(**snapshot_response.exact_match.data)
+            return target_epoch, parsed_snapshot
+        except Exception as e:
+            logger.error(f"Failed to parse snapshot data for project {project_id} against epoch {target_epoch}: {e}")
+            return None
     else:
         logger.error(f"No snapshot data found for project {project_id} against epoch {target_epoch}")
         return None

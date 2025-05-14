@@ -4,8 +4,9 @@ from typing import Dict
 from typing import List
 from typing import Optional
 from typing import Tuple
+from typing import Union
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class SnapshotStatus(Enum):
@@ -192,4 +193,58 @@ class UniswapEthPriceSnapshot(BaseModel):
     epoch: EpochBaseSnapshot  # Range of blocks for this snapshot
     ethPrice: Dict[int, float]  # Block number to corresponding ETH price
     previousSnapshots: List[Tuple[int, str]] = []  # Will be filled by snapshot worker
+
+
+class EpochIdentifier(BaseModel):
+    """
+    Identifies a specific epoch and its associated snapshot CID.
+    """
+    epoch_id: int
+    snapshot_cid: str
+
+
+class ClosestEpochs(BaseModel):
+    """
+    Represents the closest epochs (before and after) to a requested epoch when an exact match is not found.
+    """
+    previous: Optional[EpochIdentifier] = None  # The closest epoch before the requested epoch
+    next: Optional[EpochIdentifier] = None  # The closest epoch after the requested epoch
+
+
+class ExactEpochSnapshot(BaseModel):
+    """
+    Represents a snapshot that exactly matches the requested epoch.
+    """
+    epoch_id: int
+    snapshot_cid: str
+    data: Dict[str, Any]
+
+
+class EpochSnapshotResponse(BaseModel):
+    """
+    A union type response that represents either:
+    1. An exact match for the requested epoch
+    2. The closest epochs when seek=True and no exact match exists
+    3. No data found
+    """
+    exact_match: Optional[ExactEpochSnapshot] = None  # Present only when exact epoch match is found
+    closest_epochs: Optional[ClosestEpochs] = None  # Present only when seek=True and no exact match
+    
+    @property
+    def has_data(self) -> bool:
+        """Returns whether this response contains any useful data"""
+        return self.exact_match is not None or self.closest_epochs is not None
+    
+    @property
+    def is_exact_match(self) -> bool:
+        """Returns whether this response contains an exact epoch match"""
+        return self.exact_match is not None
+    
+    @property
+    def has_closest_epochs(self) -> bool:
+        """Returns whether this response contains closest epoch information"""
+        return self.closest_epochs is not None and (
+            self.closest_epochs.previous is not None or 
+            self.closest_epochs.next is not None
+        )
 
