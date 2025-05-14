@@ -1209,12 +1209,12 @@ async def get_uniswap_v3_token_pools_snapshot(
     token_address = Web3.to_checksum_address(token_address)
     project_id = f"tokenPools:{token_address}:{settings.namespace}"
     result = await get_uniswapv3_snapshot(
-        redis_conn,
-        anchor_rpc_helper,
-        ipfs_reader,
-        protocol_state_contract,
-        project_id,
-        UniswapTokenPoolsSnapshot,
+        redis_conn=redis_conn,
+        anchor_rpc_helper=anchor_rpc_helper,
+        ipfs_reader=ipfs_reader,
+        protocol_state_contract=protocol_state_contract,
+        project_id=project_id,
+        message_model=UniswapTokenPoolsSnapshot,
     )
     if not result:
         logger.error(f"No snapshot data found for project {project_id}")
@@ -1237,13 +1237,13 @@ async def get_uniswap_v3_base_snapshot(
 ):
     project_id = f"baseSnapshot:{pool_address}:{settings.namespace}"
     result = await get_uniswapv3_snapshot(
-        redis_conn,
-        anchor_rpc_helper,
-        ipfs_reader,
-        protocol_state_contract,
-        project_id,
-        UniswapBaseSnapshot,
-        block_number,
+        redis_conn=redis_conn,
+        anchor_rpc_helper=anchor_rpc_helper,
+        ipfs_reader=ipfs_reader,
+        protocol_state_contract=protocol_state_contract,
+        project_id=project_id,
+        message_model=UniswapBaseSnapshot,
+        block_number=block_number,
     )
     if not result:
         logger.error(f"No snapshot data found for project {project_id}")
@@ -1263,13 +1263,13 @@ async def get_uniswap_v3_trades_snapshot(
 ):
     project_id = f"tradesSnapshot:{pool_address}:{settings.namespace}"
     result = await get_uniswapv3_snapshot(
-        redis_conn,
-        anchor_rpc_helper,
-        ipfs_reader,
-        protocol_state_contract,
-        project_id,
-        UniswapTradesSnapshot,
-        block_number,
+        redis_conn=redis_conn,
+        anchor_rpc_helper=anchor_rpc_helper,
+        ipfs_reader=ipfs_reader,
+        protocol_state_contract=protocol_state_contract,
+        project_id=project_id,
+        message_model=UniswapTradesSnapshot,
+        block_number=block_number,
     )
     if not result:
         logger.error(f"No snapshot data found for project {project_id}")
@@ -1289,13 +1289,13 @@ async def get_uniswap_v3_eth_price_snapshot(
 ):
     project_id = f'price:ETH:{settings.namespace}'
     result = await get_uniswapv3_snapshot(
-        redis_conn,
-        anchor_rpc_helper,
-        ipfs_reader,
-        protocol_state_contract,
-        project_id,
-        UniswapEthPriceSnapshot,
-        block_number,
+        redis_conn=redis_conn,
+        anchor_rpc_helper=anchor_rpc_helper,
+        ipfs_reader=ipfs_reader,
+        protocol_state_contract=protocol_state_contract,
+        project_id=project_id,
+        message_model=UniswapEthPriceSnapshot,
+        block_number=block_number,
     )
     if not result:
         logger.error(f"No snapshot data found for project {project_id}")
@@ -1320,13 +1320,13 @@ async def get_uniswap_v3_token_price_pool(
     base_project_id = f"baseSnapshot:{pool_address}:{settings.namespace}"
 
     result = await get_uniswapv3_snapshot(
-        redis_conn,
-        anchor_rpc_helper,
-        ipfs_reader,
-        protocol_state_contract,
-        base_project_id,
-        UniswapBaseSnapshot,
-        block_number,
+        redis_conn=redis_conn,
+        anchor_rpc_helper=anchor_rpc_helper,
+        ipfs_reader=ipfs_reader,
+        protocol_state_contract=protocol_state_contract,
+        project_id=base_project_id,
+        message_model=UniswapBaseSnapshot,
+        block_number=block_number,
     )
     if not result:
         logger.error(f"No snapshot data found for project {base_project_id}")
@@ -1363,11 +1363,11 @@ async def get_uniswap_v3_token_prices_all_snapshot(
     Returns a dict mapping pool addresses to their respective token prices.
     """
     token_pools_snapshot_result = await get_uniswap_v3_token_pools_snapshot(
-        redis_conn,
-        anchor_rpc_helper,
-        ipfs_reader,
-        protocol_state_contract,
-        token_address,
+        redis_conn=redis_conn,
+        anchor_rpc_helper=anchor_rpc_helper,
+        ipfs_reader=ipfs_reader,
+        protocol_state_contract=protocol_state_contract,
+        token_address=token_address,
     )
     if not token_pools_snapshot_result:
         logger.error(f"No token pools snapshot found for token {token_address}")
@@ -1486,10 +1486,9 @@ async def get_uniswap_price_series_agg(
     # Fetch all block details from Redis for timestamps
     block_to_timestamp_map = {}
     if tail_epoch_id <= current_epoch:
-        redis_block_cache_key = cached_block_details_at_height(settings.namespace)
         try:
             block_details_raw = await redis_conn.zrangebyscore(
-                redis_block_cache_key,
+                cached_block_details_at_height,
                 min=tail_epoch_id,
                 max=current_epoch
             )
@@ -1501,7 +1500,7 @@ async def get_uniswap_price_series_agg(
                     block_to_timestamp_map[block_num] = timestamp
         except Exception as e:
             logger.opt(exception=True).error(
-                f"Error fetching block details from Redis for key {redis_block_cache_key} "
+                f"Error fetching block details from Redis for key {cached_block_details_at_height} "
                 f"in range {tail_epoch_id}-{current_epoch}: {e}"
             )
 
