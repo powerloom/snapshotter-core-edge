@@ -284,8 +284,8 @@ async def get_trades_snapshot(
         return {"error": "Trades snapshot not found"}
     
 
-@app.get('/token/price/{token_address}')
-@app.get('/token/price/{token_address}/{block_number}')
+@app.get('/token/price/all/{token_address}')
+@app.get('/token/price/all/{token_address}/{block_number}')
 async def get_token_price_all(
     request: Request,
     response: Response,
