@@ -1,7 +1,7 @@
 from snapshotter.settings.config import settings
 
 # Redis key for cached block details at a specific height
-cached_block_details_at_height = f'block_cache:{settings.namespace}x'
+cached_block_details_at_height = f'block_cache:{settings.namespace}'
 
 # Redis key for the last processed block by the event detector
 event_detector_last_processed_block = 'SystemEventDetector:lastProcessedBlock'
