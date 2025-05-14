@@ -588,7 +588,7 @@ class Cacher(multiprocessing.Process):
             # Wait for the result
             future.result()  # 60 second timeout
 
-            self._logger.warning(f'Event has been handled: {args}')
+            self._logger.debug(f'Event has been handled: {args}')
 
             return None
         except Exception as e:
