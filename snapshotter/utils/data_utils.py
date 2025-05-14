@@ -26,7 +26,6 @@ from snapshotter.utils.redis.redis_keys import source_chain_block_time_key
 from snapshotter.utils.redis.redis_keys import source_chain_epoch_size_key
 from snapshotter.utils.redis.redis_keys import source_chain_id_key
 from snapshotter.utils.redis.redis_keys import project_data_expiry_zset
-from snapshotter.utils.redis.redis_keys import block_cache_key
 from snapshotter.settings.config import projects_config
 
 logger = default_logger.bind(module='data_helper')
@@ -1449,8 +1448,8 @@ async def get_uniswap_price_series_agg(
     # Fetch all block details from Redis for timestamps
     block_to_timestamp_map = {}
     if tail_epoch_id <= current_epoch:
+        redis_block_cache_key = cached_block_details_at_height(settings.namespace)
         try:
-            redis_block_cache_key = block_cache_key(settings.namespace)
             block_details_raw = await redis_conn.zrangebyscore(
                 redis_block_cache_key,
                 min=tail_epoch_id,
