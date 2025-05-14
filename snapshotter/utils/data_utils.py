@@ -17,6 +17,7 @@ from computes.utils.models.message_models import UniswapBaseSnapshot, UniswapTra
 from snapshotter.utils.models.data_models import UniswapPoolMetadata, UniswapTokenPoolsSnapshot, UniswapEthPriceSnapshot
 from snapshotter.settings.config import settings
 from snapshotter.utils.default_logger import default_logger
+from snapshotter.utils.redis.redis_keys import cached_block_details_at_height
 from snapshotter.utils.redis.redis_keys import cid_not_found_key
 from snapshotter.utils.redis.redis_keys import project_first_epoch_hmap
 from snapshotter.utils.redis.redis_keys import project_last_finalized_epoch_hmap
@@ -25,6 +26,7 @@ from snapshotter.utils.redis.redis_keys import source_chain_block_time_key
 from snapshotter.utils.redis.redis_keys import source_chain_epoch_size_key
 from snapshotter.utils.redis.redis_keys import source_chain_id_key
 from snapshotter.utils.redis.redis_keys import project_data_expiry_zset
+from snapshotter.utils.redis.redis_keys import block_cache_key
 from snapshotter.settings.config import projects_config
 
 logger = default_logger.bind(module='data_helper')
@@ -1444,70 +1446,111 @@ async def get_uniswap_price_series_agg(
         redis_conn, protocol_state_contract, anchor_rpc_helper, current_epoch, time_interval, project_id,
     )
 
+    # Fetch all block details from Redis for timestamps
+    block_to_timestamp_map = {}
+    if tail_epoch_id <= current_epoch:
+        try:
+            redis_block_cache_key = block_cache_key(settings.namespace)
+            block_details_raw = await redis_conn.zrangebyscore(
+                redis_block_cache_key,
+                min=tail_epoch_id,
+                max=current_epoch
+            )
+            for item_raw in block_details_raw:
+                if item_raw:
+                    block_data = json.loads(item_raw)
+                    block_num = int(block_data['number'], 16)
+                    timestamp = int(block_data['timestamp'], 16)
+                    block_to_timestamp_map[block_num] = timestamp
+        except Exception as e:
+            logger.opt(exception=True).error(
+                f"Error fetching block details from Redis for key {redis_block_cache_key} "
+                f"in range {tail_epoch_id}-{current_epoch}: {e}"
+            )
+
+
     snapshots = await get_project_epoch_snapshot_bulk(
         redis_conn, protocol_state_contract, anchor_rpc_helper, ipfs_reader, tail_epoch_id, current_epoch, project_id,
     )
+    
     price_data = []
     target_token_address = Web3.to_checksum_address(token_address)
-    tarket_token_price_key = None  # Will store 'token0PricesUSD' or 'token1PricesUSD'
+    tarket_token_price_key = None
 
-    for snapshot in snapshots:
-        if not snapshot:
-            logger.warning("Empty snapshot encountered in get_uniswap_price_series_agg")
-            continue
-
+    if snapshots: # Only try to determine key if there are snapshots
+        for snapshot_data_for_key_check in snapshots:
+            if snapshot_data_for_key_check: # Ensure snapshot is not empty or None
+                token0 = snapshot_data_for_key_check.get('token0')
+                token1 = snapshot_data_for_key_check.get('token1')
+                if target_token_address == token0:
+                    tarket_token_price_key = 'token0PricesUSD'
+                    break
+                elif target_token_address == token1:
+                    tarket_token_price_key = 'token1PricesUSD'
+                    break
+        
         if not tarket_token_price_key:
-            token0 = snapshot.get('token0')
-            token1 = snapshot.get('token1')
-            if target_token_address == token0:
-                tarket_token_price_key = 'token0PricesUSD'
-            elif target_token_address == token1:
-                tarket_token_price_key = 'token1PricesUSD'
-            else:
-                logger.error(
-                    f"Target token address {token_address} not found in snapshot's tokens "
-                    f"({token0}, {token1}) for epoch {snapshot.get('epoch', {}).get('end')}. "
-                    f"Cannot determine price series key from this snapshot."
-                )
+            msg = (
+                f"Failed to determine the correct price key ('token0PricesUSD' or 'token1PricesUSD') "
+                f"for token {target_token_address} from any of the provided snapshots "
+                f"in range {tail_epoch_id} to {current_epoch} for project {project_id}."
+            )
+            logger.error(msg)
+            raise Exception(msg)
+
+    snapshot_prices_map = {}
+    if tarket_token_price_key:
+        for snapshot in snapshots:
+            if not snapshot:
                 continue
 
-        if not tarket_token_price_key:
-            logger.warning(f"Could not determine tarket_token_price_key for {target_token_address} from available snapshots up to epoch {snapshot.get('epoch', {}).get('end')}")
-            continue
+            prices_for_current_snapshot = snapshot.get(tarket_token_price_key)
+            if isinstance(prices_for_current_snapshot, dict):
+                for block_num_str, price_val in prices_for_current_snapshot.items():
+                    try:
+                        block_num = int(block_num_str)
+                        price = float(price_val)
+                        snapshot_prices_map[block_num] = price
+                    except ValueError:
+                        logger.warning(
+                            f"Could not parse block number '{block_num_str}' or price '{price_val}' "
+                            f"from snapshot for project {project_id}. Key: {tarket_token_price_key}"
+                        )
+            elif prices_for_current_snapshot is not None:
+                logger.warning(
+                    f"Price data for {tarket_token_price_key} in snapshot for project {project_id} "
+                    f"is not a dictionary: {prices_for_current_snapshot}"
+                )
+    
+    last_known_price = None
+    if tail_epoch_id <= current_epoch:
+        for current_block_num in range(tail_epoch_id, current_epoch + 1):
+            current_timestamp = block_to_timestamp_map.get(current_block_num)
 
-        prices_for_current_snapshot = snapshot.get(tarket_token_price_key)
-        timestamps_for_current_snapshot = snapshot.get('timestamps', {})
+            if current_timestamp is None:
+                logger.warning(f"Timestamp not found in Redis for block {current_block_num} in project {project_id}. Skipping this block.")
+                continue
 
-        if isinstance(prices_for_current_snapshot, dict):
-            for block_num_str, price_val in prices_for_current_snapshot.items():
-                try:
-                    block_num = int(block_num_str)
-                    timestamp = timestamps_for_current_snapshot.get(block_num)
-                    price_data.append({
-                        'blockNumber': block_num,
-                        'price': float(price_val),
-                        'timestamp': timestamp,
-                    })
-                except ValueError:
-                    logger.warning(
-                        f"Could not parse block number '{block_num_str}' or price '{price_val}' "
-                        f"from snapshot for epoch {snapshot.get('epoch')}. Key: {tarket_token_price_key}"
-                    )
-        elif prices_for_current_snapshot is not None:
-            logger.warning(
-                f"Price data for {tarket_token_price_key} in snapshot for epoch {snapshot.get('epoch')} "
-                f"is not a dictionary: {prices_for_current_snapshot}"
-            )
-
-    if not tarket_token_price_key and snapshots:
-        msg = f"Failed to determine the correct price key ('token0PricesUSD' or 'token1PricesUSD') "
-        msg += f"for token {target_token_address} from any of the provided snapshots."
-        logger.error(msg)
-        raise Exception(msg)
-
-    # Sort the collected price data by block number
-    price_data.sort(key=lambda x: x['blockNumber'])
-                
+            if current_block_num in snapshot_prices_map:
+                price = snapshot_prices_map[current_block_num]
+                last_known_price = price
+                price_data.append({
+                    'blockNumber': current_block_num,
+                    'price': price,
+                    'timestamp': current_timestamp,
+                })
+            elif last_known_price is not None: # Backfill with the last known price
+                price_data.append({
+                    'blockNumber': current_block_num,
+                    'price': last_known_price,
+                    'timestamp': current_timestamp,
+                })
+            else:
+                logger.info(
+                    f"No price data available for block {current_block_num} (project {project_id}) "
+                    f"and no preceding price found in range {tail_epoch_id}-{current_epoch}. Skipping."
+                )
+ 
     return {
         'priceSeries': price_data,
         'timeInterval': time_interval,
