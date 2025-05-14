@@ -1280,7 +1280,39 @@ async def get_uniswapv3_snapshot(
             logger.error(f"Failed to parse snapshot data for project {project_id} against epoch {target_epoch}: {e}")
             return None
     else:
-        logger.error(f"No snapshot data found for project {project_id} against epoch {target_epoch}")
+        # if exact match is not found, check if nearby epochs are included in the response
+        if snapshot_response.has_closest_epochs:
+            logger.info(f"No exact match found for project {project_id} against epoch {target_epoch}, but nearby epochs found: {snapshot_response.closest_epochs}") 
+            previous_epoch = snapshot_response.closest_epochs.previous        
+            if previous_epoch:
+                logger.info(f"Fetching previous epoch {previous_epoch} CID for project {project_id} against actual sought epoch {target_epoch}")
+                target_epoch = previous_epoch.epoch_id
+                snapshot_response = await get_submission_data(
+                    redis_conn=redis_conn,
+                    cid=previous_epoch.snapshot_cid,
+                    ipfs_reader=ipfs_reader,
+                )
+                if snapshot_response:
+                    parsed_snapshot = message_model(**snapshot_response)
+                    return target_epoch, parsed_snapshot
+                else:
+                    logger.error(f"No snapshot data found for project {project_id} against nearby epoch {previous_epoch.epoch_id} with CID {previous_epoch.snapshot_cid}")
+                    return None
+            next_epoch = snapshot_response.closest_epochs.next
+            if next_epoch:
+                logger.info(f"Fetching next epoch {next_epoch} CID for project {project_id} against actual sought epoch {target_epoch}")
+                target_epoch = next_epoch.epoch_id
+                snapshot_response = await get_submission_data(
+                    redis_conn=redis_conn,
+                    cid=next_epoch.snapshot_cid,
+                    ipfs_reader=ipfs_reader,
+                )
+                if snapshot_response:
+                    parsed_snapshot = message_model(**snapshot_response)
+                    return target_epoch, parsed_snapshot
+                else:
+                    logger.error(f"No snapshot data found for project {project_id} against nearby epoch {next_epoch.epoch_id} with CID {next_epoch.snapshot_cid}")
+                    return None
         return None
 
 
