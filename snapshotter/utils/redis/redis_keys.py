@@ -14,6 +14,13 @@ def project_data_hmap(project_id):
     return f'projectID:{project_id}:data'
 
 
+def cid_cache_hmap(project_id):
+    """
+    Generate Redis key for CID cache hashmap.
+    """
+    return f'CIDCache:{project_id}'
+
+
 def cid_not_found_key(cid):
     """
     Generate Redis key for CID not found.
@@ -141,7 +148,7 @@ def last_epoch_detected_epoch_id_key():
     return f'lastEpochDetectedEpochID:{settings.namespace}'
 
 
-def project_data_expiry_zset():
+def data_expiry_zset(project_id):
     """
     Generate Redis key for project data expiry zset.
     This zset tracks expiration times for individual hash entries in project data hashmaps.
@@ -149,7 +156,7 @@ def project_data_expiry_zset():
     Returns:
         str: Redis key for the project data expiry zset.
     """
-    return f'projectDataExpiry:{settings.namespace}'
+    return f'DataExpiry:{project_id}'
 
 
 def callback_last_sent_by_issue(issue_type):

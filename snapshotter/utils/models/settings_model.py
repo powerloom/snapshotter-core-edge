@@ -180,6 +180,7 @@ class ProjectConfig(BaseModel):
     """Project configuration model."""
     project_name: str
     keep_previous_snapshot_data: bool = False
+    cache_cids: bool = False
     processor: ProcessorConfig
     preload_tasks: List[str]
 
