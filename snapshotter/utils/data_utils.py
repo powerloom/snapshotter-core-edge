@@ -1476,14 +1476,17 @@ async def get_uniswap_price_series_agg(
             continue
 
         prices_for_current_snapshot = snapshot.get(tarket_token_price_key)
+        timestamps_for_current_snapshot = snapshot.get('timestamps', {})
 
         if isinstance(prices_for_current_snapshot, dict):
             for block_num_str, price_val in prices_for_current_snapshot.items():
                 try:
                     block_num = int(block_num_str)
+                    timestamp = timestamps_for_current_snapshot.get(block_num)
                     price_data.append({
                         'blockNumber': block_num,
-                        'price': float(price_val)
+                        'price': float(price_val),
+                        'timestamp': timestamp,
                     })
                 except ValueError:
                     logger.warning(
