@@ -1248,7 +1248,10 @@ async def get_uniswapv3_snapshot(
     seek = False
     if not block_number:
         target_epoch = await get_project_last_finalized_epoch(
-            redis_conn, protocol_state_contract, anchor_rpc_helper, project_id,
+            redis_conn=redis_conn,
+            state_contract_obj=protocol_state_contract,
+            rpc_helper=anchor_rpc_helper,
+            project_id=project_id,
         )
         if not target_epoch:
             logger.error(f"No last finalized epoch found for project {project_id}")
@@ -1261,7 +1264,13 @@ async def get_uniswapv3_snapshot(
         target_epoch = block_number
         seek = True
     snapshot_response = await get_project_epoch_snapshot(
-        redis_conn, protocol_state_contract, anchor_rpc_helper, ipfs_reader, target_epoch, project_id, seek=seek
+        redis_conn=redis_conn,
+        state_contract_obj=protocol_state_contract,
+        rpc_helper=anchor_rpc_helper,
+        ipfs_reader=ipfs_reader,
+        epoch_id=target_epoch,
+        project_id=project_id,
+        seek=seek
     )
     if snapshot_response.exact_match:
         try:
@@ -1288,12 +1297,12 @@ async def get_uniswap_v3_token_pools_snapshot(
     token_address = Web3.to_checksum_address(token_address)
     project_id = f"tokenPools:{token_address}:{settings.namespace}"
     result = await get_uniswapv3_snapshot(
-        redis_conn,
-        anchor_rpc_helper,
-        ipfs_reader,
-        protocol_state_contract,
-        project_id,
-        UniswapTokenPoolsSnapshot,
+        redis_conn=redis_conn,
+        anchor_rpc_helper=anchor_rpc_helper,
+        ipfs_reader=ipfs_reader,
+        protocol_state_contract=protocol_state_contract,
+        project_id=project_id,
+        message_model=UniswapTokenPoolsSnapshot,
     )
     if not result:
         logger.error(f"No snapshot data found for project {project_id}")
@@ -1399,13 +1408,13 @@ async def get_uniswap_v3_token_price_pool(
     base_project_id = f"baseSnapshot:{pool_address}:{settings.namespace}"
 
     result = await get_uniswapv3_snapshot(
-        redis_conn,
-        anchor_rpc_helper,
-        ipfs_reader,
-        protocol_state_contract,
-        base_project_id,
-        UniswapBaseSnapshot,
-        block_number,
+        redis_conn=redis_conn,
+        anchor_rpc_helper=anchor_rpc_helper,
+        ipfs_reader=ipfs_reader,
+        protocol_state_contract=protocol_state_contract,
+        project_id=base_project_id,
+        message_model=UniswapBaseSnapshot,
+        block_number=block_number,
     )
     if not result:
         logger.error(f"No snapshot data found for project {base_project_id}")
@@ -1441,24 +1450,25 @@ async def get_uniswap_v3_token_prices_all_snapshot(
     Uses batch processing with asyncio tasks to fetch prices concurrently.
     Returns a dict mapping pool addresses to their respective token prices.
     """
+    logger.info(f"Getting pool addresses for token {token_address}")
     token_pools_snapshot_result = await get_uniswap_v3_token_pools_snapshot(
-        redis_conn,
-        anchor_rpc_helper,
-        ipfs_reader,
-        protocol_state_contract,
-        token_address,
+        redis_conn=redis_conn,
+        anchor_rpc_helper=anchor_rpc_helper,
+        ipfs_reader=ipfs_reader,
+        protocol_state_contract=protocol_state_contract,
+        token_address=token_address,
     )
     if not token_pools_snapshot_result:
         logger.error(f"No token pools snapshot found for token {token_address}")
         return None
     
-    snapshot_data = token_pools_snapshot_result
-    if not snapshot_data or not snapshot_data.pools:
+    if not token_pools_snapshot_result or not token_pools_snapshot_result.pools:
         logger.error(f"No token pools snapshot data found for token {token_address}")
         return None
     
+    logger.info(f"Token pools snapshot result against token {token_address}: {token_pools_snapshot_result}")
     # Get list of pool addresses
-    pool_addresses = list(snapshot_data.pools.keys())
+    pool_addresses = list(token_pools_snapshot_result.pools.keys())
     if not pool_addresses:
         logger.error(f"No pools found for token {token_address}")
         return None
@@ -1469,7 +1479,7 @@ async def get_uniswap_v3_token_prices_all_snapshot(
     
     for i in range(0, len(pool_addresses), BATCH_SIZE):
         batch_pools = pool_addresses[i:i + BATCH_SIZE]
-        
+        logger.info(f"Processing batch of {len(batch_pools)} pools against token {token_address} for prices: {batch_pools}")
         # Create tasks for each pool in the batch
         tasks = [
             get_uniswap_v3_token_price_pool(
