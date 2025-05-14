@@ -25,8 +25,8 @@ from snapshotter.utils.redis.redis_keys import project_data_hmap
 from snapshotter.utils.redis.redis_keys import source_chain_block_time_key
 from snapshotter.utils.redis.redis_keys import source_chain_epoch_size_key
 from snapshotter.utils.redis.redis_keys import source_chain_id_key
-from snapshotter.utils.redis.redis_keys import project_data_expiry_zset
-from snapshotter.utils.redis.redis_keys import block_cache_key
+from snapshotter.utils.redis.redis_keys import data_expiry_zset
+from snapshotter.utils.redis.redis_keys import cid_cache_hmap
 from snapshotter.settings.config import projects_config
 
 logger = default_logger.bind(module='data_helper')
@@ -285,7 +285,7 @@ async def w3_get_and_cache_finalized_cid(
             json.dumps({"snapshot_cid": cid, "status": status + 1}),
         )
 
-        expiry_keys.append(f"{project_id}|{epoch_id}")
+        expiry_keys.append(f"{project_hmap_key}|{epoch_id}")
 
         # Process previousSnapshots if available
         try:
@@ -301,8 +301,8 @@ async def w3_get_and_cache_finalized_cid(
                         "snapshot_cid": snapshot_cid,
                         "status": status + 1
                     })
-                    all_previous_snapshot_keys.remove(epoch_id)
-                    expiry_keys.append(f"{project_id}|{epoch_id}")
+                    all_previous_snapshot_keys.discard(epoch_id)
+                    expiry_keys.append(f"{project_hmap_key}|{epoch_id}")
 
                     # Add to pipeline if we have data to cache
                     if data_to_cache:
@@ -318,12 +318,12 @@ async def w3_get_and_cache_finalized_cid(
                         epoch_id,
                         json.dumps({"snapshot_cid": null_cid, "status": -1}),
                     )
-                    expiry_keys.append(f"{project_id}|{epoch_id}")
+                    expiry_keys.append(f"{project_hmap_key}|{epoch_id}")
 
             if expiry_keys:
                 expiry_data = {key: expiry_time for key in expiry_keys}
                 pipeline.zadd(
-                    name=project_data_expiry_zset(),
+                    name=data_expiry_zset(project_id),
                     mapping=expiry_data,
                 )
         
@@ -338,16 +338,16 @@ async def w3_get_and_cache_finalized_cid(
         return cid, epoch_id
     else:
         pipeline = redis_conn.pipeline()
-
+        project_hmap_key = project_data_hmap(project_id=project_id)
         pipeline.hset(
-            project_data_hmap(project_id=project_id),
+            project_hmap_key,
             epoch_id,
             json.dumps({"snapshot_cid": null_cid, "status": -1}),
         )
 
-        expiry_key = f"{project_id}|{epoch_id}"
+        expiry_key = f"{project_hmap_key}|{epoch_id}"
         pipeline.zadd(
-            name=project_data_expiry_zset(),
+            name=data_expiry_zset(project_id),
             mapping={expiry_key: expiry_time},
         )
 
@@ -499,7 +499,7 @@ async def w3_get_and_cache_finalized_cid_bulk(
             else:
                 # Only cache null if we're sure there's no CID (timestamp > 0 but no CID)
                 data_to_cache[epoch_id] = json.dumps({"snapshot_cid": null_cid, "status": -1})
-            expiry_keys.append(f"{project_id}|{epoch_id}")
+            expiry_keys.append(f"{project_hmap_key}|{epoch_id}")
 
             # Add to result list regardless of whether we're caching
             if cid:
@@ -520,7 +520,7 @@ async def w3_get_and_cache_finalized_cid_bulk(
             if expiry_keys:
                 expiry_data = {key: expiry_time for key in expiry_keys}
                 pipeline.zadd(
-                    name=project_data_expiry_zset(),
+                    name=data_expiry_zset(project_id),
                     mapping=expiry_data,
                 )
 
@@ -653,6 +653,7 @@ async def get_submission_data_bulk(
     redis_conn: aioredis.Redis,
     cids: List[str],
     ipfs_reader,
+    project_id: str,
     ensure_complete: bool = False,
 ) -> List[dict]:
     """
@@ -668,17 +669,49 @@ async def get_submission_data_bulk(
     Returns:
         List[dict]: List of submission data dictionaries.
     """
-    all_snapshot_data = []
+    all_snapshot_data = {}
+
+    # try to get data from redis cache
+    cid_cache_key = cid_cache_hmap(project_id)
+    cid_cache_data = await redis_conn.hmget(cid_cache_key, cids)
+    project_config = get_project_config(project_id)
+    pipeline = redis_conn.pipeline()
+    current_time = int(time.time())
+    expiry_time = current_time + PROJECT_DATA_ENTRY_EXPIRY
+    expiry_keys = []
+
+    missing_cids = []
+    for cid, data in zip(cids, cid_cache_data):
+        if data:
+            all_snapshot_data[cid] = json.loads(data)
+        else:
+            missing_cids.append(cid)
 
     # Process submissions in batches
-    for i in range(0, len(cids), BATCH_SIZE):
-        batch_cids = cids[i:i + BATCH_SIZE]
+    for i in range(0, len(missing_cids), BATCH_SIZE):
+        batch_cids = missing_cids[i:i + BATCH_SIZE]
         batch_snapshot_data = await asyncio.gather(
             *[
                 get_submission_data(redis_conn, cid, ipfs_reader)
                 for cid in batch_cids
             ],
         )
+
+        for cid, data in zip(batch_cids, batch_snapshot_data):
+
+            all_snapshot_data[cid] = data
+            if project_config.cache_cids:
+                pipeline.hset(
+                    name=cid_cache_key,
+                    mapping={cid: json.dumps(data)},
+                )
+                expiry_keys.append(f"{cid_cache_key}|{cid}")
+        if expiry_keys:
+            pipeline.zadd(
+                name=data_expiry_zset(project_id),
+                mapping={key: expiry_time for key in expiry_keys},
+            )
+        await pipeline.execute()
 
         if ensure_complete:
             missing_cids = [
@@ -689,9 +722,11 @@ async def get_submission_data_bulk(
                 logger.error(f'Incomplete ipfs data for CIDs: {missing_cids}')
                 return []
 
-        all_snapshot_data.extend(batch_snapshot_data)
+    final_snapshot_data = []
+    for cid in cids:
+        final_snapshot_data.append(all_snapshot_data[cid])
 
-    return all_snapshot_data
+    return final_snapshot_data
 
 
 async def get_project_epoch_snapshot(
@@ -1033,6 +1068,7 @@ async def get_project_epoch_snapshot_bulk(
         redis_conn,
         [cid for cid, _ in valid_cid_data_with_epochs],
         ipfs_reader,
+        project_id,
         ensure_complete=ensure_complete,
     )
 
@@ -1144,6 +1180,7 @@ async def get_project_time_series_data(
         redis_conn=redis_conn,
         cids=all_cids,
         ipfs_reader=ipfs_reader,
+        project_id=project_id,
     )
 
 ### UNISWAP V3 SPECIFIC LOGIC ###
@@ -1528,8 +1565,8 @@ async def get_uniswap_price_series_agg(
     # Fetch all block details from Redis for timestamps
     block_to_timestamp_map = {}
     if tail_epoch_id <= current_epoch:
+        redis_block_cache_key = cached_block_details_at_height(settings.namespace)
         try:
-            redis_block_cache_key = block_cache_key(settings.namespace)
             block_details_raw = await redis_conn.zrangebyscore(
                 redis_block_cache_key,
                 min=tail_epoch_id,
