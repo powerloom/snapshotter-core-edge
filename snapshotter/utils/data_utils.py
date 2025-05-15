@@ -1,6 +1,6 @@
 import asyncio
 import json
-from typing import List, Optional, Tuple, Type
+from typing import List, Optional, Tuple, Type, Dict, Any
 import time
 import tenacity
 from pydantic import BaseModel
@@ -14,7 +14,7 @@ from web3 import Web3
 from ipfs_client.main import AsyncIPFSClient
 import random
 from computes.utils.models.message_models import UniswapBaseSnapshot, UniswapTradesSnapshot
-from snapshotter.utils.models.data_models import UniswapPoolMetadata, UniswapTokenPoolsSnapshot, UniswapEthPriceSnapshot
+from snapshotter.utils.models.data_models import UniswapPoolMetadata, UniswapTokenPoolsSnapshot, UniswapEthPriceSnapshot, EpochSnapshotResponse, ExactEpochSnapshot, ClosestEpochs, EpochIdentifier
 from snapshotter.settings.config import settings
 from snapshotter.utils.default_logger import default_logger
 from snapshotter.utils.redis.redis_keys import cached_block_details_at_height
@@ -753,13 +753,14 @@ async def get_submission_data_bulk(
 
 
 async def get_project_epoch_snapshot(
-    redis_conn: aioredis.Redis, state_contract_obj, rpc_helper, ipfs_reader, epoch_id, project_id,
-) -> dict:
+    redis_conn: aioredis.Redis, state_contract_obj, rpc_helper, ipfs_reader, epoch_id, project_id, seek=False
+) -> EpochSnapshotResponse:
     """
     Retrieves the epoch snapshot for a given project.
 
     This function first gets the finalized CID for the given epoch and project,
-    then fetches the corresponding submission data.
+    then fetches the corresponding submission data. If no CID is found for the exact epoch,
+    it will find the closest epochs before and after the requested epoch if seek=True.
 
     Args:
         redis_conn (aioredis.Redis): Redis connection object.
@@ -768,16 +769,82 @@ async def get_project_epoch_snapshot(
         ipfs_reader: IPFS reader object.
         epoch_id (int): Epoch ID.
         project_id (str): Project ID.
+        seek (bool): If True and no exact match found, find closest epochs.
 
     Returns:
-        dict: The epoch snapshot data.
+        EpochSnapshotResponse: A response object containing either:
+            1. An exact match for the requested epoch
+            2. The closest epochs when seek=True and no exact match exists
+            3. No data (empty response)
     """
     cid = await get_project_finalized_cid(redis_conn, state_contract_obj, rpc_helper, ipfs_reader, epoch_id, project_id)
-    if cid:
+    if cid and 'null' not in cid:
         data = await get_submission_data(redis_conn, cid, ipfs_reader)
-        return data
+        return EpochSnapshotResponse(
+            exact_match=ExactEpochSnapshot(
+                epoch_id=epoch_id,
+                snapshot_cid=cid,
+                data=data
+            )
+        )
+    elif seek:
+        # Get all finalized epoch IDs for this project
+        project_hmap_key = project_data_hmap(project_id=project_id)
+        keys = await redis_conn.hkeys(project_hmap_key)
+        epoch_ids = []
+        for key in keys:
+            try:
+                epoch_ids.append(int(key.decode('utf-8')))
+            except (ValueError, AttributeError) as e:
+                logger.warning(f"Invalid epoch ID in Redis: {key}, Error: {e}")
+                continue
+        
+        if not epoch_ids:
+            logger.info(f"No finalized epochs found for project {project_id}")
+            return EpochSnapshotResponse()
+
+        # Sort epoch IDs to find closest ones
+        epoch_ids.sort()
+        
+        # Find closest epochs before and after the requested epoch_id
+        prev_epoch = None
+        next_epoch = None
+        
+        for e_id in epoch_ids:
+            if e_id <= epoch_id:
+                prev_epoch = e_id
+            else:
+                next_epoch = e_id
+                break
+
+        closest_epochs = ClosestEpochs()
+        
+        # If we found closest epochs, get their CIDs and data
+        if prev_epoch is not None:
+            prev_data_raw = await redis_conn.hget(project_hmap_key, str(prev_epoch))
+            if prev_data_raw:
+                prev_data = json.loads(prev_data_raw)
+                prev_cid = prev_data.get("snapshot_cid")
+                if prev_cid and 'null' not in prev_cid:
+                    closest_epochs.previous = EpochIdentifier(
+                        epoch_id=prev_epoch,
+                        snapshot_cid=prev_cid
+                    )
+        
+        if next_epoch is not None:
+            next_data_raw = await redis_conn.hget(project_hmap_key, str(next_epoch))
+            if next_data_raw:
+                next_data = json.loads(next_data_raw)
+                next_cid = next_data.get("snapshot_cid")
+                if next_cid and 'null' not in next_cid:
+                    closest_epochs.next = EpochIdentifier(
+                        epoch_id=next_epoch,
+                        snapshot_cid=next_cid
+                    )
+        
+        return EpochSnapshotResponse(closest_epochs=closest_epochs)
     else:
-        return dict()
+        return EpochSnapshotResponse()
 
 
 async def get_source_chain_id(redis_conn: aioredis.Redis, state_contract_obj, rpc_helper: RpcHelper):
@@ -947,7 +1014,7 @@ async def get_project_latest_snapshot(
     rpc_helper,
     ipfs_reader,
     project_id,
-):
+) -> Optional[Dict[str, Any]]:
     """
     Retrieves the latest snapshot for a given project.
 
@@ -961,12 +1028,19 @@ async def get_project_latest_snapshot(
         project_id: ID of the project to fetch snapshot data for.
 
     Returns:
-        dict: The latest snapshot data for the given project.
+        Optional[Dict[str, Any]]: The latest snapshot data for the given project, or None if not found.
     """
     last_finalized_epoch = await get_project_last_finalized_epoch(redis_conn, state_contract_obj, rpc_helper, project_id)
     if not last_finalized_epoch:
-        return dict()
-    return await get_project_epoch_snapshot(redis_conn, state_contract_obj, rpc_helper, ipfs_reader, last_finalized_epoch, project_id)
+        return None
+    
+    snapshot_response = await get_project_epoch_snapshot(
+        redis_conn, state_contract_obj, rpc_helper, ipfs_reader, last_finalized_epoch, project_id
+    )
+    
+    if snapshot_response.exact_match:
+        return snapshot_response.exact_match.data
+    return None
 
 
 async def get_project_epoch_snapshot_bulk(
@@ -1034,26 +1108,25 @@ async def get_project_time_series_data(
         rpc_helper,
         ipfs_reader,
         project_id,
-):
+) -> List[Dict[str, Any]]:
     """
     Returns a list of snapshot data containing equally spaced observations starting with the start_epoch id
     for the given project_id, and including epochs spaced step_seconds apart until the maximum observations has been reached.
 
     Args:
-        observations: Total number of data points to gather
-        step_seconds: Time in seconds between each obsveration
-        project_last_finalized_epoch: Epoch ID of the last finalized epoch for'project_id'
+        start_time: Start time in seconds
+        end_time: End time in seconds
+        step_seconds: Time in seconds between each observation
+        end_epoch_id: End epoch ID
         redis_conn (aioredis.Redis): Redis connection object.
         state_contract_obj: State contract object.
         rpc_helper: RPC helper object.
         ipfs_reader: IPFS reader object.
         project_id: ID of the project to fetch snapshot data for.
 
-
     Returns:
-        A list of snapshot data objects for the given project_id with a maximum length of the observations param.
+        List[Dict[str, Any]]: A list of snapshot data objects for the given project_id.
     """
-
     # get metadata for building steps
     [
         source_chain_epoch_size,
@@ -1295,27 +1368,74 @@ async def get_uniswapv3_snapshot(
     block_number: Optional[int] = None,
 ) -> Optional[Tuple[int, BaseModel]]:
     # if block_number is not provided, get the last finalized epoch and use that
+    seek = False
     if not block_number:
         target_epoch = await get_project_last_finalized_epoch(
-            redis_conn, protocol_state_contract, anchor_rpc_helper, project_id,
+            redis_conn=redis_conn,
+            state_contract_obj=protocol_state_contract,
+            rpc_helper=anchor_rpc_helper,
+            project_id=project_id,
         )
         if not target_epoch:
             logger.error(f"No last finalized epoch found for project {project_id}")
             return None
         else:
             logger.info(f"Using last finalized epoch {target_epoch} for fetch against project {project_id}")
+    # if block_number is provided, use that as the target epoch and seek around it if needed
     else:
         # TODO: assumes epoch is set to block number in data market contract, may need to add config flag for this and derive epoch from block number if false
         target_epoch = block_number
-    
-    snapshot = await get_project_epoch_snapshot(
-        redis_conn, protocol_state_contract, anchor_rpc_helper, ipfs_reader, target_epoch, project_id,
+        seek = True
+    snapshot_response = await get_project_epoch_snapshot(
+        redis_conn=redis_conn,
+        state_contract_obj=protocol_state_contract,
+        rpc_helper=anchor_rpc_helper,
+        ipfs_reader=ipfs_reader,
+        epoch_id=target_epoch,
+        project_id=project_id,
+        seek=seek
     )
-    if snapshot:
-        parsed_snapshot = message_model(**snapshot)
-        return target_epoch, parsed_snapshot
+    if snapshot_response.exact_match:
+        try:
+            parsed_snapshot = message_model(**snapshot_response.exact_match.data)
+            return target_epoch, parsed_snapshot
+        except Exception as e:
+            logger.error(f"Failed to parse snapshot data for project {project_id} against epoch {target_epoch}: {e}")
+            return None
     else:
-        logger.error(f"No snapshot data found for project {project_id} against epoch {target_epoch}")
+        # if exact match is not found, check if nearby epochs are included in the response
+        if snapshot_response.has_closest_epochs:
+            logger.info(f"No exact match found for project {project_id} against epoch {target_epoch}, but nearby epochs found: {snapshot_response.closest_epochs}") 
+            previous_epoch = snapshot_response.closest_epochs.previous        
+            if previous_epoch:
+                logger.info(f"Fetching previous epoch {previous_epoch} CID for project {project_id} against actual sought epoch {target_epoch}")
+                target_epoch = previous_epoch.epoch_id
+                snapshot_response = await get_submission_data(
+                    redis_conn=redis_conn,
+                    cid=previous_epoch.snapshot_cid,
+                    ipfs_reader=ipfs_reader,
+                )
+                if snapshot_response:
+                    parsed_snapshot = message_model(**snapshot_response)
+                    return target_epoch, parsed_snapshot
+                else:
+                    logger.error(f"No snapshot data found for project {project_id} against nearby epoch {previous_epoch.epoch_id} with CID {previous_epoch.snapshot_cid}")
+                    return None
+            next_epoch = snapshot_response.closest_epochs.next
+            if next_epoch:
+                logger.info(f"Fetching next epoch {next_epoch} CID for project {project_id} against actual sought epoch {target_epoch}")
+                target_epoch = next_epoch.epoch_id
+                snapshot_response = await get_submission_data(
+                    redis_conn=redis_conn,
+                    cid=next_epoch.snapshot_cid,
+                    ipfs_reader=ipfs_reader,
+                )
+                if snapshot_response:
+                    parsed_snapshot = message_model(**snapshot_response)
+                    return target_epoch, parsed_snapshot
+                else:
+                    logger.error(f"No snapshot data found for project {project_id} against nearby epoch {next_epoch.epoch_id} with CID {next_epoch.snapshot_cid}")
+                    return None
         return None
 
 
@@ -1332,12 +1452,12 @@ async def get_uniswap_v3_token_pools_snapshot(
     token_address = Web3.to_checksum_address(token_address)
     project_id = f"tokenPools:{token_address}:{settings.namespace}"
     result = await get_uniswapv3_snapshot(
-        redis_conn,
-        anchor_rpc_helper,
-        ipfs_reader,
-        protocol_state_contract,
-        project_id,
-        UniswapTokenPoolsSnapshot,
+        redis_conn=redis_conn,
+        anchor_rpc_helper=anchor_rpc_helper,
+        ipfs_reader=ipfs_reader,
+        protocol_state_contract=protocol_state_contract,
+        project_id=project_id,
+        message_model=UniswapTokenPoolsSnapshot,
     )
     if not result:
         logger.error(f"No snapshot data found for project {project_id}")
@@ -1360,13 +1480,13 @@ async def get_uniswap_v3_base_snapshot(
 ):
     project_id = f"baseSnapshot:{pool_address}:{settings.namespace}"
     result = await get_uniswapv3_snapshot(
-        redis_conn,
-        anchor_rpc_helper,
-        ipfs_reader,
-        protocol_state_contract,
-        project_id,
-        UniswapBaseSnapshot,
-        block_number,
+        redis_conn=redis_conn,
+        anchor_rpc_helper=anchor_rpc_helper,
+        ipfs_reader=ipfs_reader,
+        protocol_state_contract=protocol_state_contract,
+        project_id=project_id,
+        message_model=UniswapBaseSnapshot,
+        block_number=block_number,
     )
     if not result:
         logger.error(f"No snapshot data found for project {project_id}")
@@ -1386,13 +1506,13 @@ async def get_uniswap_v3_trades_snapshot(
 ):
     project_id = f"tradesSnapshot:{pool_address}:{settings.namespace}"
     result = await get_uniswapv3_snapshot(
-        redis_conn,
-        anchor_rpc_helper,
-        ipfs_reader,
-        protocol_state_contract,
-        project_id,
-        UniswapTradesSnapshot,
-        block_number,
+        redis_conn=redis_conn,
+        anchor_rpc_helper=anchor_rpc_helper,
+        ipfs_reader=ipfs_reader,
+        protocol_state_contract=protocol_state_contract,
+        project_id=project_id,
+        message_model=UniswapTradesSnapshot,
+        block_number=block_number,
     )
     if not result:
         logger.error(f"No snapshot data found for project {project_id}")
@@ -1412,13 +1532,13 @@ async def get_uniswap_v3_eth_price_snapshot(
 ):
     project_id = f'price:ETH:{settings.namespace}'
     result = await get_uniswapv3_snapshot(
-        redis_conn,
-        anchor_rpc_helper,
-        ipfs_reader,
-        protocol_state_contract,
-        project_id,
-        UniswapEthPriceSnapshot,
-        block_number,
+        redis_conn=redis_conn,
+        anchor_rpc_helper=anchor_rpc_helper,
+        ipfs_reader=ipfs_reader,
+        protocol_state_contract=protocol_state_contract,
+        project_id=project_id,
+        message_model=UniswapEthPriceSnapshot,
+        block_number=block_number,
     )
     if not result:
         logger.error(f"No snapshot data found for project {project_id}")
@@ -1443,13 +1563,13 @@ async def get_uniswap_v3_token_price_pool(
     base_project_id = f"baseSnapshot:{pool_address}:{settings.namespace}"
 
     result = await get_uniswapv3_snapshot(
-        redis_conn,
-        anchor_rpc_helper,
-        ipfs_reader,
-        protocol_state_contract,
-        base_project_id,
-        UniswapBaseSnapshot,
-        block_number,
+        redis_conn=redis_conn,
+        anchor_rpc_helper=anchor_rpc_helper,
+        ipfs_reader=ipfs_reader,
+        protocol_state_contract=protocol_state_contract,
+        project_id=base_project_id,
+        message_model=UniswapBaseSnapshot,
+        block_number=block_number,
     )
     if not result:
         logger.error(f"No snapshot data found for project {base_project_id}")
@@ -1485,24 +1605,25 @@ async def get_uniswap_v3_token_prices_all_snapshot(
     Uses batch processing with asyncio tasks to fetch prices concurrently.
     Returns a dict mapping pool addresses to their respective token prices.
     """
+    logger.info(f"Getting pool addresses for token {token_address}")
     token_pools_snapshot_result = await get_uniswap_v3_token_pools_snapshot(
-        redis_conn,
-        anchor_rpc_helper,
-        ipfs_reader,
-        protocol_state_contract,
-        token_address,
+        redis_conn=redis_conn,
+        anchor_rpc_helper=anchor_rpc_helper,
+        ipfs_reader=ipfs_reader,
+        protocol_state_contract=protocol_state_contract,
+        token_address=token_address,
     )
     if not token_pools_snapshot_result:
         logger.error(f"No token pools snapshot found for token {token_address}")
         return None
     
-    snapshot_data = token_pools_snapshot_result
-    if not snapshot_data or not snapshot_data.pools:
+    if not token_pools_snapshot_result or not token_pools_snapshot_result.pools:
         logger.error(f"No token pools snapshot data found for token {token_address}")
         return None
     
+    logger.info(f"Token pools snapshot result against token {token_address}: {token_pools_snapshot_result}")
     # Get list of pool addresses
-    pool_addresses = list(snapshot_data.pools.keys())
+    pool_addresses = list(token_pools_snapshot_result.pools.keys())
     if not pool_addresses:
         logger.error(f"No pools found for token {token_address}")
         return None
@@ -1513,7 +1634,7 @@ async def get_uniswap_v3_token_prices_all_snapshot(
     
     for i in range(0, len(pool_addresses), BATCH_SIZE):
         batch_pools = pool_addresses[i:i + BATCH_SIZE]
-        
+        logger.info(f"Processing batch of {len(batch_pools)} pools against token {token_address} for prices: {batch_pools}")
         # Create tasks for each pool in the batch
         tasks = [
             get_uniswap_v3_token_price_pool(
@@ -1591,6 +1712,7 @@ async def get_uniswap_price_series_agg(
     time_interval: int,
     project_id: str,
     token_address: str,
+    step_seconds: int,
 ):
     [current_epoch_data] = await anchor_rpc_helper.web3_call(
         tasks=[
@@ -1609,10 +1731,9 @@ async def get_uniswap_price_series_agg(
     # Fetch all block details from Redis for timestamps
     block_to_timestamp_map = {}
     if tail_epoch_id <= current_epoch:
-        redis_block_cache_key = cached_block_details_at_height(settings.namespace)
         try:
             block_details_raw = await redis_conn.zrangebyscore(
-                redis_block_cache_key,
+                cached_block_details_at_height,
                 min=tail_epoch_id,
                 max=current_epoch
             )
@@ -1624,7 +1745,7 @@ async def get_uniswap_price_series_agg(
                     block_to_timestamp_map[block_num] = timestamp
         except Exception as e:
             logger.opt(exception=True).error(
-                f"Error fetching block details from Redis for key {redis_block_cache_key} "
+                f"Error fetching block details from Redis for key {cached_block_details_at_height} "
                 f"in range {tail_epoch_id}-{current_epoch}: {e}"
             )
 
@@ -1635,54 +1756,128 @@ async def get_uniswap_price_series_agg(
     
     price_data = []
     target_token_address = Web3.to_checksum_address(token_address)
-    tarket_token_price_key = None
+    target_token_price_key = None
+    snapshot_prices_map = {}
+    tail_epoch_covered_by_bulk = False
+    snapshot_at_tail = None
 
-    if snapshots: # Only try to determine key if there are snapshots
+    if snapshots:
         for snapshot_data_for_key_check in snapshots:
-            if snapshot_data_for_key_check: # Ensure snapshot is not empty or None
+            if snapshot_data_for_key_check: 
                 token0 = snapshot_data_for_key_check.get('token0')
                 token1 = snapshot_data_for_key_check.get('token1')
                 if target_token_address == token0:
-                    tarket_token_price_key = 'token0PricesUSD'
+                    target_token_price_key = 'token0PricesUSD'
                     break
                 elif target_token_address == token1:
-                    tarket_token_price_key = 'token1PricesUSD'
+                    target_token_price_key = 'token1PricesUSD'
                     break
         
-        if not tarket_token_price_key:
-            msg = (
-                f"Failed to determine the correct price key ('token0PricesUSD' or 'token1PricesUSD') "
-                f"for token {target_token_address} from any of the provided snapshots "
-                f"in range {tail_epoch_id} to {current_epoch} for project {project_id}."
-            )
-            logger.error(msg)
-            raise Exception(msg)
+        if target_token_price_key:
+            for snapshot in snapshots: 
+                if not snapshot:
+                    continue
+                prices_for_current_snapshot = snapshot.get(target_token_price_key)
+                if isinstance(prices_for_current_snapshot, dict):
+                    for block_num_str, price_val in prices_for_current_snapshot.items():
+                        try:
+                            block_num = int(block_num_str)
+                            price = float(price_val)
+                            snapshot_prices_map[block_num] = price
+                            if block_num == tail_epoch_id:
+                                tail_epoch_covered_by_bulk = True
+                        except ValueError:
+                            logger.warning(
+                                f"Could not parse block number '{block_num_str}' or price '{price_val}' "
+                                f"from bulk snapshot for project {project_id}. Key: {target_token_price_key}"
+                            )
+                elif prices_for_current_snapshot is not None:
+                    logger.warning(
+                        f"Price data for {target_token_price_key} in bulk snapshot for project {project_id} "
+                        f"is not a dictionary: {prices_for_current_snapshot}"
+                    )
 
-    snapshot_prices_map = {}
-    if tarket_token_price_key:
-        for snapshot in snapshots:
-            if not snapshot:
-                continue
-
-            prices_for_current_snapshot = snapshot.get(tarket_token_price_key)
-            if isinstance(prices_for_current_snapshot, dict):
-                for block_num_str, price_val in prices_for_current_snapshot.items():
-                    try:
-                        block_num = int(block_num_str)
-                        price = float(price_val)
-                        snapshot_prices_map[block_num] = price
-                    except ValueError:
-                        logger.warning(
-                            f"Could not parse block number '{block_num_str}' or price '{price_val}' "
-                            f"from snapshot for project {project_id}. Key: {tarket_token_price_key}"
-                        )
-            elif prices_for_current_snapshot is not None:
-                logger.warning(
-                    f"Price data for {tarket_token_price_key} in snapshot for project {project_id} "
-                    f"is not a dictionary: {prices_for_current_snapshot}"
+            if not tail_epoch_covered_by_bulk:
+                logger.info(
+                    f"Tail epoch {tail_epoch_id} not covered by bulk or price key undetermined. "
+                    f"Fetching snapshot_at_tail for project {project_id}."
                 )
-    
+                snapshot_response = await get_project_epoch_snapshot(
+                    redis_conn=redis_conn, 
+                    state_contract_obj=protocol_state_contract, 
+                    rpc_helper=anchor_rpc_helper, 
+                    ipfs_reader=ipfs_reader, 
+                    epoch_id=tail_epoch_id, 
+                    project_id=project_id, 
+                    seek=True,
+                )
+
+                logger.info(f"Snapshot response for project {project_id} at tail_epoch_id {tail_epoch_id}: {snapshot_response.model_dump_json()}")
+                
+                if snapshot_response.exact_match:
+                    # This shouldn't happen, but just in case
+                    snapshot_at_tail = snapshot_response.exact_match.data
+                elif snapshot_response.has_closest_epochs:
+                    previous_epoch = snapshot_response.closest_epochs.previous
+                    if previous_epoch:
+                        snapshot_at_tail = await get_submission_data(
+                            redis_conn=redis_conn, 
+                            cid=previous_epoch.snapshot_cid, 
+                            ipfs_reader=ipfs_reader,
+                        )
+                        logger.info(f"Closest snapshot at tail for project {project_id} at tail_epoch_id {tail_epoch_id} is {previous_epoch.epoch_id}.")
+                    else:
+                        logger.error(f"No previous closest epoch found for project {project_id} at tail_epoch_id {tail_epoch_id}.")
+                        raise Exception(f"No previous closest epoch found for project {project_id} at tail_epoch_id {tail_epoch_id}.")
+                else:
+                    logger.error(f"No snapshot data found for project {project_id} at tail_epoch_id {tail_epoch_id}.")
+                    raise Exception(f"No snapshot data found for project {project_id} at tail_epoch_id {tail_epoch_id}.")
+        else:
+            msg = f"Unable to determine target token price key for project {project_id} and token {token_address}."
+            logger.error(msg)
+            raise ValueError(msg)
+
     last_known_price = None
+    if not tail_epoch_covered_by_bulk:
+        prices_from_tail_snapshot = snapshot_at_tail.get(target_token_price_key)
+        if isinstance(prices_from_tail_snapshot, dict):
+            latest_relevant_block_num_in_tail = -1
+            for block_num_str in prices_from_tail_snapshot.keys():
+                try:
+                    block_num = int(block_num_str)
+                    if block_num <= tail_epoch_id and block_num > latest_relevant_block_num_in_tail:
+                        latest_relevant_block_num_in_tail = block_num
+                except ValueError:
+                    logger.warning(
+                        f"Could not parse block_num_str '{block_num_str}' from snapshot_at_tail keys for project {project_id}."
+                    )
+                    continue
+            
+            # If a relevant block number was found, get its price
+            if latest_relevant_block_num_in_tail == -1:
+                logger.warning(f"No relevant block (<= tail_epoch_id) with a valid price found in snapshot_at_tail for project {project_id}.")
+            else:
+                price_value = prices_from_tail_snapshot.get(str(latest_relevant_block_num_in_tail)) # Keys are strings
+                if price_value is not None:
+                    try:
+                        last_known_price = float(price_value)
+                        logger.info(
+                            f"Initialized last_known_price to {last_known_price} from block {latest_relevant_block_num_in_tail} "
+                            f"in snapshot_at_tail for project {project_id} (tail_epoch_id {tail_epoch_id})."
+                        )
+                    except (ValueError, TypeError):
+                        logger.warning(
+                            f"Could not convert price '{price_value}' to float for block {latest_relevant_block_num_in_tail} "
+                            f"from snapshot_at_tail for project {project_id}."
+                        )
+        
+        # Only matters if there are blocks before the last known data in snapshots
+        if last_known_price is None:
+            msg = f"No last known price data available for project {project_id} and token {token_address}."
+            logger.error(msg)
+            raise ValueError(msg)
+
+    price_data = []
     if tail_epoch_id <= current_epoch:
         for current_block_num in range(tail_epoch_id, current_epoch + 1):
             current_timestamp = block_to_timestamp_map.get(current_block_num)
@@ -1691,15 +1886,16 @@ async def get_uniswap_price_series_agg(
                 logger.warning(f"Timestamp not found in Redis for block {current_block_num} in project {project_id}. Skipping this block.")
                 continue
 
-            if current_block_num in snapshot_prices_map:
-                price = snapshot_prices_map[current_block_num]
-                last_known_price = price
+            # Price from bulk snapshot takes precedence if available for the current block
+            price_from_bulk = snapshot_prices_map.get(current_block_num)
+            if price_from_bulk is not None:
+                last_known_price = price_from_bulk 
                 price_data.append({
                     'blockNumber': current_block_num,
-                    'price': price,
+                    'price': price_from_bulk,
                     'timestamp': current_timestamp,
                 })
-            elif last_known_price is not None: # Backfill with the last known price
+            elif last_known_price is not None: 
                 price_data.append({
                     'blockNumber': current_block_num,
                     'price': last_known_price,
@@ -1708,10 +1904,21 @@ async def get_uniswap_price_series_agg(
             else:
                 logger.info(
                     f"No price data available for block {current_block_num} (project {project_id}) "
-                    f"and no preceding price found in range {tail_epoch_id}-{current_epoch}. Skipping."
+                    f"and no preceding price found (last_known_price is None). Skipping."
                 )
  
+    spaced_price_data = []
+    if price_data: 
+        spaced_price_data.append(price_data[0]) 
+        last_added_timestamp_for_spacing = price_data[0]['timestamp']
+
+        for i in range(1, len(price_data)):
+            entry = price_data[i]
+            if entry['timestamp'] >= last_added_timestamp_for_spacing + step_seconds:
+                spaced_price_data.append(entry)
+                last_added_timestamp_for_spacing = entry['timestamp']
+
     return {
-        'priceSeries': price_data,
+        'priceSeries': spaced_price_data,
         'timeInterval': time_interval,
     }

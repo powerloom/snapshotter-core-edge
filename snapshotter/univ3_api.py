@@ -284,8 +284,8 @@ async def get_trades_snapshot(
         return {"error": "Trades snapshot not found"}
     
 
-@app.get('/token/price/{token_address}')
-@app.get('/token/price/{token_address}/{block_number}')
+@app.get('/tokenPrices/all/{token_address}')
+@app.get('/tokenPrices/all/{token_address}/{block_number}')
 async def get_token_price_all(
     request: Request,
     response: Response,
@@ -343,13 +343,14 @@ async def get_trade_volume_agg(
         return trade_volume_agg
     
 
-@app.get('/token/price/{token_address}/{pool_address}/series/{time_interval}')
+@app.get('/timeSeries/{token_address}/{pool_address}/{time_interval}/{step_seconds}')
 async def get_token_price_series(
     request: Request,
     response: Response,
     token_address: str,
     pool_address: str,
     time_interval: int,
+    step_seconds: int,
 ):
     token_address = Web3.to_checksum_address(token_address)
     pool_address = Web3.to_checksum_address(pool_address)
@@ -363,6 +364,7 @@ async def get_token_price_series(
             token_address=token_address,
             time_interval=time_interval,
             project_id=project_id,
+            step_seconds=step_seconds,
         )
         if not token_price_series:
             response.status_code = 404

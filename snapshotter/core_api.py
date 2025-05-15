@@ -274,7 +274,7 @@ async def get_data_for_project_id_epoch_id(
             'message': f'IPFS url not set, /data API endpoint is unusable, please use /cid endpoint instead!',
         }
     try:
-        data = await get_project_epoch_snapshot(
+        snapshot_response = await get_project_epoch_snapshot(
             request.app.state.redis_conn,
             request.app.state.protocol_state_contract,
             request.app.state.anchor_rpc_helper,
@@ -294,14 +294,32 @@ async def get_data_for_project_id_epoch_id(
             f' epoch_id: {epoch_id}, error: {e}',
         }
 
-    if not data:
+    if not snapshot_response.has_data:
         response.status_code = 404
         return {
             'status': 'error',
             'message': f'No data found for project_id: {project_id},'
             f' epoch_id: {epoch_id}',
         }
-    return data
+    
+    # If we have an exact match, return its data
+    if snapshot_response.exact_match:
+        return snapshot_response.exact_match.data
+    
+    # If we have closest epochs info, return that
+    if snapshot_response.closest_epochs:
+        return {
+            'status': 'closest_epochs',
+            'previous': snapshot_response.closest_epochs.previous.dict() if snapshot_response.closest_epochs.previous else None,
+            'next': snapshot_response.closest_epochs.next.dict() if snapshot_response.closest_epochs.next else None
+        }
+    
+    # This should never happen since we checked has_data above
+    response.status_code = 500
+    return {
+        'status': 'error',
+        'message': f'Internal error: response has no data despite has_data check'
+    }
 
 
 @app.get('/cid/{epoch_id}/{project_id}/')
