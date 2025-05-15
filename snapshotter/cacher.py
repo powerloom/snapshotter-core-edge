@@ -370,6 +370,13 @@ class Cacher(multiprocessing.Process):
                             blank_epochs_zset_key,
                             mapping=epoch_mapping,
                         )
+                    if len(snapshot_data["previousSnapshots"]) > 0:
+                        epoch_id = snapshot_data["previousSnapshots"][0][0]
+                        epoch_cid = snapshot_data["previousSnapshots"][0][1]
+
+                        # check if epoch_id is present in project_hmap_key and blank_epochs_set_key
+                        if (not await redis_conn.hexists(project_hmap_key, epoch_id)):
+                            await self.process_snapshot_cid(redis_conn, project_id, epoch_cid, epoch_id)
 
                 if project_config.cache_cids:
                     snapshot_data["previousSnapshots"] = []
