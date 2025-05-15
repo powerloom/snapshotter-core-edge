@@ -28,6 +28,7 @@ from dramatiq.worker import Worker
 from eth_utils.address import to_checksum_address
 from eth_utils.crypto import keccak
 from redis import asyncio as aioredis
+from web3 import Web3
 
 from snapshotter.settings.config import settings
 from snapshotter.utils.default_logger import default_logger
@@ -47,10 +48,13 @@ from snapshotter.utils.redis.redis_keys import snapshots_to_unpin_zset_name
 from snapshotter.utils.redis.redis_keys import last_submitted_snapshot_data_key
 from snapshotter.utils.redis.redis_keys import data_expiry_zset
 from snapshotter.utils.redis.redis_keys import cid_cache
-from snapshotter.utils.redis.redis_keys import blank_epochs_set
+from snapshotter.utils.redis.redis_keys import blank_epochs_zset
 from snapshotter.utils.dramatiq_queues import CACHER_QUEUE_NAME
 from snapshotter.utils.data_utils import get_submission_data
 from snapshotter.utils.data_utils import get_project_config
+from snapshotter.utils.data_utils import get_source_chain_block_time
+from snapshotter.utils.data_utils import get_source_chain_epoch_size
+
 
 PROJECT_DATA_ENTRY_EXPIRY = 60 * 60 * 24 * 7  # 7 days in seconds
 
@@ -349,19 +353,22 @@ class Cacher(multiprocessing.Process):
                         all_previous_snapshot_keys.discard(epoch_id)
                         expiry_keys.append(f"{project_id}|{epoch_id}")
 
-                        # Add to pipeline if we have data to cache
-                        if data_to_cache:
-                            pipeline.hset(
-                                project_hmap_key,
-                                mapping=data_to_cache,
-                            )
+                    # Add to pipeline if we have data to cache
+                    if data_to_cache:
+                        pipeline.hset(
+                            project_hmap_key,
+                            mapping=data_to_cache,
+                        )
                     
-                    blank_epochs_set_key = blank_epochs_set(project_id)
-                    for epoch_id in all_previous_snapshot_keys:
-                        # add epoch to blank epochs set
-                        pipeline.sadd(
-                            blank_epochs_set_key,
-                            epoch_id,
+                    blank_epochs_zset_key = blank_epochs_zset(project_id)
+                    epoch_mapping = {
+                        f"{epoch_id}": int(epoch_id)
+                        for epoch_id in all_previous_snapshot_keys
+                    }
+                    if epoch_mapping:
+                        pipeline.zadd(
+                            blank_epochs_zset_key,
+                            mapping=epoch_mapping,
                         )
 
                 if project_config.cache_cids:
@@ -718,11 +725,13 @@ class Cacher(multiprocessing.Process):
                     
                     # Group by project_id for efficient deletion
                     entries_by_hmap = {}
+                    unique_blank_zset_keys_to_prune = set()
                     for entry, _ in expired_entries:
                         project_id, key = entry.decode('utf-8').split('|')
                         if project_id not in entries_by_hmap:
                             entries_by_hmap[project_id] = []
                         entries_by_hmap[project_id].append(key)
+                        unique_blank_zset_keys_to_prune.add(blank_epochs_zset(project_id))
                     
                     # Remove the entries from the hashmaps and the expiry set
                     pipeline = self._redis_conn.pipeline()
@@ -731,7 +740,51 @@ class Cacher(multiprocessing.Process):
                     
                     # Remove from expiry tracking
                     pipeline.zrem(data_expiry_zset(), *[entry for entry, _ in expired_entries])
+
+                    # Prune blank_epochs_zset for affected projects
+                    source_chain_block_time = await get_source_chain_block_time(
+                        redis_conn=self._redis_conn,
+                        rpc_helper=self._anchor_rpc_helper,
+                        state_contract_obj=self._protocol_state_contract,
+                    )
+
+                    source_chain_epoch_size = await get_source_chain_epoch_size(
+                        redis_conn=self._redis_conn,
+                        rpc_helper=self._anchor_rpc_helper,
+                        state_contract_obj=self._protocol_state_contract,
+                    )
+
+                    [current_epoch_data] = await self._anchor_rpc_helper.web3_call(
+                        tasks=[
+                            ('currentEpoch', [Web3.to_checksum_address(settings.data_market)]),
+                        ],
+                        contract_addr=self._protocol_state_contract.address,
+                        abi=self._protocol_state_contract.abi,
+                    )
                     
+                    current_epoch_id = current_epoch_data[2]
+                    
+                    if source_chain_epoch_size > 0 and source_chain_block_time > 0:
+                        epoch_duration_seconds = source_chain_epoch_size * source_chain_block_time
+                        epochs_to_go_back = int(self._project_data_entry_expiry / epoch_duration_seconds)
+                        pruning_threshold_epoch_id = current_epoch_id - epochs_to_go_back
+
+                        if pruning_threshold_epoch_id > 0:
+                            self._logger.info(f"Pruning blank epochs up to epoch ID {pruning_threshold_epoch_id} (7 days ago).")
+                            for zset_key_to_prune in unique_blank_zset_keys_to_prune:
+                                pipeline.zremrangebyscore(zset_key_to_prune, 0, pruning_threshold_epoch_id)
+                        else:
+                            self._logger.info(
+                                f"Calculated pruning threshold epoch ID ({pruning_threshold_epoch_id}) is not greater than 0. "
+                                f"Skipping pruning of blank_epochs_zsets for this cycle."
+                            )
+                    else:
+                        self._logger.warning(
+                            f"source_chain_epoch_size ({source_chain_epoch_size}) or "
+                            f"source_chain_block_time ({source_chain_block_time}) is zero or invalid. "
+                            f"Skipping pruning of blank_epochs_zsets for this cycle."
+                        )
+                        
                     await pipeline.execute()
 
             except Exception as e:

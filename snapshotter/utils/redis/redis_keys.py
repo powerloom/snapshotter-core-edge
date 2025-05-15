@@ -21,7 +21,7 @@ def cid_cache(cid: str):
     return f'CIDCache:{cid}'
 
 
-def blank_epochs_set(project_id: str):
+def blank_epochs_zset(project_id: str):
     """
     Generate Redis key for blank epochs set.
     """

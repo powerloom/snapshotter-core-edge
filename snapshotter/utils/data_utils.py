@@ -27,7 +27,7 @@ from snapshotter.utils.redis.redis_keys import source_chain_epoch_size_key
 from snapshotter.utils.redis.redis_keys import source_chain_id_key
 from snapshotter.utils.redis.redis_keys import data_expiry_zset
 from snapshotter.utils.redis.redis_keys import cid_cache
-from snapshotter.utils.redis.redis_keys import blank_epochs_set
+from snapshotter.utils.redis.redis_keys import blank_epochs_zset
 from snapshotter.settings.config import projects_config
 
 logger = default_logger.bind(module='data_helper')
@@ -98,8 +98,8 @@ async def get_project_finalized_cid(redis_conn: aioredis.Redis, state_contract_o
         cid = cid_data["snapshot_cid"]
     else:
         # check if epoch is in blank epochs set
-        blank_epochs_set_key = blank_epochs_set(project_id)
-        is_blank_epoch = await redis_conn.sismember(blank_epochs_set_key, epoch_id)
+        blank_epochs_zset_key = blank_epochs_zset(project_id)
+        is_blank_epoch = await redis_conn.zscore(blank_epochs_zset_key, str(epoch_id))
         if is_blank_epoch:
             cid = f'null_{epoch_id}'
         else:
@@ -194,8 +194,25 @@ async def get_project_finalized_cids_bulk(
     existing_epochs = set([epoch_id for _, epoch_id in cid_data_with_epochs])
     missing_epochs_with_blanks = list(epoch_ids_set.difference(existing_epochs))
     missing_epochs = []
-    blank_epochs_set_key = blank_epochs_set(project_id)
-    are_blank_epochs = await redis_conn.smismember(blank_epochs_set_key, missing_epochs_with_blanks)
+    are_blank_epochs = []
+
+    if missing_epochs_with_blanks:
+        blank_epochs_zset_key = blank_epochs_zset(project_id)
+        
+        min_epoch_to_check_for_blank = min(missing_epochs_with_blanks)
+        max_epoch_to_check_for_blank = max(missing_epochs_with_blanks)
+
+        blank_epoch_members_in_range = await redis_conn.zrangebyscore(
+            blank_epochs_zset_key,
+            min_epoch_to_check_for_blank,
+            max_epoch_to_check_for_blank
+        )
+
+        if blank_epoch_members_in_range:
+            set_of_blank_epoch_members = set(blank_epoch_members_in_range)
+            are_blank_epochs = [epoch_id in set_of_blank_epoch_members for epoch_id in missing_epochs_with_blanks]
+        else:
+            are_blank_epochs = [False] * len(missing_epochs_with_blanks)
 
     for epoch_id, is_blank in zip(missing_epochs_with_blanks, are_blank_epochs):
         if is_blank:
@@ -273,7 +290,7 @@ async def w3_get_and_cache_finalized_cid(
     expiry_time = int(time.time()) + PROJECT_DATA_ENTRY_EXPIRY
     pipeline = redis_conn.pipeline()
     expiry_keys = []
-    blank_epochs_set_key = blank_epochs_set(project_id)
+    blank_epochs_zset_key = blank_epochs_zset(project_id)
 
     # Fetch consensus status and CID from the blockchain
     [consensus_status, current_epoch] = await rpc_helper.web3_call(
@@ -327,17 +344,21 @@ async def w3_get_and_cache_finalized_cid(
                     all_previous_snapshot_keys.discard(epoch_id)
                     expiry_keys.append(f"{project_id}|{epoch_id}")
 
-                    # Add to pipeline if we have data to cache
-                    if data_to_cache:
-                        pipeline.hset(
-                            project_hmap_key,
-                            mapping=data_to_cache,
-                        )
+                # Add to pipeline if we have data to cache
+                if data_to_cache:
+                    pipeline.hset(
+                        project_hmap_key,
+                        mapping=data_to_cache,
+                    )
 
-                for epoch_id in all_previous_snapshot_keys:
-                    pipeline.sadd(
-                        blank_epochs_set_key,
-                        epoch_id,
+                blank_epoch_mapping_for_missing_previous = {
+                    str(missing_prev_ep_id): int(missing_prev_ep_id)
+                    for missing_prev_ep_id in all_previous_snapshot_keys
+                }
+                if blank_epoch_mapping_for_missing_previous:
+                    pipeline.zadd(
+                        blank_epochs_zset_key,
+                        mapping=blank_epoch_mapping_for_missing_previous,
                     )
 
             if expiry_keys:
@@ -357,10 +378,9 @@ async def w3_get_and_cache_finalized_cid(
         await pipeline.execute()
         return cid, epoch_id
     else:
-        pipeline = redis_conn.pipeline()
-        pipeline.sadd(
-            blank_epochs_set_key,
-            epoch_id,
+        pipeline.zadd(
+            blank_epochs_zset_key,
+            {str(epoch_id): int(epoch_id)},
         )
 
         await pipeline.execute()
@@ -400,11 +420,24 @@ async def w3_get_and_cache_finalized_cid_bulk_using_previous_snapshots(
     """
     try:
 
-        blank_epochs_set_key = blank_epochs_set(project_id)
+        blank_epochs_zset_key = blank_epochs_zset(project_id)
         missing_epochs = []
         cid_data_with_epochs = []
 
-        are_blank_epochs = await redis_conn.smismember(blank_epochs_set_key, epoch_ids)
+        max_epoch_id = max(epoch_ids)
+        min_epoch_id = min(epoch_ids)
+
+        blank_epoch_members_in_range = await redis_conn.zrangebyscore(
+            blank_epochs_zset_key,
+            min_epoch_id,
+            max_epoch_id
+        )
+
+        if blank_epoch_members_in_range:
+            blank_epoch_members_in_range_set = set(blank_epoch_members_in_range)
+            are_blank_epochs = [epoch_id in blank_epoch_members_in_range_set for epoch_id in epoch_ids]
+        else:
+            are_blank_epochs = [False] * len(epoch_ids)
 
         for epoch_id, is_blank in zip(epoch_ids, are_blank_epochs):
             if is_blank:
@@ -427,7 +460,21 @@ async def w3_get_and_cache_finalized_cid_bulk_using_previous_snapshots(
             if cid and "null" not in cid:
                 missing_epoch_list = list(missing_epochs)
                 redis_cache_data = await redis_conn.hmget(project_hmap_key, missing_epoch_list)
-                are_blank_epochs = await redis_conn.smismember(blank_epochs_set_key, missing_epoch_list)
+
+                max_missing_epoch_id = max(missing_epoch_list)
+                min_missing_epoch_id = min(missing_epoch_list)
+
+                blank_epoch_members_in_range = await redis_conn.zrangebyscore(
+                    blank_epochs_zset_key,
+                    min_missing_epoch_id,
+                    max_missing_epoch_id
+                )
+
+                if blank_epoch_members_in_range:
+                    set_of_blank_epoch_members = set(blank_epoch_members_in_range)
+                    are_blank_epochs = [epoch_id in set_of_blank_epoch_members for epoch_id in missing_epoch_list]
+                else:
+                    are_blank_epochs = [False] * len(missing_epoch_list)
 
                 for epoch_id, is_blank in zip(missing_epoch_list, are_blank_epochs):
                     if is_blank:
@@ -485,7 +532,7 @@ async def w3_get_and_cache_finalized_cid_bulk(
     """
     try:
         pipeline = redis_conn.pipeline()
-        blank_epochs_set_key = blank_epochs_set(project_id)
+        blank_epochs_zset_key = blank_epochs_zset(project_id)
         all_results = []
 
         for i in range(0, len(epoch_ids), BATCH_SIZE):
@@ -512,6 +559,7 @@ async def w3_get_and_cache_finalized_cid_bulk(
         
         # Create mappings only for non-existing keys
         data_to_cache = {}
+        blank_epochs_mapping = {}
         expiry_keys = []
         expiry_time = int(time.time()) + PROJECT_DATA_ENTRY_EXPIRY
 
@@ -534,10 +582,7 @@ async def w3_get_and_cache_finalized_cid_bulk(
                 cids_with_epochs.append((cid, epoch_id))
             else:
                 cids_with_epochs.append((null_cid, epoch_id))
-                pipeline.sadd(
-                    blank_epochs_set_key,
-                    epoch_id,
-                )
+                blank_epochs_mapping[str(epoch_id)] = int(epoch_id)
 
         # Use pipeline for Redis operations if we have keys to update
         if data_to_cache:
@@ -545,6 +590,12 @@ async def w3_get_and_cache_finalized_cid_bulk(
             pipeline.hset(
                 project_hmap_key,
                 mapping=data_to_cache,
+            )
+
+        if blank_epochs_mapping:
+            pipeline.zadd(
+                blank_epochs_zset_key,
+                mapping=blank_epochs_mapping,
             )
 
         # Add to expiry tracking sorted set with TTL
@@ -1205,105 +1256,6 @@ async def get_project_time_series_data(
         ipfs_reader=ipfs_reader,
         project_id=project_id,
     )
-
-
-async def get_project_random_epoch_snapshots(
-    redis_conn: aioredis.Redis,
-    state_contract_obj,
-    rpc_helper,
-    ipfs_reader,
-    project_id: str,
-    num_epochs: int = 10,
-    ensure_complete: bool = False,
-):
-    """
-    Fetches snapshot data for randomly selected epochs of a given project.
-
-    This function retrieves the first and last finalized epochs for the project,
-    then randomly selects a specified number of epochs within that range and fetches
-    their snapshot data.
-
-    Args:
-        redis_conn (aioredis.Redis): Redis connection object.
-        state_contract_obj: State contract object.
-        rpc_helper (RpcHelper): Helper object for making RPC calls.
-        ipfs_reader: IPFS reader object.
-        project_id (str): ID of the project to fetch snapshots for.
-        num_epochs (int): Number of random epochs to select (default: 10).
-        ensure_complete (bool): Whether to ensure all selected epochs have complete data.
-
-    Returns:
-        dict: A dictionary mapping epoch IDs to their corresponding snapshot data.
-              If ensure_complete is True and any data is missing, returns an empty dict.
-    """
-    import random
-    
-    # Get the first and last finalized epochs for the project
-    [project_first_epoch, project_last_epoch] = await asyncio.gather(
-        get_project_first_epoch(redis_conn, state_contract_obj, rpc_helper, project_id),
-        get_project_last_finalized_epoch(redis_conn, state_contract_obj, rpc_helper, project_id),
-    )
-    
-    if project_first_epoch is None or project_last_epoch is None:
-        logger.error(f"Could not determine epoch range for project {project_id}")
-        return {}
-    
-    # Calculate the available epoch range
-    available_range = project_last_epoch - project_first_epoch + 1
-    
-    # If the available range is smaller than the requested number of epochs,
-    # adjust the number of epochs to select
-    if available_range <= num_epochs:
-        logger.info(f"Available epoch range ({available_range}) is less than or equal to requested number ({num_epochs}). "
-                   f"Using all available epochs.")
-        selected_epochs = list(range(project_first_epoch, project_last_epoch + 1))
-    else:
-        # Randomly select epochs within the available range
-        selected_epochs = sorted(random.sample(range(project_first_epoch, project_last_epoch + 1), num_epochs))
-    
-    logger.info(f"Selected {len(selected_epochs)} random epochs for project {project_id}: {selected_epochs}")
-    
-    # Fetch the CIDs for the selected epochs
-    cid_tasks = [
-        get_project_finalized_cid(
-            redis_conn,
-            state_contract_obj,
-            rpc_helper,
-            ipfs_reader,
-            epoch_id,
-            project_id,
-        )
-        for epoch_id in selected_epochs
-    ]
-    
-    all_cids = await asyncio.gather(*cid_tasks)
-    
-    # Filter out any null CIDs and their corresponding epochs
-    valid_cids_with_epochs = [
-        (cid, epoch_id) for cid, epoch_id in zip(all_cids, selected_epochs)
-        if cid and 'null' not in cid
-    ]
-    
-    if ensure_complete and len(valid_cids_with_epochs) < len(selected_epochs):
-        logger.error(f"Incomplete CIDs found for project {project_id}. "
-                    f"Found {len(valid_cids_with_epochs)} valid CIDs out of {len(selected_epochs)} selected epochs.")
-        return {}
-    
-    # Fetch the snapshot data for the valid CIDs
-    all_snapshot_data = await get_submission_data_bulk(
-        redis_conn,
-        [cid for cid, _ in valid_cids_with_epochs],
-        ipfs_reader,
-        project_id,
-        ensure_complete=ensure_complete,
-    )
-    
-    # Pair each snapshot with its epoch ID
-    result = {}
-    for (_, epoch_id), snapshot_data in zip(valid_cids_with_epochs, all_snapshot_data):
-        result[epoch_id] = snapshot_data
-    
-    return result
 
 
 ### UNISWAP V3 SPECIFIC LOGIC ###
