@@ -46,7 +46,8 @@ from snapshotter.utils.redis.redis_keys import service_health_timestamps_key
 from snapshotter.utils.redis.redis_keys import snapshots_to_unpin_zset_name
 from snapshotter.utils.redis.redis_keys import last_submitted_snapshot_data_key
 from snapshotter.utils.redis.redis_keys import data_expiry_zset
-from snapshotter.utils.redis.redis_keys import cid_cache_hmap
+from snapshotter.utils.redis.redis_keys import cid_cache
+from snapshotter.utils.redis.redis_keys import blank_epochs_set
 from snapshotter.utils.dramatiq_queues import CACHER_QUEUE_NAME
 from snapshotter.utils.data_utils import get_submission_data
 from snapshotter.utils.data_utils import get_project_config
@@ -148,8 +149,7 @@ class Cacher(multiprocessing.Process):
         self._worker_thread: Optional[threading.Thread] = None
         # TODO: Move to settings later
         self._project_data_entry_expiry = 60 * 60 * 24 * 7  # 7 days in seconds
-        self.CLEANUP_INTERVAL = 60 * 60
-        self._last_cleanup_timestamp = {}
+        self._cleanup_interval = 60 * 60
 
     def _signal_handler(self, signum, frame):
         """
@@ -229,6 +229,7 @@ class Cacher(multiprocessing.Process):
             await self._init_protocol_meta()
             await self._init_ipfs_client()
             asyncio.create_task(self._cleanup_tasks())
+            asyncio.create_task(self._cleanup_expired_project_data())
 
         self._initialized = True
 
@@ -296,9 +297,9 @@ class Cacher(multiprocessing.Process):
             
             # Add to expiry tracking sorted set with TTL
             expiry_time = int(time.time()) + self._project_data_entry_expiry
-            expiry_key = f"{project_hmap_key}|{msg_obj.epochId}"
+            expiry_key = f"{project_id}|{msg_obj.epochId}"
             pipeline.zadd(
-                name=data_expiry_zset(project_id),
+                name=data_expiry_zset(),
                 mapping={expiry_key: expiry_time}
             )
 
@@ -314,11 +315,9 @@ class Cacher(multiprocessing.Process):
                     ).model_dump_json(),
                 },
             )
-            await self.cleanup_expired_project_data(project_id)
         
         # Execute all commands in a single network round-trip
         await pipeline.execute()
-
 
     async def process_snapshot_cid(self, redis_conn: aioredis.Redis, project_id: str, snapshot_cid: str, epoch_id: int, last_processed_epoch: int = 0):
         try:
@@ -348,7 +347,7 @@ class Cacher(multiprocessing.Process):
                             "status": SnapshotStatus.SUBMITTED.value
                         })
                         all_previous_snapshot_keys.discard(epoch_id)
-                        expiry_keys.append(f"{project_hmap_key}|{epoch_id}")
+                        expiry_keys.append(f"{project_id}|{epoch_id}")
 
                         # Add to pipeline if we have data to cache
                         if data_to_cache:
@@ -356,31 +355,29 @@ class Cacher(multiprocessing.Process):
                                 project_hmap_key,
                                 mapping=data_to_cache,
                             )
+                    
+                    blank_epochs_set_key = blank_epochs_set(project_id)
                     for epoch_id in all_previous_snapshot_keys:
-                        null_cid = f'null_{epoch_id}'
-                        pipeline.hset(
-                            project_hmap_key,
+                        # add epoch to blank epochs set
+                        pipeline.sadd(
+                            blank_epochs_set_key,
                             epoch_id,
-                            json.dumps({"snapshot_cid": null_cid, "status": SnapshotStatus.NULL.value}),
                         )
-                        expiry_keys.append(f"{project_hmap_key}|{epoch_id}")
 
                 if project_config.cache_cids:
                     snapshot_data["previousSnapshots"] = []
                     # cache lite snapshot in redis
-                    cid_cache_key = cid_cache_hmap(project_id)
-                    pipeline.hset(
+                    cid_cache_key = cid_cache(snapshot_cid)
+                    pipeline.set(
                         name=cid_cache_key,
-                        mapping={
-                            snapshot_cid: json.dumps(snapshot_data),
-                        },
+                        value=json.dumps(snapshot_data),
+                        ex=self._project_data_entry_expiry,
                     )
-                    expiry_keys.append(f"{cid_cache_key}|{snapshot_cid}")
 
             if expiry_keys:
                 expiry_data = {key: expiry_time for key in expiry_keys}
                 pipeline.zadd(
-                    name=data_expiry_zset(project_id),
+                    name=data_expiry_zset(),
                     mapping=expiry_data,
                 )
 
@@ -440,9 +437,9 @@ class Cacher(multiprocessing.Process):
         
         # Add to expiry tracking sorted set with TTL
         expiry_time = int(time.time()) + self._project_data_entry_expiry
-        expiry_key = f"{project_hmap_key}|{msg_obj.epochId}"
+        expiry_key = f"{msg_obj.projectId}|{msg_obj.epochId}"
         pipeline.zadd(
-            name=data_expiry_zset(msg_obj.projectId),
+            name=data_expiry_zset(),
             mapping={expiry_key: expiry_time}
         )
         
@@ -457,7 +454,6 @@ class Cacher(multiprocessing.Process):
         
         # Execute all commands in a single network round-trip
         await pipeline.execute()
-        await self.cleanup_expired_project_data(msg_obj.projectId)
 
     async def _process_snapshot_finalized_message(self, event_data):
         """
@@ -509,9 +505,9 @@ class Cacher(multiprocessing.Process):
         
         # Add to expiry tracking sorted set with TTL
         expiry_time = int(time.time()) + self._project_data_entry_expiry
-        expiry_key = f"{project_hmap_key}|{msg_obj.epochId}"
+        expiry_key = f"{msg_obj.projectId}|{msg_obj.epochId}"
         pipeline.zadd(
-            name=data_expiry_zset(msg_obj.projectId),
+            name=data_expiry_zset(),
             mapping={expiry_key: expiry_time}
         )
 
@@ -526,7 +522,6 @@ class Cacher(multiprocessing.Process):
         
         # Execute all commands in a single network round-trip
         await pipeline.execute()
-        await self.cleanup_expired_project_data(msg_obj.projectId)
 
     async def process_event(self, event_type, event_data):
         """
@@ -700,56 +695,49 @@ class Cacher(multiprocessing.Process):
                 self._logger.error(f'Error in periodic health reporter loop: {e}')
                 await asyncio.sleep(self._health_report_interval)
 
-    async def cleanup_expired_project_data(self, project_id):
+    async def _cleanup_expired_project_data(self):
         """
         Periodically checks for and removes expired project data entries.
         
         This method runs in the background to clean up project data hash entries
         that have exceeded their TTL as recorded in the expiry sorted set.
         """
-        try:
-            if project_id in self._last_cleanup_timestamp:
-                last_cleanup_timestamp = self._last_cleanup_timestamp[project_id]
-            else:
-                last_cleanup_timestamp = 0
-            
-            current_time = int(time.time())
-            if current_time - last_cleanup_timestamp < self.CLEANUP_INTERVAL:
-                return
-            
-            # Get all entries that have expired
-            expired_entries = await self._redis_conn.zrangebyscore(
-                data_expiry_zset(project_id),
-                0,
-                current_time,
-                withscores=True
-            )
-            
-            if expired_entries:
-                self._logger.info(f"Cleaning up {len(expired_entries)} expired project data entries")
+        while True:
+            try:
+                current_time = int(time.time())
+                # Get all entries that have expired
+                expired_entries = await self._redis_conn.zrangebyscore(
+                    data_expiry_zset(),
+                    0,
+                    current_time,
+                    withscores=True
+                )
                 
-                # Group by project_id for efficient deletion
-                entries_by_hmap = {}
-                for entry, _ in expired_entries:
-                    project_id, key = entry.decode('utf-8').split('|')
-                    if project_id not in entries_by_hmap:
-                        entries_by_hmap[project_id] = []
-                    entries_by_hmap[project_id].append(key)
-                
-                # Remove the entries from the hashmaps and the expiry set
-                pipeline = self._redis_conn.pipeline()
-                for hmap, keys in entries_by_project_hmap.items():
-                    cid_cache_key = cid_cache_hmap(project_id)
-                    pipeline.hdel(cid_cache_key, *keys)
-                
-                # Remove from expiry tracking
-                pipeline.zrem(data_expiry_zset(project_id), *[entry for entry, _ in expired_entries])
-                
-                await pipeline.execute()
+                if expired_entries:
+                    self._logger.info(f"Cleaning up {len(expired_entries)} expired project data entries")
+                    
+                    # Group by project_id for efficient deletion
+                    entries_by_hmap = {}
+                    for entry, _ in expired_entries:
+                        project_id, key = entry.decode('utf-8').split('|')
+                        if project_id not in entries_by_hmap:
+                            entries_by_hmap[project_id] = []
+                        entries_by_hmap[project_id].append(key)
+                    
+                    # Remove the entries from the hashmaps and the expiry set
+                    pipeline = self._redis_conn.pipeline()
+                    for project_id, keys in entries_by_hmap.items():
+                        pipeline.hdel(project_data_hmap(project_id), *keys)
+                    
+                    # Remove from expiry tracking
+                    pipeline.zrem(data_expiry_zset(), *[entry for entry, _ in expired_entries])
+                    
+                    await pipeline.execute()
 
-                self._last_cleanup_timestamp[project_id] = current_time
-        except Exception as e:
-            self._logger.error(f"Error cleaning up expired project data: {e}")
+            except Exception as e:
+                self._logger.error(f"Error cleaning up expired project data: {e}")
+        
+            await asyncio.sleep(self._cleanup_interval)
 
     def run(self) -> None:
         """
@@ -802,10 +790,6 @@ class Cacher(multiprocessing.Process):
                 health_reporter_task.cancel()
                 ev_loop.run_until_complete(asyncio.sleep(2))
             
-            if cleanup_expired_project_data_task and not cleanup_expired_project_data_task.done():
-                cleanup_expired_project_data_task.cancel()
-                ev_loop.run_until_complete(asyncio.sleep(2))
-
             ev_loop.close()
 
 
