@@ -1,8 +1,8 @@
 import asyncio
 import json
-from typing import List, Optional, Tuple, Type, Dict, Any
 import time
 import tenacity
+
 from pydantic import BaseModel
 from redis import asyncio as aioredis
 from rpc_helper.rpc import RpcHelper
@@ -10,13 +10,15 @@ from tenacity import retry
 from tenacity import retry_if_exception_type
 from tenacity import stop_after_attempt
 from tenacity import wait_random_exponential
+from typing import List, Optional, Tuple, Type, Dict, Any
 from web3 import Web3
 from ipfs_client.main import AsyncIPFSClient
-import random
+
 from computes.utils.models.message_models import UniswapBaseSnapshot, UniswapTradesSnapshot
 from snapshotter.utils.models.data_models import UniswapPoolMetadata, UniswapTokenPoolsSnapshot, UniswapEthPriceSnapshot, EpochSnapshotResponse, ExactEpochSnapshot, ClosestEpochs, EpochIdentifier
 from snapshotter.settings.config import settings
 from snapshotter.utils.default_logger import default_logger
+from snapshotter.utils.redis.redis_keys import block_timestamp_key
 from snapshotter.utils.redis.redis_keys import cached_block_details_at_height
 from snapshotter.utils.redis.redis_keys import cid_not_found_key
 from snapshotter.utils.redis.redis_keys import project_first_epoch_hmap
@@ -1255,6 +1257,72 @@ async def get_project_time_series_data(
     )
 
 
+async def fetch_block_timestamps(
+    redis_conn: aioredis.Redis,
+    rpc_helper: RpcHelper,
+    block_numbers: List[int],
+) -> Optional[int]:
+    
+    block_number_to_timestamp_mapping = {}
+    rpc_query = []
+
+    request_id = 1
+    for block in block_numbers:
+        rpc_query.append(
+            {
+                'jsonrpc': '2.0',
+                'method': 'eth_getBlockByNumber',
+                'params': [
+                    hex(block),
+                    False,
+                ],
+                'id': request_id,
+            },
+        )
+        request_id += 1
+
+    response_data = await rpc_helper._make_rpc_jsonrpc_call(rpc_query)
+
+    missing_block_data = []
+    if isinstance(response_data, list):
+
+        pipeline = redis_conn.pipeline()
+        
+        for block_num, block_data in zip(block_numbers, response_data):
+            if block_data and 'result' in block_data:
+                block_data = block_data['result']
+                if 'timestamp' in block_data:
+                    timestamp = int(block_data['timestamp'], 16)
+                    block_number_to_timestamp_mapping[block_num] = timestamp
+
+                    # NOTE: this function does not handle redis cleanup of block data / timestamps. This should be done by the caller.
+                    # For the Snapshotter-Core-Edge use case, this is handled by the block fetcher.
+                    pipeline.zadd(
+                        cached_block_details_at_height,
+                        json.dumps(block_data),
+                        block_num
+                    )
+
+                    pipeline.zadd(
+                        block_timestamp_key(settings.namespace),
+                        json.dumps(timestamp),
+                        block_num,
+                    )
+
+                else:
+                    logger.warning(f"No timestamp found for block {block_num}")
+                    missing_block_data.append(block_num)
+
+            # Couldn't find block data from rpc, using external api
+            else:
+                logger.warning(f"No block data found for block {block_num}")
+                missing_block_data.append(block_num)
+
+        await pipeline.execute()
+
+    return block_number_to_timestamp_mapping
+
+
 ### UNISWAP V3 SPECIFIC LOGIC ###
 # TODO: consider packaging this as a separate plugin like computes since it uses compute specific logic and cache access
  
@@ -1655,6 +1723,7 @@ async def get_uniswap_trade_volume_agg(
 
 async def get_uniswap_price_series_agg(
     redis_conn: aioredis.Redis,
+    rpc_helper: RpcHelper,
     anchor_rpc_helper: RpcHelper,
     ipfs_reader: AsyncIPFSClient,
     protocol_state_contract,
@@ -1681,20 +1750,27 @@ async def get_uniswap_price_series_agg(
     block_to_timestamp_map = {}
     if tail_epoch_id <= current_epoch:
         try:
-            block_details_raw = await redis_conn.zrangebyscore(
-                cached_block_details_at_height,
+            # Fetch timestamp values along with their scores (block numbers)
+            timestamp_data_raw = await redis_conn.zrangebyscore(
+                block_timestamp_key(settings.namespace),
                 min=tail_epoch_id,
-                max=current_epoch
+                max=current_epoch,
+                withscores=True
             )
-            for item_raw in block_details_raw:
+            
+            for item_raw, block_num_score in timestamp_data_raw:
                 if item_raw:
-                    block_data = json.loads(item_raw)
-                    block_num = int(block_data['number'], 16)
-                    timestamp = int(block_data['timestamp'], 16)
-                    block_to_timestamp_map[block_num] = timestamp
+                    try:
+                        timestamp = json.loads(item_raw)
+                        block_num = int(block_num_score)
+                        block_to_timestamp_map[block_num] = int(timestamp)
+                    except json.JSONDecodeError as jde:
+                        logger.warning(f"Failed to decode JSON for timestamp data: {item_raw}. Error: {jde}")
+                    except TypeError as te:
+                        logger.warning(f"TypeError during processing of timestamp data. item_raw: {item_raw}, score: {block_num_score}. Error: {te}")
         except Exception as e:
             logger.opt(exception=True).error(
-                f"Error fetching block details from Redis for key {cached_block_details_at_height} "
+                f"Error fetching block timestamps from Redis for key {block_timestamp_key(settings.namespace)} "
                 f"in range {tail_epoch_id}-{current_epoch}: {e}"
             )
 
@@ -1787,7 +1863,7 @@ async def get_uniswap_price_series_agg(
             raise ValueError(msg)
 
     last_known_price = None
-    if not tail_epoch_covered_by_bulk:
+    if snapshot_at_tail and target_token_price_key and not tail_epoch_covered_by_bulk:
         prices_from_tail_snapshot = snapshot_at_tail.get(target_token_price_key)
         if isinstance(prices_from_tail_snapshot, dict):
             latest_relevant_block_num_in_tail = -1
@@ -1797,9 +1873,7 @@ async def get_uniswap_price_series_agg(
                     if block_num <= tail_epoch_id and block_num > latest_relevant_block_num_in_tail:
                         latest_relevant_block_num_in_tail = block_num
                 except ValueError:
-                    logger.warning(
-                        f"Could not parse block_num_str '{block_num_str}' from snapshot_at_tail keys for project {project_id}."
-                    )
+                    logger.warning(f"Could not parse block_num_str '{block_num_str}' from snapshot_at_tail for project {project_id}.")
                     continue
             
             # If a relevant block number was found, get its price
@@ -1827,15 +1901,40 @@ async def get_uniswap_price_series_agg(
             raise ValueError(msg)
 
     price_data = []
+    
+    all_block_numbers_in_range = []
     if tail_epoch_id <= current_epoch:
-        for current_block_num in range(tail_epoch_id, current_epoch + 1):
-            current_timestamp = block_to_timestamp_map.get(current_block_num)
+        all_block_numbers_in_range = list(range(tail_epoch_id, current_epoch + 1))
+
+    block_timestamps_to_fetch_rpc = []
+    if all_block_numbers_in_range:
+        for block_num in all_block_numbers_in_range:
+            if block_num not in block_to_timestamp_map:
+                block_timestamps_to_fetch_rpc.append(block_num)
+
+    if block_timestamps_to_fetch_rpc:
+        logger.info(
+            f"Timestamps for {len(block_timestamps_to_fetch_rpc)} blocks (e.g., {block_timestamps_to_fetch_rpc[:5]}{'...' if len(block_timestamps_to_fetch_rpc) > 5 else ''}) "
+            f"not found in initial Redis cache for project {project_id}. Attempting to fetch from RPC."
+        )
+        fetched_timestamps_from_rpc = await fetch_block_timestamps(
+            redis_conn=redis_conn,
+            rpc_helper=rpc_helper,
+            block_numbers=block_timestamps_to_fetch_rpc,
+        )
+        if fetched_timestamps_from_rpc:
+            block_to_timestamp_map.update(fetched_timestamps_from_rpc)
+        else:
+            logger.warning(f"fetch_block_timestamps returned no data for {len(block_timestamps_to_fetch_rpc)} blocks for project {project_id}.")
+
+    if all_block_numbers_in_range:
+        for current_block_num in all_block_numbers_in_range:
+            current_timestamp = block_to_timestamp_map.get(current_block_num, None)
 
             if current_timestamp is None:
-                logger.warning(f"Timestamp not found in Redis for block {current_block_num} in project {project_id}. Skipping this block.")
+                logger.warning(f"Unable to determine timestamp for block {current_block_num} in project {project_id}, even after RPC attempt. Skipping this block in price series.")
                 continue
 
-            # Price from bulk snapshot takes precedence if available for the current block
             price_from_bulk = snapshot_prices_map.get(current_block_num)
             if price_from_bulk is not None:
                 last_known_price = price_from_bulk 
@@ -1851,9 +1950,10 @@ async def get_uniswap_price_series_agg(
                     'timestamp': current_timestamp,
                 })
             else:
-                logger.info(
+                # This case should ideally be prevented by handling of the last_known_price initialization,
+                logger.warning(
                     f"No price data available for block {current_block_num} (project {project_id}) "
-                    f"and no preceding price found (last_known_price is None). Skipping."
+                    f"and no preceding price established (last_known_price is None). Skipping this block."
                 )
  
     spaced_price_data = []

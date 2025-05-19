@@ -74,6 +74,7 @@ async def startup_boilerplate():
     """
     app.state.core_settings = settings
     app.state.local_user_cache = dict()
+    app.state.rpc_helper = RpcHelper(rpc_settings=settings.rpc)
     app.state.anchor_rpc_helper = RpcHelper(rpc_settings=settings.anchor_chain_rpc)
     await app.state.anchor_rpc_helper.init()
     app.state.protocol_state_contract = app.state.anchor_rpc_helper.get_current_node()['web3_client'].eth.contract(
@@ -359,6 +360,7 @@ async def get_token_price_series(
         token_price_series = await get_uniswap_price_series_agg(
             redis_conn=app.state.redis_conn,
             protocol_state_contract=app.state.protocol_state_contract,
+            rpc_helper=app.state.rpc_helper,
             anchor_rpc_helper=app.state.anchor_rpc_helper,
             ipfs_reader=app.state.ipfs_reader_client,
             token_address=token_address,
