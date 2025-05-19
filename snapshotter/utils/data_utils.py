@@ -174,7 +174,7 @@ async def get_project_finalized_cids_bulk(
 
     # Check Redis cache for existing CIDs
     epoch_ids_to_fetch = list(range(epoch_id_min, epoch_id_max + 1))
-    logger.info(f'Fetching CIDs for epochs {epoch_ids_to_fetch} for project {project_id}')
+    logger.info(f'Fetching CIDs for {len(epoch_ids_to_fetch)} epochs for project {project_id}')
     data_raw = await redis_conn.hmget(
         project_data_hmap(project_id=project_id),
         epoch_ids_to_fetch
@@ -208,11 +208,16 @@ async def get_project_finalized_cids_bulk(
             max_epoch_to_check_for_blank
         )
 
+        logger.info(f'Blank epochs in range: {blank_epoch_members_in_range}')
+
         if blank_epoch_members_in_range:
+            blank_epoch_members_in_range = [int(epoch) for epoch in blank_epoch_members_in_range]
             set_of_blank_epoch_members = set(blank_epoch_members_in_range)
             are_blank_epochs = [epoch_id in set_of_blank_epoch_members for epoch_id in missing_epochs_with_blanks]
         else:
             are_blank_epochs = [False] * len(missing_epochs_with_blanks)
+
+        logger.info(f'Are blank epochs: {are_blank_epochs}')
 
     for epoch_id, is_blank in zip(missing_epochs_with_blanks, are_blank_epochs):
         if is_blank:
@@ -220,18 +225,10 @@ async def get_project_finalized_cids_bulk(
         else:
             missing_epochs.append(epoch_id)
 
-    # blank_epochs = {int(epoch) for epoch in await redis_conn.smembers(blank_epochs_set_key)}
-
-    # for epoch_id in missing_epochs_with_blanks:
-    #     if epoch_id in blank_epochs:
-    #         cid_data_with_epochs.append((f'null_{epoch_id}', epoch_id))
-    #     else:
-    #         missing_epochs.append(epoch_id)
-
     # batch_web3_contract_calls
     if missing_epochs:
         if project_config.keep_previous_snapshot_data:
-            logger.info(f'Fetching CIDs for epochs {missing_epochs} for project {project_id}')
+            logger.info(f'Fetching CIDs for {len(missing_epochs)} epochs for project {project_id}')
             missing_cids_with_epochs = await w3_get_and_cache_finalized_cid_bulk_using_previous_snapshots(
                 redis_conn, state_contract_obj, rpc_helper, ipfs_reader, missing_epochs, project_id,
             )
