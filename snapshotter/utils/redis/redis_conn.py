@@ -126,6 +126,8 @@ class RedisPoolCache:
     """
     A class that manages a Redis connection pool cache.
     """
+    _aioredis_pool: aioredis.Redis
+    _pool_size: int
 
     def __init__(self, pool_size=2000):
         """
@@ -142,6 +144,6 @@ class RedisPoolCache:
         Populates the Redis connection pool with the specified number of connections.
         """
         if not self._aioredis_pool:
-            self._aioredis_pool: aioredis.Redis = await get_aioredis_pool(
+            self._aioredis_pool = await get_aioredis_pool(
                 self._pool_size,
             )
