@@ -14,7 +14,7 @@ from typing import List, Optional, Tuple, Type, Dict, Any
 from web3 import Web3
 from ipfs_client.main import AsyncIPFSClient
 
-from computes.utils.models.message_models import UniswapBaseSnapshot, UniswapTradesSnapshot
+from computes.utils.models.message_models import UniswapBaseSnapshot, UniswapTradesSnapshot, TradeType
 from snapshotter.utils.models.data_models import UniswapPoolMetadata, UniswapTokenPoolsSnapshot, UniswapEthPriceSnapshot, EpochSnapshotResponse, ExactEpochSnapshot, ClosestEpochs, EpochIdentifier
 from snapshotter.settings.config import settings
 from snapshotter.utils.default_logger import default_logger
@@ -29,11 +29,13 @@ from snapshotter.utils.redis.redis_keys import source_chain_id_key
 from snapshotter.utils.redis.redis_keys import data_expiry_zset
 from snapshotter.utils.redis.redis_keys import cid_cache
 from snapshotter.utils.redis.redis_keys import blank_epochs_zset
+from snapshotter.utils.redis.redis_keys import timestamp_to_block_number_key
 from snapshotter.settings.config import projects_config
 
 logger = default_logger.bind(module='data_helper')
 BATCH_SIZE = 50
 PROJECT_DATA_ENTRY_EXPIRY = 60 * 60 * 24 * 7  # 7 days in seconds
+WETH = Web3.to_checksum_address('0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2')
 
 
 def retry_state_callback(retry_state: tenacity.RetryCallState):
@@ -457,40 +459,47 @@ async def w3_get_and_cache_finalized_cid_bulk_using_previous_snapshots(
             missing_epochs.remove(epoch_to_fetch)
             if cid and "null" not in cid:
                 missing_epoch_list = list(missing_epochs)
-                redis_cache_data = await redis_conn.hmget(project_hmap_key, missing_epoch_list)
+                if missing_epoch_list:  # Check if the list is not empty
+                    redis_cache_data = await redis_conn.hmget(project_hmap_key, missing_epoch_list)
 
-                max_missing_epoch_id = max(missing_epoch_list)
-                min_missing_epoch_id = min(missing_epoch_list)
+                    max_missing_epoch_id = max(missing_epoch_list)
+                    min_missing_epoch_id = min(missing_epoch_list)
 
-                blank_epoch_members_in_range = await redis_conn.zrangebyscore(
-                    blank_epochs_zset_key,
-                    min_missing_epoch_id,
-                    max_missing_epoch_id
-                )
+                    blank_epoch_members_in_range = await redis_conn.zrangebyscore(
+                        blank_epochs_zset_key,
+                        min_missing_epoch_id,
+                        max_missing_epoch_id
+                    )
 
-                if blank_epoch_members_in_range:
-                    set_of_blank_epoch_members = set(blank_epoch_members_in_range)
-                    are_blank_epochs = [epoch_id in set_of_blank_epoch_members for epoch_id in missing_epoch_list]
-                else:
-                    are_blank_epochs = [False] * len(missing_epoch_list)
-
-                for epoch_id, is_blank in zip(missing_epoch_list, are_blank_epochs):
-                    if is_blank:
-                        cid_data_with_epochs.append((f'null_{epoch_id}', epoch_id))
-                        missing_epochs.remove(epoch_id)
-
-
-                data = []
-                for data_raw in redis_cache_data:
-                    if data_raw:
-                        data.append(json.loads(data_raw))
+                    if blank_epoch_members_in_range:
+                        set_of_blank_epoch_members = set(blank_epoch_members_in_range)
+                        are_blank_epochs = [epoch_id in set_of_blank_epoch_members for epoch_id in missing_epoch_list]
                     else:
-                        data.append(dict())
+                        are_blank_epochs = [False] * len(missing_epoch_list)
 
-                for snapshot_data, epoch_id in zip(data, missing_epoch_list):
-                    if "snapshot_cid" in snapshot_data:
-                        cid_data_with_epochs.append((snapshot_data["snapshot_cid"], epoch_id))
-                        missing_epochs.remove(epoch_id)                    
+                    for epoch_id, is_blank in zip(missing_epoch_list, are_blank_epochs):
+                        if is_blank:
+                            cid_data_with_epochs.append((f'null_{epoch_id}', epoch_id))
+                            missing_epochs.remove(epoch_id)
+
+
+                    data = []
+                    for data_raw_item in redis_cache_data: # Iterate over redis_cache_data directly
+                        if data_raw_item:
+                            data.append(json.loads(data_raw_item))
+                        else:
+                            data.append(dict())
+                    
+                    # Original missing_epoch_list used for zipping with data
+                    epochs_for_data_processing = missing_epoch_list[:]
+
+                    for snapshot_data, epoch_id_from_list in zip(data, epochs_for_data_processing):
+                        if "snapshot_cid" in snapshot_data:
+                            cid_data_with_epochs.append((snapshot_data["snapshot_cid"], epoch_id_from_list))
+                            if epoch_id_from_list in missing_epochs: # Check before removing
+                                missing_epochs.remove(epoch_id_from_list)
+                else:
+                    logger.debug(f"missing_epoch_list is empty after fetching CID for {epoch_to_fetch}. Skipping hmget for this iteration.")                    
 
         return cid_data_with_epochs
 
@@ -1345,6 +1354,60 @@ async def fetch_block_timestamps(
         return {}
 
 
+async def get_block_number_closest_to_timestamp(
+    redis_conn: aioredis.Redis,
+    target_timestamp: int,
+) -> Optional[int]:
+    """Finds the block number with the largest timestamp that is less than or equal to
+    the target_timestamp using a Redis ZSET.
+
+    The ZSET is expected to have timestamps as scores and block numbers (as strings) as values.
+
+    Args:
+        redis_conn: Async Redis connection object.
+        target_timestamp: The Unix timestamp to find the closest block at or before.
+
+    Returns:
+        The block number at or immediately before the target timestamp, 
+        or None if no such block is found.
+    """
+    key = timestamp_to_block_number_key(settings.namespace)
+    
+    try:
+        # Find block with the largest timestamp <= target_timestamp
+        result_before_raw = await redis_conn.zrevrangebyscore(
+            key, 
+            max=target_timestamp, 
+            min='-inf', 
+            start=0, 
+            num=1, 
+            withscores=True
+        )
+        
+        if result_before_raw:
+            block_num_bytes, ts_before_float = result_before_raw[0]
+            block_number = int(block_num_bytes.decode('utf-8'))
+            timestamp_of_block = int(ts_before_float)
+            logger.debug(
+                f"Closest block at or before {target_timestamp} is {block_number} "
+                f"(ts: {timestamp_of_block}) from key {key}"
+            )
+            return block_number
+        else:
+            logger.warning(
+                f"No block found at or before timestamp {target_timestamp} in ZSET {key}. "
+                f"This may mean the target timestamp is too old or data is missing."
+            )
+            return None
+
+    except Exception as e:
+        logger.error(
+            f"Error querying Redis for closest block at or before timestamp {target_timestamp} "
+            f"using key {key}: {e}", exc_info=True
+        )
+        return None
+
+
 ### UNISWAP V3 SPECIFIC LOGIC ###
 # TODO: consider packaging this as a separate plugin like computes since it uses compute specific logic and cache access
  
@@ -2003,3 +2066,119 @@ async def get_uniswap_price_series_agg(
         'priceSeries': spaced_price_data,
         'timeInterval': time_interval,
     }
+
+
+async def get_uniswap_v3_pool_trades(
+    redis_conn: aioredis.Redis,
+    anchor_rpc_helper: RpcHelper,
+    rpc_helper: RpcHelper,
+    ipfs_reader: AsyncIPFSClient,
+    project_id: str,
+    pool_address: str,
+    start_timestamp: int,
+    end_timestamp: int,
+    protocol_state_contract,
+) -> List[Dict]:
+    
+    pool_metadata = await get_uniswap_v3_pool_metadata(
+        pool_address=pool_address,
+        redis_conn=redis_conn,
+        anchor_rpc_helper=anchor_rpc_helper,
+        ipfs_reader=ipfs_reader,
+        protocol_state_contract=protocol_state_contract,
+    )
+
+    if not pool_metadata:
+        logger.error(f"No pool metadata found for project {project_id} and pool {pool_address}.")
+        raise Exception(f"No pool metadata found for project {project_id} and pool {pool_address}.")
+
+    closest_start_block = await get_block_number_closest_to_timestamp(
+        redis_conn=redis_conn,
+        target_timestamp=start_timestamp,
+    )
+
+    if not closest_start_block:
+        logger.error(f"No closest start block found for project {project_id} and pool {pool_address}.")
+        raise Exception(f"No closest start block found for project {project_id} and pool {pool_address}.")
+    
+    logger.info(f"Closest start block for project {project_id} and pool {pool_address} is {closest_start_block}.")
+
+    time_interval = end_timestamp - start_timestamp
+
+    tail_epoch_id, _ = await get_tail_epoch_id(
+        redis_conn, protocol_state_contract, anchor_rpc_helper, closest_start_block, time_interval, project_id,
+    )
+
+    logger.info(f"Tail epoch ID for project {project_id} and pool {pool_address} is {tail_epoch_id}.")
+
+    trade_snapshots_raw = await get_project_epoch_snapshot_bulk(
+        redis_conn, protocol_state_contract, anchor_rpc_helper, ipfs_reader, tail_epoch_id, closest_start_block, project_id,
+    )
+
+    if Web3.to_checksum_address(pool_metadata.token0.address) == WETH:
+        base_token_num = 0
+    else:
+        base_token_num = 1
+
+    token0_symbol = pool_metadata.token0.symbol
+    token1_symbol = pool_metadata.token1.symbol
+
+    processed_trades = [] # Changed from all_trades = {} to store processed trade data
+
+    for trade_snapshot_raw in trade_snapshots_raw:
+        if not trade_snapshot_raw:
+            continue
+
+        try:
+            trade_snapshot = UniswapTradesSnapshot.model_validate(trade_snapshot_raw)
+        except Exception as e:
+            logger.error(f"Error validating trade snapshot for project {project_id} and pool {pool_address}: {e}")
+            continue
+
+        for trade in trade_snapshot.trades:
+            if trade.tradeType == TradeType.SWAP:
+                logger.info(f"Processing trade {trade}")
+                block_timestamp = trade.data['block_timestamp']
+                token0_amount = trade.data['amount0']
+                token1_amount = trade.data['amount1']
+                token0_amount_adjusted = abs(token0_amount) / 10 ** pool_metadata.token0.decimals
+                token1_amount_adjusted = abs(token1_amount) / 10 ** pool_metadata.token1.decimals
+                trade_amount_usd = trade.data['calculated_trade_amount_usd']
+
+                if base_token_num == 0:
+                    trade_type = "Sell" if token0_amount < 0 else "Buy"
+                else:
+                    trade_type = "Sell" if token1_amount < 0 else "Buy"
+                  
+                price_of_non_base_token_in_weth = 0.0
+                if base_token_num == 0: # Token0 is WETH, Token1 is non-base
+                    if token1_amount_adjusted > 1e-18: # Avoid division by zero or near-zero
+                        price_of_non_base_token_in_weth = token0_amount_adjusted / token1_amount_adjusted
+                    else:
+                        logger.warning(f"Non-base token (token1: {token1_symbol}) amount is effectively zero for trade. Pool: {pool_address}, ts: {block_timestamp}")
+                else: # Token1 is WETH, Token0 is non-base
+                    if token0_amount_adjusted > 1e-18: # Avoid division by zero or near-zero
+                        price_of_non_base_token_in_weth = token1_amount_adjusted / token0_amount_adjusted
+                    else:
+                        logger.warning(f"Non-base token (token0: {token0_symbol}) amount is effectively zero for trade. Pool: {pool_address}, ts: {block_timestamp}")
+
+                eth_price_usd = trade.data.get('calculated_eth_price', 0.0)
+                logger.info(f"ETH price for block {trade.log['blockNumber']} is {eth_price_usd}")
+                price_of_non_base_token_usd = price_of_non_base_token_in_weth * eth_price_usd
+                
+                # Construct the final trade dictionary
+                processed_trade_entry = {
+                    'timestamp': block_timestamp,
+                    'tokens': {
+                        token0_symbol: token0_amount_adjusted,
+                        token1_symbol: token1_amount_adjusted,
+                    },
+                    'trade_amount_usd': trade_amount_usd,
+                    'trade_type': trade_type,
+                    'trade_price_usd': price_of_non_base_token_usd,
+                }
+                processed_trades.append(processed_trade_entry)
+
+    return processed_trades
+
+    
