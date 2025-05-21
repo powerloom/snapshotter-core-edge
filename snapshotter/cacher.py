@@ -40,6 +40,7 @@ from snapshotter.utils.models.message_models import SnapshotBatchSubmittedMessag
 from snapshotter.utils.models.message_models import SnapshotFinalizedMessage
 from snapshotter.utils.models.message_models import SnapshotSubmittedMessage
 from snapshotter.utils.redis.redis_conn import RedisPoolCache
+from snapshotter.utils.redis.redis_bitmap import RedisBitmap
 from snapshotter.utils.redis.redis_keys import epoch_id_project_to_state_mapping
 from snapshotter.utils.redis.redis_keys import project_data_hmap
 from snapshotter.utils.redis.redis_keys import project_last_finalized_epoch_hmap
@@ -48,14 +49,14 @@ from snapshotter.utils.redis.redis_keys import snapshots_to_unpin_zset_name
 from snapshotter.utils.redis.redis_keys import last_submitted_snapshot_data_key
 from snapshotter.utils.redis.redis_keys import data_expiry_zset
 from snapshotter.utils.redis.redis_keys import cid_cache
-from snapshotter.utils.redis.redis_keys import blank_epochs_zset
+from snapshotter.utils.redis.redis_keys import blank_epochs_bitmap
 from snapshotter.utils.dramatiq_queues import CACHER_QUEUE_NAME
 from snapshotter.utils.data_utils import get_submission_data
 from snapshotter.utils.data_utils import get_project_config
 from snapshotter.utils.data_utils import get_source_chain_block_time
 from snapshotter.utils.data_utils import get_source_chain_epoch_size
 
-
+BLOCK_SHIFT_FOR_BITMAP_INDEX = 22400000
 # Configure Redis broker with no middleware
 redis_broker = RedisBroker(host=settings.redis.host, port=settings.redis.port)
 redis_broker.add_middleware(AsyncIO())
@@ -154,6 +155,7 @@ class Cacher(multiprocessing.Process):
         self._cleanup_interval = 60 * 60
         self._max_epochs_to_process = 0
         self._max_recursion_depth = 150
+        self._redis_bitmap = RedisBitmap(epoch_offset=BLOCK_SHIFT_FOR_BITMAP_INDEX)
 
     def _signal_handler(self, signum, frame):
         """
@@ -354,7 +356,10 @@ class Cacher(multiprocessing.Process):
             if snapshot_data:
                 if "previousSnapshots" in snapshot_data and len(snapshot_data["previousSnapshots"]) > 0:    
                     data_to_cache = {}
-                    min_previous_snapshot_key = max(snapshot_data["previousSnapshots"][0][0], original_epoch_id - self._max_epochs_to_process + 1 )
+                    min_previous_snapshot_key = max(
+                        BLOCK_SHIFT_FOR_BITMAP_INDEX + 1, 
+                        snapshot_data["previousSnapshots"][0][0], 
+                        original_epoch_id - self._max_epochs_to_process + 1 )
                     all_previous_snapshot_keys = set(range(min_previous_snapshot_key, epoch_id))
                     # Process each previous snapshot
                     for (epoch_id, snapshot_cid) in snapshot_data["previousSnapshots"][::-1]:
@@ -373,16 +378,11 @@ class Cacher(multiprocessing.Process):
                             mapping=data_to_cache,
                         )
                     
-                    blank_epochs_zset_key = blank_epochs_zset(project_id)
-                    epoch_mapping = {
-                        f"{epoch_id}": int(epoch_id)
-                        for epoch_id in all_previous_snapshot_keys
-                    }
-                    if epoch_mapping:
-                        pipeline.zadd(
-                            blank_epochs_zset_key,
-                            mapping=epoch_mapping,
-                        )
+                    blank_epochs_bitmap_key = blank_epochs_bitmap(project_id)
+
+                    epochs_to_set = sorted(list(all_previous_snapshot_keys))
+                    await self._redis_bitmap.set_bits_in_range(redis_conn, blank_epochs_bitmap_key, epochs_to_set)
+
                     if len(snapshot_data["previousSnapshots"]) > 0:
                         epoch_id = snapshot_data["previousSnapshots"][0][0]
                         epoch_cid = snapshot_data["previousSnapshots"][0][1]
@@ -612,7 +612,7 @@ class Cacher(multiprocessing.Process):
         
         Args:
             *args: Arguments passed by Dramatiq, expected to be [event_type, event_data].
-            
+
         Returns:
             None
         """
@@ -644,7 +644,7 @@ class Cacher(multiprocessing.Process):
     async def _cleanup_tasks(self):
         """
         Periodically clean up completed or timed-out tasks.
-        
+
         This method runs in a loop, checking for tasks that have completed or
         timed out, and removing them from the active tasks set. It also cancels
         tasks that have exceeded the timeout period.
@@ -668,7 +668,7 @@ class Cacher(multiprocessing.Process):
     async def report_health_status(self):
         """
         Reports the current health status of this Cacher instance to Redis.
-        
+
         This method updates a Redis hash with the current timestamp for this
         instance's hostname, allowing monitoring systems to detect if the
         Cacher is alive and responsive.
@@ -690,7 +690,7 @@ class Cacher(multiprocessing.Process):
     async def _periodic_health_reporter(self):
         """
         Periodically reports health status to Redis.
-        
+
         This method runs in a loop, reporting the health status of this Cacher
         instance to Redis at regular intervals. It also checks if the worker
         thread is still alive, and stops reporting if it's not.
@@ -728,7 +728,7 @@ class Cacher(multiprocessing.Process):
     async def _cleanup_expired_project_data(self):
         """
         Periodically checks for and removes expired project data entries.
-        
+
         This method runs in the background to clean up project data hash entries
         that have exceeded their TTL as recorded in the expiry sorted set.
         """
@@ -743,60 +743,25 @@ class Cacher(multiprocessing.Process):
                     current_time,
                     withscores=True
                 )
-                
+
                 self._logger.info(f"Cleaning up {len(expired_entries)} expired project data entries")
                 if expired_entries:                    
                     # Group by project_id for efficient deletion
                     entries_by_hmap = {}
-                    unique_blank_zset_keys_to_prune = set()
                     for entry, _ in expired_entries:
                         project_id, key = entry.decode('utf-8').split('|')
                         if project_id not in entries_by_hmap:
                             entries_by_hmap[project_id] = []
                         entries_by_hmap[project_id].append(key)
-                        unique_blank_zset_keys_to_prune.add(blank_epochs_zset(project_id))
-                    
+
                     # Remove the entries from the hashmaps and the expiry set
                     pipeline = self._redis_conn.pipeline()
                     for project_id, keys in entries_by_hmap.items():
                         pipeline.hdel(project_data_hmap(project_id), *keys)
-                    
+
                     # Remove from expiry tracking
                     pipeline.zrem(data_expiry_zset(), *[entry for entry, _ in expired_entries])
 
-                    # Prune blank_epochs_zset for affected projects
-
-                    [current_epoch_data] = await self._anchor_rpc_helper.web3_call(
-                        tasks=[
-                            ('currentEpoch', [Web3.to_checksum_address(settings.data_market)]),
-                        ],
-                        contract_addr=self._protocol_state_contract.address,
-                        abi=self._protocol_state_contract.abi,
-                    )
-                    
-                    current_epoch_id = current_epoch_data[2]
-                    
-                    if self._source_chain_epoch_size > 0 and self._source_chain_block_time > 0:
-                        epoch_duration_seconds = self._source_chain_epoch_size * self._source_chain_block_time
-                        epochs_to_go_back = int(self._project_data_entry_expiry / epoch_duration_seconds)
-                        pruning_threshold_epoch_id = current_epoch_id - epochs_to_go_back
-
-                        if pruning_threshold_epoch_id > 0:
-                            self._logger.info(f"Pruning blank epochs up to epoch ID {pruning_threshold_epoch_id}.")
-                            for zset_key_to_prune in unique_blank_zset_keys_to_prune:
-                                pipeline.zremrangebyscore(zset_key_to_prune, 0, pruning_threshold_epoch_id)
-                        else:
-                            self._logger.info(
-                                f"Calculated pruning threshold epoch ID ({pruning_threshold_epoch_id}) is not greater than 0. "
-                                f"Skipping pruning of blank_epochs_zsets for this cycle."
-                            )
-                    else:
-                        self._logger.warning(
-                            f"source_chain_epoch_size ({self._source_chain_epoch_size}) or "
-                            f"source_chain_block_time ({self._source_chain_block_time}) is zero or invalid. "
-                            f"Skipping pruning of blank_epochs_zsets for this cycle."
-                        )
-                        
                     await pipeline.execute()
 
             except Exception as e:
