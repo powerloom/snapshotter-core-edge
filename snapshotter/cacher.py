@@ -346,7 +346,7 @@ class Cacher(multiprocessing.Process):
             project_config = get_project_config(project_id)
             if not project_config.keep_previous_snapshot_data:
                 return
-            snapshot_data = await get_submission_data(redis_conn, snapshot_cid, self._ipfs_reader_client, False)
+            snapshot_data = await get_submission_data(snapshot_cid, self._ipfs_reader_client, False)
             pipeline = redis_conn.pipeline()
             expiry_keys = []
 

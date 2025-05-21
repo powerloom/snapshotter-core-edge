@@ -31,7 +31,6 @@ from snapshotter.utils.redis.redis_bitmap import RedisBitmap
 from snapshotter.settings.config import projects_config
 
 logger = default_logger.bind(module='data_helper')
-BATCH_SIZE = 50
 PROJECT_DATA_ENTRY_EXPIRY = 60 * 60 * 24 * 7  # 7 days in seconds
 BLOCK_SHIFT_FOR_BITMAP_INDEX = 22400000
 
@@ -308,7 +307,7 @@ async def w3_get_and_cache_finalized_cid(
 
         # Process previousSnapshots if available
         try:
-            snapshot_data = await get_submission_data(redis_conn, cid, ipfs_reader, False)
+            snapshot_data = await get_submission_data(cid, ipfs_reader, False)
             if snapshot_data and "previousSnapshots" in snapshot_data and len(snapshot_data["previousSnapshots"]) > 0:
                 data_to_cache = {}
                 min_previous_snapshot_key = snapshot_data["previousSnapshots"][0][0]
@@ -480,6 +479,7 @@ async def w3_get_and_cache_finalized_cid_bulk(
     Returns:
         List[Tuple[str, int]]: List of tuples containing (CID, epoch_id) for each epoch
     """
+    BATCH_SIZE = 50
     try:
         pipeline = redis_conn.pipeline()
         blank_epochs_bitmap_key = blank_epochs_bitmap(project_id)
@@ -635,24 +635,21 @@ async def _fetch_file_from_ipfs(ipfs_reader, cid):
     return await ipfs_reader.cat(cid)
 
 
-async def fetch_file_from_ipfs(redis_conn: aioredis.Redis, ipfs_reader, cid):
+async def fetch_file_from_ipfs(ipfs_reader, cid):
     """
     Fetches a file from IPFS using the given IPFS reader and CID.
 
     Uses _fetch_file_from_ipfs under the hood, if it is unable to fetch file from IPFS, it will mark the cid as not found in redis.
     """
-    if await redis_conn.get(cid_not_found_key(cid)):
-        return dict()
     try:
         data = await _fetch_file_from_ipfs(ipfs_reader, cid)
         return json.loads(data)
     except Exception as e:
         logger.opt(exception=True).error(f'Error while fetching data from IPFS | CID {cid} | Error: {e}')
-        await redis_conn.set(cid_not_found_key(cid), 'true', ex=86400)
         return dict()
 
 
-async def get_submission_data(redis_conn: aioredis.Redis, cid, ipfs_reader, cleanup_previous_snapshots: bool = True) -> dict:
+async def get_submission_data(cid, ipfs_reader, cleanup_previous_snapshots: bool = True) -> dict:
     """
     Fetches submission data from cache or IPFS.
 
@@ -671,7 +668,7 @@ async def get_submission_data(redis_conn: aioredis.Redis, cid, ipfs_reader, clea
     if not cid or 'null' in cid:
         return dict()
 
-    data = await fetch_file_from_ipfs(redis_conn, ipfs_reader, cid)
+    data = await fetch_file_from_ipfs(ipfs_reader, cid)
     if isinstance(data, str):
         data = json.loads(data)
     if data:
@@ -702,6 +699,7 @@ async def get_submission_data_bulk(
     Returns:
         List[dict]: List of submission data dictionaries.
     """
+    BATCH_SIZE = 1000
     all_snapshot_data = {}
     cid_keys = [cid_cache(cid) for cid in cids]
     # try to get data from redis cache
@@ -722,7 +720,7 @@ async def get_submission_data_bulk(
         batch_cids = missing_cids[i:i + BATCH_SIZE]
         batch_snapshot_data = await asyncio.gather(
             *[
-                get_submission_data(redis_conn, cid, ipfs_reader)
+                get_submission_data(cid, ipfs_reader)
                 for cid in batch_cids
             ],
         )
@@ -781,7 +779,7 @@ async def get_project_epoch_snapshot(
     """
     cid = await get_project_finalized_cid(redis_conn, state_contract_obj, rpc_helper, ipfs_reader, epoch_id, project_id)
     if cid and 'null' not in cid:
-        data = await get_submission_data(redis_conn, cid, ipfs_reader)
+        data = await get_submission_data(cid, ipfs_reader)
         return EpochSnapshotResponse(
             exact_match=ExactEpochSnapshot(
                 epoch_id=epoch_id,
@@ -1293,7 +1291,6 @@ async def get_uniswapv3_snapshot(
                 logger.info(f"Fetching previous epoch {previous_epoch} CID for project {project_id} against actual sought epoch {target_epoch}")
                 target_epoch = previous_epoch.epoch_id
                 snapshot_response = await get_submission_data(
-                    redis_conn=redis_conn,
                     cid=previous_epoch.snapshot_cid,
                     ipfs_reader=ipfs_reader,
                 )
@@ -1308,7 +1305,6 @@ async def get_uniswapv3_snapshot(
                 logger.info(f"Fetching next epoch {next_epoch} CID for project {project_id} against actual sought epoch {target_epoch}")
                 target_epoch = next_epoch.epoch_id
                 snapshot_response = await get_submission_data(
-                    redis_conn=redis_conn,
                     cid=next_epoch.snapshot_cid,
                     ipfs_reader=ipfs_reader,
                 )
@@ -1703,7 +1699,6 @@ async def get_uniswap_price_series_agg(
                     previous_epoch = snapshot_response.closest_epochs.previous
                     if previous_epoch:
                         snapshot_at_tail = await get_submission_data(
-                            redis_conn=redis_conn, 
                             cid=previous_epoch.snapshot_cid, 
                             ipfs_reader=ipfs_reader,
                         )

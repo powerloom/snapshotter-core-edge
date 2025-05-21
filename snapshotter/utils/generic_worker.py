@@ -338,14 +338,14 @@ class GenericAsyncWorker(multiprocessing.Process):
                     last_submitted_data = json.loads(last_submitted_data)
                     last_snapshot_cid = last_submitted_data['snapshotCid']
                     last_epoch_id = last_submitted_data['epochId']
-                    last_snapshot = await get_submission_data(self._redis_conn, last_snapshot_cid, self._ipfs_reader_client, False)
+                    last_snapshot = await get_submission_data(last_snapshot_cid, self._ipfs_reader_client, False)
                 else:
                     # fetch last finalized snapshot for the project
                     last_epoch_id = await get_project_last_finalized_epoch(self._redis_conn, self._protocol_state_contract, self._anchor_rpc_helper, project_id)
                     if last_epoch_id:
                         last_snapshot_cid = await get_project_finalized_cid(self._redis_conn, self._protocol_state_contract, self._anchor_rpc_helper, self._ipfs_reader_client, last_epoch_id, project_id)
                         if last_snapshot_cid:
-                            last_snapshot = await get_submission_data(self._redis_conn, last_snapshot_cid, self._ipfs_reader_client, False)
+                            last_snapshot = await get_submission_data(last_snapshot_cid, self._ipfs_reader_client, False)
                 
                 if last_snapshot:
                     previous_snapshots = last_snapshot.get('previousSnapshots', [])
