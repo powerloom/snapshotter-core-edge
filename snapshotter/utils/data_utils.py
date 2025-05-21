@@ -18,8 +18,7 @@ from computes.utils.models.message_models import UniswapBaseSnapshot, UniswapTra
 from snapshotter.utils.models.data_models import UniswapPoolMetadata, UniswapTokenPoolsSnapshot, UniswapEthPriceSnapshot, EpochSnapshotResponse, ExactEpochSnapshot, ClosestEpochs, EpochIdentifier
 from snapshotter.settings.config import settings
 from snapshotter.utils.default_logger import default_logger
-from snapshotter.utils.redis.redis_keys import block_timestamp_key
-from snapshotter.utils.redis.redis_keys import cached_block_details_at_height
+from snapshotter.utils.redis.redis_keys import block_number_to_timestamp_key
 from snapshotter.utils.redis.redis_keys import cid_not_found_key
 from snapshotter.utils.redis.redis_keys import project_first_epoch_hmap
 from snapshotter.utils.redis.redis_keys import project_last_finalized_epoch_hmap
@@ -1261,66 +1260,89 @@ async def fetch_block_timestamps(
     redis_conn: aioredis.Redis,
     rpc_helper: RpcHelper,
     block_numbers: List[int],
-) -> Optional[int]:
-    
-    block_number_to_timestamp_mapping = {}
-    rpc_query = []
+) -> Optional[Dict[int, int]]:
+    try:
 
-    request_id = 1
-    for block in block_numbers:
-        rpc_query.append(
-            {
-                'jsonrpc': '2.0',
-                'method': 'eth_getBlockByNumber',
-                'params': [
-                    hex(block),
-                    False,
-                ],
-                'id': request_id,
-            },
-        )
-        request_id += 1
+        block_number_to_timestamp_mapping = {}
+        missing_block_data = []
+        RPC_BATCH_SIZE = 100
+        data_to_cache_in_redis = {}
 
-    response_data = await rpc_helper._make_rpc_jsonrpc_call(rpc_query)
+        prepared_rpc_calls = []
 
-    missing_block_data = []
-    if isinstance(response_data, list):
+        for i in range(0, len(block_numbers), RPC_BATCH_SIZE):
+            current_batch_block_numbers = block_numbers[i:i + RPC_BATCH_SIZE]
+            if not current_batch_block_numbers:
+                continue
 
-        pipeline = redis_conn.pipeline()
+            rpc_query = []
+            request_id_counter = 1
+            for block_num_in_batch in current_batch_block_numbers:
+                rpc_query.append(
+                    {
+                        'jsonrpc': '2.0',
+                        'method': 'eth_getBlockByNumber',
+                        'params': [
+                            hex(block_num_in_batch),
+                            False,
+                        ],
+                        'id': request_id_counter,
+                    },
+                )
+                request_id_counter += 1
+            prepared_rpc_calls.append((current_batch_block_numbers, rpc_query))
+
+        if not prepared_rpc_calls:
+            return {}
+
+        rpc_tasks = [rpc_helper._make_rpc_jsonrpc_call(query) for _, query in prepared_rpc_calls]
         
-        for block_num, block_data in zip(block_numbers, response_data):
-            if block_data and 'result' in block_data:
-                block_data = block_data['result']
-                if 'timestamp' in block_data:
-                    timestamp = int(block_data['timestamp'], 16)
-                    block_number_to_timestamp_mapping[block_num] = timestamp
+        logger.info(f"Concurrently fetching {len(rpc_tasks)} batches for a total of {len(block_numbers)} blocks.")
+        all_batch_responses_or_exceptions = await asyncio.gather(*rpc_tasks, return_exceptions=True)
 
-                    # NOTE: this function does not handle redis cleanup of block data / timestamps. This should be done by the caller.
-                    # For the Snapshotter-Core-Edge use case, this is handled by the block fetcher.
-                    pipeline.zadd(
-                        cached_block_details_at_height,
-                        json.dumps(block_data),
-                        block_num
-                    )
+        for i, response_or_exception in enumerate(all_batch_responses_or_exceptions):
+            current_batch_block_numbers, _ = prepared_rpc_calls[i]
 
-                    pipeline.zadd(
-                        block_timestamp_key(settings.namespace),
-                        json.dumps(timestamp),
-                        block_num,
-                    )
+            if isinstance(response_or_exception, Exception):
+                logger.error(f"RPC call for batch starting with block {current_batch_block_numbers[0] if current_batch_block_numbers else 'N/A'} failed: {response_or_exception}")
+                missing_block_data.extend(current_batch_block_numbers)
+                continue
 
-                else:
-                    logger.warning(f"No timestamp found for block {block_num}")
-                    missing_block_data.append(block_num)
-
-            # Couldn't find block data from rpc, using external api
+            batch_response_data = response_or_exception
+            if isinstance(batch_response_data, list):
+                for block_num, block_data_item in zip(current_batch_block_numbers, batch_response_data):
+                    if block_data_item and 'result' in block_data_item:
+                        result_data = block_data_item['result']
+                        if result_data and 'timestamp' in result_data:
+                            timestamp = int(result_data['timestamp'], 16)
+                            block_number_to_timestamp_mapping[block_num] = timestamp
+                            # Cache the timestamp (JSON-encoded) with block_num as score
+                            data_to_cache_in_redis[json.dumps(timestamp)] = block_num 
+                        else:
+                            logger.warning(f"No timestamp or null result in block data for block {block_num}: {result_data}")
+                            missing_block_data.append(block_num)
+                    else:
+                        logger.warning(f"No block data or malformed response for block {block_num} in batch: {block_data_item}")
+                        missing_block_data.append(block_num)
             else:
-                logger.warning(f"No block data found for block {block_num}")
-                missing_block_data.append(block_num)
+                logger.error(f"Unexpected response type from RPC batch call (expected list, got {type(batch_response_data)}): {str(batch_response_data)[:500]}. Affecting blocks: {current_batch_block_numbers}")
+                missing_block_data.extend(current_batch_block_numbers)
+        
+        
+        if data_to_cache_in_redis:
+            try:
+                await redis_conn.zadd(block_number_to_timestamp_key(settings.namespace), mapping=data_to_cache_in_redis)
+            except Exception as e:
+                logger.error(f"Redis ZADD call failed for {block_number_to_timestamp_key(settings.namespace)}: {e}")
 
-        await pipeline.execute()
+        if missing_block_data:
+            logger.warning(f"Missing block data for {len(missing_block_data)} blocks after RPC calls: {missing_block_data[:10]}{'...' if len(missing_block_data) > 10 else ''}")
 
-    return block_number_to_timestamp_mapping
+        return block_number_to_timestamp_mapping
+
+    except Exception as e:
+        logger.error(f"Overall error in fetch_block_timestamps: {e}", exc_info=True)
+        return {}
 
 
 ### UNISWAP V3 SPECIFIC LOGIC ###
@@ -1746,31 +1768,41 @@ async def get_uniswap_price_series_agg(
         redis_conn, protocol_state_contract, anchor_rpc_helper, current_epoch, time_interval, project_id,
     )
 
-    # Fetch all block details from Redis for timestamps
     block_to_timestamp_map = {}
     if tail_epoch_id <= current_epoch:
         try:
-            # Fetch timestamp values along with their scores (block numbers)
-            timestamp_data_raw = await redis_conn.zrangebyscore(
-                block_timestamp_key(settings.namespace),
+            timestamp_data_with_scores = await redis_conn.zrangebyscore(
+                block_number_to_timestamp_key(settings.namespace),
                 min=tail_epoch_id,
                 max=current_epoch,
                 withscores=True
             )
             
-            for item_raw, block_num_score in timestamp_data_raw:
-                if item_raw:
+            for json_timestamp_str, block_num_score in timestamp_data_with_scores:
+                if json_timestamp_str:
                     try:
-                        timestamp = json.loads(item_raw)
-                        block_num = int(block_num_score)
-                        block_to_timestamp_map[block_num] = int(timestamp)
+                        block_num = int(block_num_score) 
+                        timestamp = json.loads(json_timestamp_str) 
+                        if isinstance(timestamp, int):
+                            block_to_timestamp_map[block_num] = timestamp
+                        else:
+                            logger.warning(
+                                f"Decoded timestamp for block {block_num} is not an int: {timestamp} "
+                                f"(type: {type(timestamp)}) from key {block_number_to_timestamp_key(settings.namespace)}"
+                            )
                     except json.JSONDecodeError as jde:
-                        logger.warning(f"Failed to decode JSON for timestamp data: {item_raw}. Error: {jde}")
-                    except TypeError as te:
-                        logger.warning(f"TypeError during processing of timestamp data. item_raw: {item_raw}, score: {block_num_score}. Error: {te}")
+                        logger.warning(
+                            f"Failed to decode JSON for timestamp data: {json_timestamp_str}. "
+                            f"Block score: {block_num_score}. Error: {jde}. Key: {block_number_to_timestamp_key(settings.namespace)}"
+                        )
+                    except (TypeError, ValueError) as e:
+                        logger.warning(
+                            f"TypeError or ValueError during processing of cached timestamp data: {json_timestamp_str}. "
+                            f"Block score: {block_num_score}. Error: {e}. Key: {block_number_to_timestamp_key(settings.namespace)}"
+                        )
         except Exception as e:
             logger.opt(exception=True).error(
-                f"Error fetching block timestamps from Redis for key {block_timestamp_key(settings.namespace)} "
+                f"Error fetching block timestamps from Redis for key {block_number_to_timestamp_key(settings.namespace)} "
                 f"in range {tail_epoch_id}-{current_epoch}: {e}"
             )
 
@@ -1932,7 +1964,7 @@ async def get_uniswap_price_series_agg(
             current_timestamp = block_to_timestamp_map.get(current_block_num, None)
 
             if current_timestamp is None:
-                logger.warning(f"Unable to determine timestamp for block {current_block_num} in project {project_id}, even after RPC attempt. Skipping this block in price series.")
+                # logger.warning(f"Unable to determine timestamp for block {current_block_num} in project {project_id}, even after RPC attempt. Skipping this block in price series.")
                 continue
 
             price_from_bulk = snapshot_prices_map.get(current_block_num)

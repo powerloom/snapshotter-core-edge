@@ -7,8 +7,8 @@ cached_block_details_at_height = f'block_cache:{settings.namespace}'
 event_detector_last_processed_block = 'SystemEventDetector:lastProcessedBlock'
 
 
-def block_timestamp_key(namespace: str) -> str:
-    return f'block_timestamp:{namespace}'
+def block_number_to_timestamp_key(namespace: str) -> str:
+    return f'blockNumberToTimestamp:{namespace}'
 
 
 def project_data_hmap(project_id):

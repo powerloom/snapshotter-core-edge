@@ -75,6 +75,7 @@ async def startup_boilerplate():
     app.state.core_settings = settings
     app.state.local_user_cache = dict()
     app.state.rpc_helper = RpcHelper(rpc_settings=settings.rpc)
+    await app.state.rpc_helper.init()
     app.state.anchor_rpc_helper = RpcHelper(rpc_settings=settings.anchor_chain_rpc)
     await app.state.anchor_rpc_helper.init()
     app.state.protocol_state_contract = app.state.anchor_rpc_helper.get_current_node()['web3_client'].eth.contract(
