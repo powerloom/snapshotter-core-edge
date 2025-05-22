@@ -6,10 +6,9 @@ from signal import SIGINT
 from signal import signal
 from signal import SIGQUIT
 from signal import SIGTERM
-from typing import Set, Optional
+from typing import Set, Optional, List, Any
 from uuid import uuid4
 from socket import gethostname
-
 import tenacity
 import uvloop
 from eth_utils.crypto import keccak
@@ -25,8 +24,12 @@ from snapshotter.settings.config import settings
 from snapshotter.utils.default_logger import default_logger
 from snapshotter.utils.redis.redis_conn import RedisPoolCache
 from snapshotter.utils.redis.redis_keys import snapshots_to_unpin_zset_name
+from redis import asyncio as aioredis
+from typing import Coroutine
+from asyncio import AbstractEventLoop
 
-logger = default_logger.bind(module='IPFSUnpinningWorker')
+# Initialize module-level logger
+logger: Any = default_logger.bind(module='IPFSUnpinningWorker')
 
 
 class IPFSUnpinningWorker(multiprocessing.Process):
@@ -36,14 +39,29 @@ class IPFSUnpinningWorker(multiprocessing.Process):
     This worker periodically checks for snapshots that are ready to be unpinned
     from IPFS based on a configured time delay. It manages the lifecycle of IPFS
     content by removing pins after they've been stored for a sufficient time.
+
+    Attributes:
+        _active_tasks (Set[tuple[float, asyncio.Task]]): Set of currently running tasks with their start times
+        _ipfs_singleton (AsyncIPFSClientSingleton): Singleton instance of IPFS client
+        _ipfs_writer_client (AsyncIPFSClient): Client for writing to IPFS
+        _ipfs_reader_client (AsyncIPFSClient): Client for reading from IPFS
+        _unpin_snapshots_task (Optional[asyncio.Task]): Main task for unpinning snapshots
+        _redis_conn (aioredis.Redis): Redis connection instance
+        _aioredis_pool (RedisPoolCache): Redis connection pool
+        _logger (Logger): Logger instance for this worker
+        _event_loop (AbstractEventLoop): Event loop for async operations
     """
-    _active_tasks: Set[asyncio.Task]
+    _active_tasks: Set[tuple[float, asyncio.Task]]
     _ipfs_singleton: AsyncIPFSClientSingleton
     _ipfs_writer_client: AsyncIPFSClient
     _ipfs_reader_client: AsyncIPFSClient
     _unpin_snapshots_task: Optional[asyncio.Task]
+    _redis_conn: aioredis.Redis
+    _aioredis_pool: RedisPoolCache
+    _logger: Any
+    _event_loop: AbstractEventLoop
 
-    def __init__(self, name, **kwargs):
+    def __init__(self, name: str, **kwargs) -> None:
         """
         Initializes an IPFSUnpinningWorker instance.
 
@@ -54,21 +72,21 @@ class IPFSUnpinningWorker(multiprocessing.Process):
         # Generate a unique ID for this worker instance
         self._unique_id = f'{name}-' + keccak(text=str(uuid4())).hex()[:8]
 
-        super(IPFSUnpinningWorker, self).__init__(name=name, **kwargs)
+        super(IPFSUnpinningWorker, self).__init__(args=(), kwargs={'name': name, **kwargs})
 
         # Initialization state tracking
         self._initialized = False
 
         # Task tracking collection and configuration
-        self._active_tasks: Set[asyncio.Task] = set()
+        self._active_tasks = set()
         self._task_timeout = settings.async_task_config.task_timeout
         self._task_cleanup_interval = settings.async_task_config.task_cleanup_interval
-        self._event_loop = None
         self._hostname = gethostname()
         self._health_report_interval = settings.health_report_interval
         self._unpin_snapshots_task = None
+        self._shutdown_initiated = False
 
-    def _signal_handler(self, signum, frame):
+    def _signal_handler(self, signum: int, frame: Any) -> None:
         """
         Signal handler function that handles shutdown when a SIGINT, SIGTERM or SIGQUIT signal is received.
 
@@ -89,7 +107,7 @@ class IPFSUnpinningWorker(multiprocessing.Process):
         retry=tenacity.retry_if_not_exception_type(IPFSAsyncClientError),
         reraise=True,
     )
-    async def _upload_to_ipfs(self, snapshot: bytes, _ipfs_writer_client: AsyncIPFSClient):
+    async def _upload_to_ipfs(self, snapshot: bytes, _ipfs_writer_client: AsyncIPFSClient) -> str:
         """
         Uploads a snapshot to IPFS using the provided AsyncIPFSClient.
 
@@ -105,7 +123,7 @@ class IPFSUnpinningWorker(multiprocessing.Process):
             str: The CID (Content Identifier) of the uploaded snapshot.
         """
         # Upload the snapshot to IPFS
-        snapshot_cid = await _ipfs_writer_client.add_bytes(snapshot)
+        snapshot_cid: str = await _ipfs_writer_client.add_bytes(snapshot)
 
         # If unpinning is enabled, schedule this snapshot for future unpinning
         if settings.ipfs_unpinning.enabled:
@@ -116,7 +134,7 @@ class IPFSUnpinningWorker(multiprocessing.Process):
             )
         return snapshot_cid
 
-    async def _unpin_snapshot(self, snapshot_cid: str):
+    async def _unpin_snapshot(self, snapshot_cid: str) -> None:
         """
         Unpins a snapshot from IPFS.
 
@@ -136,7 +154,7 @@ class IPFSUnpinningWorker(multiprocessing.Process):
         await self._redis_conn.zrem(snapshots_to_unpin_zset_name(), snapshot_cid)
         self._logger.info(f'Unpinned snapshot {snapshot_cid}')
 
-    async def _unpin_snapshots(self):
+    async def _unpin_snapshots(self) -> None:
         """
         Unpins all snapshots from IPFS that are ready to be unpinned.
 
@@ -157,8 +175,8 @@ class IPFSUnpinningWorker(multiprocessing.Process):
         while True:
             # Get all snapshot CIDs from the Redis sorted set with scores (timestamps)
             # less than or equal to the current time, meaning they're ready to be unpinned
-            current_time = int(time.time())
-            snapshot_cids = await self._redis_conn.zrange(
+            current_time: int = int(time.time())
+            snapshot_cids: List[bytes] = await self._redis_conn.zrange(
                 name=snapshots_to_unpin_zset_name(),
                 start=0,  # Start from the lowest score
                 end=current_time,  # Up to the current time
@@ -184,102 +202,138 @@ class IPFSUnpinningWorker(multiprocessing.Process):
             self._logger.info('Waiting for 10 minutes before checking again for snapshots to unpin')
             await asyncio.sleep(600)
 
-    async def _init_redis_pool(self):
+    async def _init_redis_pool(self) -> None:
         """
-        Initializes the Redis connection pool.
+        Initializes the Redis connection pool for the worker.
 
-        This method creates a Redis connection pool and assigns it to the instance
-        for use in other methods.
+        This method creates and populates a Redis connection pool using RedisPoolCache.
+        The pool is then stored in the instance for use across other methods.
+
+        Returns:
+            None
+
+        Note:
+            This method should be called during worker initialization to ensure
+            Redis connectivity is established before any operations requiring Redis.
         """
-        # Create and populate the Redis pool
+        # Create and populate the Redis pool with connection settings
         self._aioredis_pool = RedisPoolCache()
         await self._aioredis_pool.populate()
 
-        # Store the connection for use in other methods
+        # Store the active Redis connection for use in other methods
         self._redis_conn = self._aioredis_pool._aioredis_pool
 
-    async def _create_tracked_task(self, task):
+    async def _create_tracked_task(self, task: Coroutine) -> asyncio.Task:
         """
-        Creates and tracks an asynchronous task.
+        Creates and tracks an asynchronous task with lifecycle management.
 
-        This method creates a new task from the given coroutine, adds it to the set of active tasks,
-        and sets up a callback to remove the task from the set when it's completed.
+        This method creates a new task from the given coroutine, adds it to the set of active tasks
+        with its creation timestamp, and sets up automatic cleanup when the task completes.
 
         Args:
             task (Coroutine): The coroutine to be executed as a task.
 
         Returns:
-            asyncio.Task: The created task.
+            asyncio.Task: The created and tracked task.
 
         Note:
-            This method is used to keep track of all running tasks for potential cleanup or monitoring.
+            Tasks created through this method are automatically tracked for:
+            - Monitoring active tasks
+            - Cleanup of completed tasks
+            - Timeout detection and cancellation
         """
-        # Get the current timestamp
-        current_time = time.time()
+        # Record the task creation timestamp for timeout tracking
+        current_time: float = time.time()
 
-        # Create a new task from the given coroutine
-        new_task = asyncio.create_task(task)
+        # Create a new task from the provided coroutine
+        new_task: asyncio.Task = asyncio.create_task(task)
 
-        # Add the task to the set of active tasks, along with its creation time
+        # Add the task to the tracking set with its creation time
         self._active_tasks.add((current_time, new_task))
 
-        # Set up a callback to remove the task from the set when it's done
+        # Configure automatic cleanup when the task completes
         new_task.add_done_callback(lambda _: self._active_tasks.discard((current_time, new_task)))
 
         return new_task
 
-    async def _init_ipfs_client(self):
+    async def _init_ipfs_client(self) -> None:
         """
-        Initialize the IPFS client.
+        Initializes the IPFS client with read and write capabilities.
 
         This method creates a singleton instance of AsyncIPFSClientSingleton,
-        initializes its sessions, and assigns the write and read clients to instance variables.
+        initializes its sessions, and sets up separate clients for read and write operations.
+
+        Returns:
+            None
+
+        Note:
+            The IPFS client is initialized as a singleton to ensure consistent
+            connection management across the application.
         """
-        # Create the IPFS client singleton
+        # Initialize the IPFS client singleton with configuration
         self._ipfs_singleton = AsyncIPFSClientSingleton(settings.ipfs)
 
-        # Initialize the IPFS client sessions
+        # Set up the IPFS client sessions
         await self._ipfs_singleton.init_sessions()
 
-        # Store references to the write and read clients
+        # Configure separate clients for read and write operations
         self._ipfs_writer_client = self._ipfs_singleton._ipfs_write_client
         self._ipfs_reader_client = self._ipfs_singleton._ipfs_read_client
 
-    async def init(self):
+    async def init(self) -> None:
         """
-        Initializes the worker by setting up required components.
+        Initializes the worker's core components and services.
 
-        This method initializes the IPFS client, Redis pool, and starts the task cleanup process.
+        This method performs one-time initialization of required components:
+        - IPFS client for data operations
+        - Redis connection pool for state management
+        - Task cleanup service for resource management
+
+        Returns:
+            None
+
+        Note:
+            This method is idempotent - subsequent calls will not reinitialize
+            components if they are already initialized.
         """
         if not self._initialized:
-            # Initialize components
+            # Initialize core components
             await self._init_ipfs_client()
             await self._init_redis_pool()
 
-            # Start the task cleanup process
+            # Launch the task cleanup service
             asyncio.create_task(self._cleanup_tasks())
 
         self._initialized = True
 
-    async def _cleanup_tasks(self):
+    async def _cleanup_tasks(self) -> None:
         """
-        Periodically clean up completed or timed-out tasks.
+        Manages the lifecycle of asynchronous tasks.
 
-        This method runs in the background and periodically checks for tasks that have
-        completed or timed out, removing them from the active tasks set.
+        This method runs continuously in the background to:
+        - Remove completed tasks from tracking
+        - Cancel and clean up timed-out tasks
+        - Maintain system resource efficiency
+
+        Returns:
+            None
+
+        Note:
+            The cleanup process runs at intervals defined by _task_cleanup_interval
+            to balance system load and responsiveness.
         """
         while True:
-            # Wait for the configured cleanup interval
+            # Wait for the next cleanup cycle
             await asyncio.sleep(self._task_cleanup_interval)
 
-            # Check each active task
+            # Process all tracked tasks
             for task_start_time, task in list(self._active_tasks):
-                current_time = time.time()
+                current_time: float = time.time()
 
-                # Remove completed tasks
+                # Handle completed tasks
                 if task.done():
                     self._active_tasks.discard((task_start_time, task))
-                # Cancel and remove timed-out tasks
+                # Handle timed-out tasks
                 elif current_time - task_start_time > self._task_timeout:
                     self._logger.warning(
                         f'Task {task} timed out. Cancelling..., current_time: {current_time}, '
@@ -290,29 +344,40 @@ class IPFSUnpinningWorker(multiprocessing.Process):
 
     def run(self) -> None:
         """
-        Runs the worker process.
+        Executes the main worker process with proper resource management.
 
-        This method sets up resource limits, registers signal handlers, initializes
-        the event loop, and starts the worker's main functionality.
+        This method orchestrates the worker's lifecycle:
+        1. Sets up logging and resource limits
+        2. Configures signal handling for graceful shutdown
+        3. Initializes the event loop with performance optimizations
+        4. Starts core services (unpinning and health monitoring)
+        5. Manages graceful shutdown of all components
+
+        Returns:
+            None
+
+        Note:
+            The method implements proper resource cleanup and graceful shutdown
+            handling to ensure system stability.
         """
-        # Set up logging
+        # Configure logging for the worker
         self._logger = logger
 
-        # Set resource limits for file descriptors
+        # Set system resource limits for file descriptors
         soft, hard = resource.getrlimit(resource.RLIMIT_NOFILE)
         resource.setrlimit(
             resource.RLIMIT_NOFILE,
             (settings.rlimit.file_descriptors, hard),
         )
 
-        # Register signal handlers for graceful shutdown
+        # Set up signal handlers for graceful shutdown
         for signame in [SIGINT, SIGTERM, SIGQUIT]:
             signal(signame, self._signal_handler)
 
-        # Set up the event loop with uvloop for better performance
+        # Configure high-performance event loop
         asyncio.set_event_loop_policy(uvloop.EventLoopPolicy())
 
-        # Create a new event loop and set it as the current one
+        # Initialize and set the event loop
         ev_loop = asyncio.new_event_loop()
         asyncio.set_event_loop(ev_loop)
         self._event_loop = ev_loop
@@ -321,14 +386,13 @@ class IPFSUnpinningWorker(multiprocessing.Process):
             f'Starting IPFS unpinning worker {self._unique_id}...',
         )
 
-        # Initialize the worker
+        # Initialize worker components
         self._event_loop.run_until_complete(self.init())
 
-        # Start the event detection loop
-        # self._event_loop.run_until_complete(self._unpin_snapshots())
+        # Launch the main unpinning service
         self._unpin_snapshots_task = self._event_loop.create_task(self._unpin_snapshots())
-        
-        # Start the centralized health reporter task
+
+        # Start the health monitoring service
         health_reporter_task = self._event_loop.create_task(
             run_periodic_task_health_check(
                 logger=self._logger,
@@ -340,27 +404,34 @@ class IPFSUnpinningWorker(multiprocessing.Process):
         )
 
         try:
-            # Wait for the unpinning task to complete (it runs indefinitely)
+            # Run the main service loop
             self._event_loop.run_until_complete(self._unpin_snapshots_task)
         finally:
-            # Gracefully handle shutdown
-            shutdown_tasks = []
+            # Prepare for graceful shutdown
+            shutdown_tasks: List[asyncio.Task] = []
+
+            # Cancel and track health monitoring task
             if health_reporter_task and not health_reporter_task.done():
                 health_reporter_task.cancel()
                 shutdown_tasks.append(health_reporter_task)
+
+            # Cancel and track main service task
             if self._unpin_snapshots_task and not self._unpin_snapshots_task.done():
                 self._unpin_snapshots_task.cancel()
                 shutdown_tasks.append(self._unpin_snapshots_task)
 
+            # Execute graceful shutdown of all tasks
             if shutdown_tasks:
                 try:
                     self._event_loop.run_until_complete(asyncio.gather(*shutdown_tasks, return_exceptions=True))
                 except RuntimeError as e:
                     self._logger.warning(f"Could not fully await task cancellations on loop close: {e}")
 
+            # Clean up the event loop
             self._event_loop.close()
 
 
 if __name__ == '__main__':
-    ipfs_unpinning_worker = IPFSUnpinningWorker('IPFSUnpinningWorker')
+    # Initialize and run the IPFS unpinning worker
+    ipfs_unpinning_worker: IPFSUnpinningWorker = IPFSUnpinningWorker('IPFSUnpinningWorker')
     ipfs_unpinning_worker.run()

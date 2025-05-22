@@ -190,6 +190,16 @@ else
     export SNAPSHOTTER_IMAGE="ghcr.io/powerloom/snapshotter-core:${IMAGE_TAG}"
 fi
 
+# check if python is installed
+if ! command -v python &> /dev/null; then
+    echo "python could not be found, please install it"
+    exit 1
+fi
+
+# generate the docker-compose.yaml file
+echo "Generating docker-compose.yaml file..."
+python scripts/generate_docker_compose.py
+
 PROFILES=""
 [ "$IPFS_URL" = "/dns/ipfs/tcp/5001" ] && PROFILES="$PROFILES --profile ipfs"
 [ "$ARG1" = "yes_collector" ] && PROFILES="$PROFILES --profile local-collector"

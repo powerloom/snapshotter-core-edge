@@ -496,9 +496,10 @@ class ProcessorDistributor(multiprocessing.Process):
             epochId=epoch.epochId,
         )
 
+        project_type = project_name.split(':')[0]
         dramatiq.broker.get_broker().enqueue(
             dramatiq.Message(
-                queue_name=SNAPSHOT_QUEUE_NAME,
+                queue_name=f'{SNAPSHOT_QUEUE_NAME}-{project_type}',
                 actor_name='handleEvent',  # Match actor name with event_receiver.py
                 args=(project_name, process_unit.model_dump_json()),
                 kwargs={},

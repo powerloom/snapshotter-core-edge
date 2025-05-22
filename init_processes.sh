@@ -2,6 +2,7 @@
 
 
 service_name=$1
+extra_args=$2
 
 if [ "$service_name" == "system_event_detector" ]; then
     poetry run python -m snapshotter.snapshotter_id_ping
@@ -15,5 +16,5 @@ fi
 # sleep for 30 seconds to allow other services to start
 sleep 30
 
-echo "Starting ${service_name}..."
-poetry run python -m snapshotter.$service_name
+echo "Starting ${service_name} with extra args: ${extra_args}"
+poetry run python -m snapshotter.$service_name $extra_args

@@ -28,14 +28,17 @@ from snapshotter.utils.redis.redis_keys import source_chain_epoch_size_key
 from snapshotter.utils.redis.redis_keys import source_chain_id_key
 from snapshotter.utils.redis.redis_keys import data_expiry_zset
 from snapshotter.utils.redis.redis_keys import cid_cache
-from snapshotter.utils.redis.redis_keys import blank_epochs_zset
+from snapshotter.utils.redis.redis_keys import blank_epochs_bitmap
+from snapshotter.utils.redis.redis_bitmap import RedisBitmap
 from snapshotter.utils.redis.redis_keys import timestamp_to_block_number_key
 from snapshotter.settings.config import projects_config
 
 logger = default_logger.bind(module='data_helper')
-BATCH_SIZE = 50
 PROJECT_DATA_ENTRY_EXPIRY = 60 * 60 * 24 * 7  # 7 days in seconds
 WETH = Web3.to_checksum_address('0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2')
+BLOCK_SHIFT_FOR_BITMAP_INDEX = 22400000
+
+redis_bitmap = RedisBitmap(epoch_offset=BLOCK_SHIFT_FOR_BITMAP_INDEX)
 
 
 def retry_state_callback(retry_state: tenacity.RetryCallState):
@@ -100,9 +103,9 @@ async def get_project_finalized_cid(redis_conn: aioredis.Redis, state_contract_o
     if cid_data:
         cid = cid_data["snapshot_cid"]
     else:
+        blank_epochs_bitmap_key = blank_epochs_bitmap(project_id)
         # check if epoch is in blank epochs set
-        blank_epochs_zset_key = blank_epochs_zset(project_id)
-        is_blank_epoch = await redis_conn.zscore(blank_epochs_zset_key, str(epoch_id))
+        is_blank_epoch = await redis_bitmap.get_bit(redis_conn, blank_epochs_bitmap_key, epoch_id)
         if is_blank_epoch:
             cid = f'null_{epoch_id}'
         else:
@@ -195,34 +198,13 @@ async def get_project_finalized_cids_bulk(
             cid_data_with_epochs.append((data["snapshot_cid"], epoch_id))
 
     existing_epochs = set([epoch_id for _, epoch_id in cid_data_with_epochs])
-    missing_epochs_with_blanks = list(epoch_ids_set.difference(existing_epochs))
+    missing_epochs_with_blanks = sorted(list(epoch_ids_set.difference(existing_epochs)))
     missing_epochs = []
-    are_blank_epochs = []
 
-    if missing_epochs_with_blanks:
-        blank_epochs_zset_key = blank_epochs_zset(project_id)
-        
-        min_epoch_to_check_for_blank = min(missing_epochs_with_blanks)
-        max_epoch_to_check_for_blank = max(missing_epochs_with_blanks)
-
-        blank_epoch_members_in_range = await redis_conn.zrangebyscore(
-            blank_epochs_zset_key,
-            min_epoch_to_check_for_blank,
-            max_epoch_to_check_for_blank
-        )
-
-        logger.info(f'Blank epochs in range: {blank_epoch_members_in_range}')
-
-        if blank_epoch_members_in_range:
-            blank_epoch_members_in_range = [int(epoch) for epoch in blank_epoch_members_in_range]
-            set_of_blank_epoch_members = set(blank_epoch_members_in_range)
-            are_blank_epochs = [epoch_id in set_of_blank_epoch_members for epoch_id in missing_epochs_with_blanks]
-        else:
-            are_blank_epochs = [False] * len(missing_epochs_with_blanks)
-
-        logger.info(f'Are blank epochs: {are_blank_epochs}')
-
-    for epoch_id, is_blank in zip(missing_epochs_with_blanks, are_blank_epochs):
+    blank_epochs_bitmap_key = blank_epochs_bitmap(project_id)
+    blank_epochs = await redis_bitmap.get_bits_in_range(redis_conn, blank_epochs_bitmap_key, missing_epochs_with_blanks)
+    
+    for epoch_id, is_blank in zip(missing_epochs_with_blanks, blank_epochs):
         if is_blank:
             cid_data_with_epochs.append((f'null_{epoch_id}', epoch_id))
         else:
@@ -290,7 +272,7 @@ async def w3_get_and_cache_finalized_cid(
     expiry_time = int(time.time()) + PROJECT_DATA_ENTRY_EXPIRY
     pipeline = redis_conn.pipeline()
     expiry_keys = []
-    blank_epochs_zset_key = blank_epochs_zset(project_id)
+    blank_epochs_bitmap_key = blank_epochs_bitmap(project_id)
 
     # Fetch consensus status and CID from the blockchain
     [consensus_status, current_epoch] = await rpc_helper.web3_call(
@@ -329,7 +311,7 @@ async def w3_get_and_cache_finalized_cid(
 
         # Process previousSnapshots if available
         try:
-            snapshot_data = await get_submission_data(redis_conn, cid, ipfs_reader, False)
+            snapshot_data = await get_submission_data(cid, ipfs_reader, False)
             if snapshot_data and "previousSnapshots" in snapshot_data and len(snapshot_data["previousSnapshots"]) > 0:
                 data_to_cache = {}
                 min_previous_snapshot_key = snapshot_data["previousSnapshots"][0][0]
@@ -351,16 +333,9 @@ async def w3_get_and_cache_finalized_cid(
                         mapping=data_to_cache,
                     )
 
-                blank_epoch_mapping_for_missing_previous = {
-                    str(missing_prev_ep_id): int(missing_prev_ep_id)
-                    for missing_prev_ep_id in all_previous_snapshot_keys
-                }
-                if blank_epoch_mapping_for_missing_previous:
-                    pipeline.zadd(
-                        blank_epochs_zset_key,
-                        mapping=blank_epoch_mapping_for_missing_previous,
-                    )
-
+                blank_epochs = sorted(list(all_previous_snapshot_keys))
+                await redis_bitmap.set_bits_in_range(redis_conn, blank_epochs_bitmap_key, blank_epochs)
+                
             if expiry_keys:
                 expiry_data = {key: expiry_time for key in expiry_keys}
                 pipeline.zadd(
@@ -378,10 +353,7 @@ async def w3_get_and_cache_finalized_cid(
         await pipeline.execute()
         return cid, epoch_id
     else:
-        pipeline.zadd(
-            blank_epochs_zset_key,
-            {str(epoch_id): int(epoch_id)},
-        )
+        await redis_bitmap.set_bit(redis_conn, blank_epochs_bitmap_key, epoch_id)
 
         await pipeline.execute()
 
@@ -420,26 +392,17 @@ async def w3_get_and_cache_finalized_cid_bulk_using_previous_snapshots(
     """
     try:
 
-        blank_epochs_zset_key = blank_epochs_zset(project_id)
+        blank_epochs_bitmap_key = blank_epochs_bitmap(project_id)
         missing_epochs = []
         cid_data_with_epochs = []
 
-        max_epoch_id = max(epoch_ids)
-        min_epoch_id = min(epoch_ids)
-
-        blank_epoch_members_in_range = await redis_conn.zrangebyscore(
-            blank_epochs_zset_key,
-            min_epoch_id,
-            max_epoch_id
+        blank_epochs = await redis_bitmap.get_bits_in_range(
+            redis_conn,
+            blank_epochs_bitmap_key,
+            epoch_ids
         )
 
-        if blank_epoch_members_in_range:
-            blank_epoch_members_in_range_set = set(blank_epoch_members_in_range)
-            are_blank_epochs = [epoch_id in blank_epoch_members_in_range_set for epoch_id in epoch_ids]
-        else:
-            are_blank_epochs = [False] * len(epoch_ids)
-
-        for epoch_id, is_blank in zip(epoch_ids, are_blank_epochs):
+        for epoch_id, is_blank in zip(epoch_ids, blank_epochs):
             if is_blank:
                 cid_data_with_epochs.append((f'null_{epoch_id}', epoch_id))
             else:
@@ -458,33 +421,24 @@ async def w3_get_and_cache_finalized_cid_bulk_using_previous_snapshots(
             cid_data_with_epochs.append((cid, epoch_id))
             missing_epochs.remove(epoch_to_fetch)
             if cid and "null" not in cid:
-                missing_epoch_list = list(missing_epochs)
+                missing_epoch_list = sorted(list(missing_epochs))
                 if missing_epoch_list:  # Check if the list is not empty
                     redis_cache_data = await redis_conn.hmget(project_hmap_key, missing_epoch_list)
 
-                    max_missing_epoch_id = max(missing_epoch_list)
-                    min_missing_epoch_id = min(missing_epoch_list)
-
-                    blank_epoch_members_in_range = await redis_conn.zrangebyscore(
-                        blank_epochs_zset_key,
-                        min_missing_epoch_id,
-                        max_missing_epoch_id
+                    blank_epochs = await redis_bitmap.get_bits_in_range(
+                        redis_conn,
+                        blank_epochs_bitmap_key,
+                        missing_epoch_list
                     )
 
-                    if blank_epoch_members_in_range:
-                        set_of_blank_epoch_members = set(blank_epoch_members_in_range)
-                        are_blank_epochs = [epoch_id in set_of_blank_epoch_members for epoch_id in missing_epoch_list]
-                    else:
-                        are_blank_epochs = [False] * len(missing_epoch_list)
-
-                    for epoch_id, is_blank in zip(missing_epoch_list, are_blank_epochs):
+                    for epoch_id, is_blank in zip(missing_epoch_list, blank_epochs):
                         if is_blank:
                             cid_data_with_epochs.append((f'null_{epoch_id}', epoch_id))
                             missing_epochs.remove(epoch_id)
 
 
                     data = []
-                    for data_raw_item in redis_cache_data: # Iterate over redis_cache_data directly
+                    for data_raw_item in redis_cache_data:
                         if data_raw_item:
                             data.append(json.loads(data_raw_item))
                         else:
@@ -496,7 +450,7 @@ async def w3_get_and_cache_finalized_cid_bulk_using_previous_snapshots(
                     for snapshot_data, epoch_id_from_list in zip(data, epochs_for_data_processing):
                         if "snapshot_cid" in snapshot_data:
                             cid_data_with_epochs.append((snapshot_data["snapshot_cid"], epoch_id_from_list))
-                            if epoch_id_from_list in missing_epochs: # Check before removing
+                            if epoch_id_from_list in missing_epochs:
                                 missing_epochs.remove(epoch_id_from_list)
                 else:
                     logger.debug(f"missing_epoch_list is empty after fetching CID for {epoch_to_fetch}. Skipping hmget for this iteration.")                    
@@ -537,9 +491,10 @@ async def w3_get_and_cache_finalized_cid_bulk(
     Returns:
         List[Tuple[str, int]]: List of tuples containing (CID, epoch_id) for each epoch
     """
+    BATCH_SIZE = 50
     try:
         pipeline = redis_conn.pipeline()
-        blank_epochs_zset_key = blank_epochs_zset(project_id)
+        blank_epochs_bitmap_key = blank_epochs_bitmap(project_id)
         all_results = []
 
         for i in range(0, len(epoch_ids), BATCH_SIZE):
@@ -566,7 +521,7 @@ async def w3_get_and_cache_finalized_cid_bulk(
         
         # Create mappings only for non-existing keys
         data_to_cache = {}
-        blank_epochs_mapping = {}
+        blank_epochs = []
         expiry_keys = []
         expiry_time = int(time.time()) + PROJECT_DATA_ENTRY_EXPIRY
 
@@ -589,7 +544,7 @@ async def w3_get_and_cache_finalized_cid_bulk(
                 cids_with_epochs.append((cid, epoch_id))
             else:
                 cids_with_epochs.append((null_cid, epoch_id))
-                blank_epochs_mapping[str(epoch_id)] = int(epoch_id)
+                blank_epochs.append(epoch_id)
 
         # Use pipeline for Redis operations if we have keys to update
         if data_to_cache:
@@ -599,10 +554,11 @@ async def w3_get_and_cache_finalized_cid_bulk(
                 mapping=data_to_cache,
             )
 
-        if blank_epochs_mapping:
-            pipeline.zadd(
-                blank_epochs_zset_key,
-                mapping=blank_epochs_mapping,
+        if blank_epochs:
+            await redis_bitmap.set_bits_in_range(
+                redis_conn,
+                blank_epochs_bitmap_key,
+                blank_epochs,
             )
 
         # Add to expiry tracking sorted set with TTL
@@ -691,24 +647,21 @@ async def _fetch_file_from_ipfs(ipfs_reader, cid):
     return await ipfs_reader.cat(cid)
 
 
-async def fetch_file_from_ipfs(redis_conn: aioredis.Redis, ipfs_reader, cid):
+async def fetch_file_from_ipfs(ipfs_reader, cid):
     """
     Fetches a file from IPFS using the given IPFS reader and CID.
 
     Uses _fetch_file_from_ipfs under the hood, if it is unable to fetch file from IPFS, it will mark the cid as not found in redis.
     """
-    if await redis_conn.get(cid_not_found_key(cid)):
-        return dict()
     try:
         data = await _fetch_file_from_ipfs(ipfs_reader, cid)
         return json.loads(data)
     except Exception as e:
         logger.opt(exception=True).error(f'Error while fetching data from IPFS | CID {cid} | Error: {e}')
-        await redis_conn.set(cid_not_found_key(cid), 'true', ex=86400)
         return dict()
 
 
-async def get_submission_data(redis_conn: aioredis.Redis, cid, ipfs_reader, cleanup_previous_snapshots: bool = True) -> dict:
+async def get_submission_data(cid, ipfs_reader, cleanup_previous_snapshots: bool = True) -> dict:
     """
     Fetches submission data from cache or IPFS.
 
@@ -727,7 +680,7 @@ async def get_submission_data(redis_conn: aioredis.Redis, cid, ipfs_reader, clea
     if not cid or 'null' in cid:
         return dict()
 
-    data = await fetch_file_from_ipfs(redis_conn, ipfs_reader, cid)
+    data = await fetch_file_from_ipfs(ipfs_reader, cid)
     if isinstance(data, str):
         data = json.loads(data)
     if data:
@@ -758,6 +711,7 @@ async def get_submission_data_bulk(
     Returns:
         List[dict]: List of submission data dictionaries.
     """
+    BATCH_SIZE = 1000
     all_snapshot_data = {}
     cid_keys = [cid_cache(cid) for cid in cids]
     # try to get data from redis cache
@@ -778,7 +732,7 @@ async def get_submission_data_bulk(
         batch_cids = missing_cids[i:i + BATCH_SIZE]
         batch_snapshot_data = await asyncio.gather(
             *[
-                get_submission_data(redis_conn, cid, ipfs_reader)
+                get_submission_data(cid, ipfs_reader)
                 for cid in batch_cids
             ],
         )
@@ -837,7 +791,7 @@ async def get_project_epoch_snapshot(
     """
     cid = await get_project_finalized_cid(redis_conn, state_contract_obj, rpc_helper, ipfs_reader, epoch_id, project_id)
     if cid and 'null' not in cid:
-        data = await get_submission_data(redis_conn, cid, ipfs_reader)
+        data = await get_submission_data(cid, ipfs_reader)
         return EpochSnapshotResponse(
             exact_match=ExactEpochSnapshot(
                 epoch_id=epoch_id,
@@ -1420,44 +1374,23 @@ async def get_uniswap_v3_pool_metadata(
         
     ) -> Optional[UniswapPoolMetadata]:
         # check redis cache first
+        
         project_id: str = 'metadata:{poolAddress}:{Namespace}'
         cache_key = f'pool_metadata:{pool_address}'
         cached_data = await redis_conn.get(cache_key)
+        
         if cached_data:
             logger.info(f"Found cached metadata for pool {pool_address}")
             return UniswapPoolMetadata(**json.loads(cached_data))
 
         try:
-            last_finalized_epoch = await get_project_last_finalized_epoch(
-                redis_conn, protocol_state_contract, anchor_rpc_helper, project_id.format(poolAddress=pool_address, Namespace=settings.namespace)
+            latest_snapshot = await get_project_latest_snapshot(
+                redis_conn, protocol_state_contract, anchor_rpc_helper, ipfs_reader, project_id.format(poolAddress=pool_address, Namespace=settings.namespace)
             )
         except Exception as e:
-            logger.opt(exception=e).error(f"Error getting last finalized epoch for pool {pool_address} while processing metadata")
-            last_finalized_epoch = None
-
-        if not last_finalized_epoch:
-            logger.error(f"No last finalized epoch found for pool {pool_address} while processing metadata")
+            logger.opt(exception=e).error(f"Error getting latest snapshot for pool {pool_address} while processing metadata")
             return None
-
-        # get finalized cid
-        finalized_cid = await get_project_finalized_cid(
-            redis_conn=redis_conn,
-            state_contract_obj=protocol_state_contract,
-            rpc_helper=anchor_rpc_helper,
-            ipfs_reader=ipfs_reader,
-            epoch_id=last_finalized_epoch,
-            project_id=project_id.format(poolAddress=pool_address, Namespace=settings.namespace),
-        )
-        if not finalized_cid:
-            logger.error(f"No finalized cid found for pool {pool_address} against epoch {last_finalized_epoch} while processing metadata")
-            return None
-        data = await get_project_epoch_snapshot(
-            redis_conn, protocol_state_contract, anchor_rpc_helper, ipfs_reader, last_finalized_epoch, project_id.format(poolAddress=pool_address, Namespace=settings.namespace)
-        )
-        if not data:
-            logger.error(f"No snapshot data found for pool {pool_address} against epoch {last_finalized_epoch} while processing metadata")
-            return None
-        return UniswapPoolMetadata(**data)
+        return UniswapPoolMetadata(**latest_snapshot)
 
 
 async def get_uniswapv3_snapshot(
@@ -1513,7 +1446,6 @@ async def get_uniswapv3_snapshot(
                 logger.info(f"Fetching previous epoch {previous_epoch} CID for project {project_id} against actual sought epoch {target_epoch}")
                 target_epoch = previous_epoch.epoch_id
                 snapshot_response = await get_submission_data(
-                    redis_conn=redis_conn,
                     cid=previous_epoch.snapshot_cid,
                     ipfs_reader=ipfs_reader,
                 )
@@ -1528,7 +1460,6 @@ async def get_uniswapv3_snapshot(
                 logger.info(f"Fetching next epoch {next_epoch} CID for project {project_id} against actual sought epoch {target_epoch}")
                 target_epoch = next_epoch.epoch_id
                 snapshot_response = await get_submission_data(
-                    redis_conn=redis_conn,
                     cid=next_epoch.snapshot_cid,
                     ipfs_reader=ipfs_reader,
                 )
@@ -1941,7 +1872,6 @@ async def get_uniswap_price_series_agg(
                     previous_epoch = snapshot_response.closest_epochs.previous
                     if previous_epoch:
                         snapshot_at_tail = await get_submission_data(
-                            redis_conn=redis_conn, 
                             cid=previous_epoch.snapshot_cid, 
                             ipfs_reader=ipfs_reader,
                         )

@@ -123,13 +123,6 @@ services:
     command: bash -c "bash init_processes.sh cacher"
     depends_on:
       - processor-distributor
-  snapshot-worker:
-    <<: *snapshotter-base
-    command: bash -c "bash init_processes.sh utils.snapshot_worker"
-    depends_on:
-      - processor-distributor
-    deploy:
-      replicas: ${SNAPSHOT_WORKER_REPLICAS:-6}
   aggregation-worker:
     <<: *snapshotter-base
     command: bash -c "bash init_processes.sh utils.aggregation_worker"
@@ -334,3 +327,7 @@ services:
     # Add optional password and memory configurations
     environment:
       - REDIS_PASSWORD
+# Dynamic worker services will be inserted here by generate_worker_services.py
+# DO NOT EDIT BELOW THIS LINE - DYNAMIC CONFIGURATION
+# Generated worker services start
+# Generated worker services end

@@ -7,7 +7,7 @@ from signal import signal
 from signal import SIGQUIT
 from signal import SIGTERM
 from socket import gethostname
-
+import sys
 import dramatiq
 import uvloop
 from dramatiq.brokers.redis import RedisBroker
@@ -67,15 +67,18 @@ class SnapshotAsyncWorker(GenericAsyncWorker):
         for project_config in projects_config:
             task_type = project_config.project_name
             self._task_types.append(task_type)
+        self._queue_name = f'{SNAPSHOT_QUEUE_NAME}-{name}'
+        self._health_queue_name = f'{SNAPSHOT_HEALTH_QUEUE_NAME}-{name}'
         self._handle_event_actor = dramatiq.actor(
-            queue_name=SNAPSHOT_QUEUE_NAME,
+            queue_name=self._queue_name,
             actor_name='handleEvent',
+        
         )(self.handle_event)
         self._hostname = gethostname()
         self._health_report_interval = settings.health_report_interval
         self._health_ping_actor = create_health_ping_actor(
             broker=redis_broker,
-            queue_name=SNAPSHOT_HEALTH_QUEUE_NAME,
+            queue_name=self._health_queue_name,
             actor_name='healthPingSnapshot',
             logger=self._logger # Pass the instance logger
         )
@@ -304,7 +307,7 @@ class SnapshotAsyncWorker(GenericAsyncWorker):
         # init worker components
         self._event_loop.run_until_complete(self.init_worker())
         
-        worker = Worker(redis_broker, queues=[SNAPSHOT_QUEUE_NAME, SNAPSHOT_HEALTH_QUEUE_NAME])
+        worker = Worker(redis_broker, queues=[self._queue_name, self._health_queue_name])
 
         # Start the worker's internal threads
         self._logger.info("Starting Dramatiq worker internal threads...")
@@ -318,7 +321,7 @@ class SnapshotAsyncWorker(GenericAsyncWorker):
                 health_report_interval=self._health_report_interval,
                 health_actor_send=self._health_ping_actor.send,
                 worker_type="SnapshotWorker",
-                health_queue_name=SNAPSHOT_HEALTH_QUEUE_NAME
+                health_queue_name=self._health_queue_name
             )
         )
 
@@ -349,5 +352,7 @@ class SnapshotAsyncWorker(GenericAsyncWorker):
 
 
 if __name__ == '__main__':
-    snapshot_worker = SnapshotAsyncWorker('SnapshotAsyncWorker')
+    # read the first argument as the project name
+    project_name = sys.argv[1]
+    snapshot_worker = SnapshotAsyncWorker(project_name)
     snapshot_worker.run()
