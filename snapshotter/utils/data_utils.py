@@ -421,37 +421,35 @@ async def w3_get_and_cache_finalized_cid_bulk_using_previous_snapshots(
             cid_data_with_epochs.append((cid, epoch_id))
             missing_epochs.remove(epoch_to_fetch)
             if cid and "null" not in cid:
+                if not missing_epochs:
+                    break
                 missing_epoch_list = sorted(list(missing_epochs))
-                if missing_epoch_list:  # Check if the list is not empty
-                    redis_cache_data = await redis_conn.hmget(project_hmap_key, missing_epoch_list)
+                redis_cache_data = await redis_conn.hmget(project_hmap_key, missing_epoch_list)
 
-                    blank_epochs = await redis_bitmap.get_bits_in_range(
-                        redis_conn,
-                        blank_epochs_bitmap_key,
-                        missing_epoch_list
-                    )
+                blank_epochs = await redis_bitmap.get_bits_in_range(
+                    redis_conn,
+                    blank_epochs_bitmap_key,
+                    missing_epoch_list
+                )
 
-                    for epoch_id, is_blank in zip(missing_epoch_list, blank_epochs):
-                        if is_blank:
-                            cid_data_with_epochs.append((f'null_{epoch_id}', epoch_id))
-                            missing_epochs.remove(epoch_id)
+                for epoch_id, is_blank in zip(missing_epoch_list, blank_epochs):
+                    if is_blank:
+                        cid_data_with_epochs.append((f'null_{epoch_id}', epoch_id))
+                        missing_epochs.remove(epoch_id)
 
 
-                    data = []
-                    for data_raw_item in redis_cache_data:
-                        if data_raw_item:
-                            data.append(json.loads(data_raw_item))
-                        else:
-                            data.append(dict())
+                data = []
+                for data_raw_item in redis_cache_data:
+                    if data_raw_item:
+                        data.append(json.loads(data_raw_item))
+                    else:
+                        data.append(dict())
                     
-                    # Original missing_epoch_list used for zipping with data
-                    epochs_for_data_processing = missing_epoch_list[:]
-
-                    for snapshot_data, epoch_id_from_list in zip(data, epochs_for_data_processing):
-                        if "snapshot_cid" in snapshot_data:
-                            cid_data_with_epochs.append((snapshot_data["snapshot_cid"], epoch_id_from_list))
-                            if epoch_id_from_list in missing_epochs:
-                                missing_epochs.remove(epoch_id_from_list)
+                for snapshot_data, epoch_id_from_list in zip(data, missing_epoch_list):
+                    if "snapshot_cid" in snapshot_data:
+                        cid_data_with_epochs.append((snapshot_data["snapshot_cid"], epoch_id_from_list))
+                        if epoch_id_from_list in missing_epochs:
+                            missing_epochs.remove(epoch_id_from_list)
                 else:
                     logger.debug(f"missing_epoch_list is empty after fetching CID for {epoch_to_fetch}. Skipping hmget for this iteration.")                    
 
