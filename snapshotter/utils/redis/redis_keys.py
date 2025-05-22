@@ -7,6 +7,14 @@ cached_block_details_at_height = f'block_cache:{settings.namespace}'
 event_detector_last_processed_block = 'SystemEventDetector:lastProcessedBlock'
 
 
+def block_number_to_timestamp_key(namespace: str) -> str:
+    return f'blockNumberToTimestamp:{namespace}'
+
+
+def timestamp_to_block_number_key(namespace: str) -> str:
+    return f'timestampToBlockNumber:{namespace}'
+
+
 def project_data_hmap(project_id):
     """
     Generate Redis key for project data hashmap.

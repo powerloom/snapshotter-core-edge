@@ -29,7 +29,7 @@ from snapshotter.utils.data_utils import (
     get_uniswap_v3_trades_snapshot,
     get_uniswapv3_snapshot,
     get_uniswap_v3_pool_metadata,
-    
+    get_uniswap_v3_pool_trades,
 )
 from snapshotter.utils.default_logger import default_logger
 from snapshotter.utils.file_utils import read_json_file
@@ -74,6 +74,8 @@ async def startup_boilerplate():
     """
     app.state.core_settings = settings
     app.state.local_user_cache = dict()
+    app.state.rpc_helper = RpcHelper(rpc_settings=settings.rpc)
+    await app.state.rpc_helper.init()
     app.state.anchor_rpc_helper = RpcHelper(rpc_settings=settings.anchor_chain_rpc)
     await app.state.anchor_rpc_helper.init()
     app.state.protocol_state_contract = app.state.anchor_rpc_helper.get_current_node()['web3_client'].eth.contract(
@@ -343,6 +345,42 @@ async def get_trade_volume_agg(
         return trade_volume_agg
     
 
+@app.get('/poolTrades/{pool_address}/{start_timestamp}/{end_timestamp}')
+async def get_pool_trades(
+    request: Request,
+    response: Response,
+    pool_address: str,
+    start_timestamp: int,
+    end_timestamp: int,
+):
+    pool_address = Web3.to_checksum_address(pool_address)
+    project_id = f"tradesSnapshot:{pool_address}:{settings.namespace}"
+    try:
+        pool_trades = await get_uniswap_v3_pool_trades(
+            redis_conn=app.state.redis_conn,
+            anchor_rpc_helper=app.state.anchor_rpc_helper,
+            rpc_helper=app.state.rpc_helper,
+            ipfs_reader=app.state.ipfs_reader_client,
+            project_id=project_id,
+            pool_address=pool_address,
+            start_timestamp=start_timestamp,
+            end_timestamp=end_timestamp,
+            protocol_state_contract=app.state.protocol_state_contract,
+        )
+    except Exception as e:
+        rest_logger.opt(exception=True).error(f"Error getting pool trades for {pool_address}: {e}")
+        response.status_code = 500
+        return {"error": "Pool trades not found"}
+    
+    if not pool_trades:
+        response.status_code = 404
+        return {"error": "Pool trades not found"}
+    else:
+        response.status_code = 200
+        return pool_trades
+    
+    
+
 @app.get('/timeSeries/{token_address}/{pool_address}/{time_interval}/{step_seconds}')
 async def get_token_price_series(
     request: Request,
@@ -359,6 +397,7 @@ async def get_token_price_series(
         token_price_series = await get_uniswap_price_series_agg(
             redis_conn=app.state.redis_conn,
             protocol_state_contract=app.state.protocol_state_contract,
+            rpc_helper=app.state.rpc_helper,
             anchor_rpc_helper=app.state.anchor_rpc_helper,
             ipfs_reader=app.state.ipfs_reader_client,
             token_address=token_address,
