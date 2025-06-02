@@ -2160,6 +2160,7 @@ async def get_uniswap_v3_pool_trades(
                 block_timestamp = trade.data['block_timestamp']
                 token0_amount = trade.data['amount0']
                 token1_amount = trade.data['amount1']
+                transaction_hash = trade.log['transactionHash']
                 token0_amount_adjusted = abs(token0_amount) / 10 ** pool_metadata.token0.decimals
                 token1_amount_adjusted = abs(token1_amount) / 10 ** pool_metadata.token1.decimals
                 trade_amount_usd = trade.data['calculated_trade_amount_usd']
@@ -2194,6 +2195,7 @@ async def get_uniswap_v3_pool_trades(
                     'trade_amount_usd': trade_amount_usd,
                     'trade_type': trade_type,
                     'trade_price_usd': price_of_non_base_token_usd,
+                    'transaction_hash': transaction_hash,
                 }
                 processed_trades.append(processed_trade_entry)
 
