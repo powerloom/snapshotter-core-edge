@@ -1541,6 +1541,40 @@ async def get_uniswap_v3_token_pools_snapshot(
         return None
 
 
+async def get_uniswap_v3_base_snapshots_for_token(
+    redis_conn: aioredis.Redis,
+    anchor_rpc_helper: RpcHelper,
+    ipfs_reader: AsyncIPFSClient,
+    protocol_state_contract,
+    token_address: str,
+
+):
+    token_pools = await get_uniswap_v3_token_pools_snapshot(
+        redis_conn=redis_conn,
+        anchor_rpc_helper=anchor_rpc_helper,
+        ipfs_reader=ipfs_reader,
+        protocol_state_contract=protocol_state_contract,
+        token_address=token_address,
+    )
+    if not token_pools:
+        logger.error(f"No token pools found for token {token_address}")
+        return None
+    data = {}
+    for pool in token_pools.pools:
+        base_snapshot = await get_uniswap_v3_base_snapshot(
+            redis_conn=redis_conn,
+            anchor_rpc_helper=anchor_rpc_helper,
+            ipfs_reader=ipfs_reader,
+            protocol_state_contract=protocol_state_contract,
+            pool_address=pool,
+        )
+        if not base_snapshot:
+            logger.error(f"No base snapshot found for pool {pool}")
+            continue
+        data[pool] = base_snapshot
+    return data
+
+
 async def get_uniswap_v3_base_snapshot(
     redis_conn: aioredis.Redis,
     anchor_rpc_helper: RpcHelper,

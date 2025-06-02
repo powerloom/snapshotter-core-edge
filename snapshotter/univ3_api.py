@@ -30,6 +30,7 @@ from snapshotter.utils.data_utils import (
     get_uniswapv3_snapshot,
     get_uniswap_v3_pool_metadata,
     get_uniswap_v3_pool_trades,
+    get_uniswap_v3_base_snapshots_for_token,
 )
 from snapshotter.utils.default_logger import default_logger
 from snapshotter.utils.file_utils import read_json_file
@@ -225,6 +226,33 @@ async def get_token_price_pool(
         response.status_code = 500
         return {"error": "Token price snapshot not found"}
     
+
+@app.get('/snapshot/base_all_pools/{token_address}')
+async def get_token_base_snapshots(
+    request: Request,
+    response: Response,
+    token_address: str,
+):
+    token_address = Web3.to_checksum_address(token_address)
+    try:
+        base_snapshots = await get_uniswap_v3_base_snapshots_for_token(
+            redis_conn=app.state.redis_conn,
+            anchor_rpc_helper=app.state.anchor_rpc_helper,
+            ipfs_reader=app.state.ipfs_reader_client,
+            protocol_state_contract=app.state.protocol_state_contract,
+            token_address=token_address,
+        )
+        if not base_snapshots:
+            response.status_code = 404
+            return {"error": "Base snapshots not found"}
+        else:
+            response.status_code = 200
+            return base_snapshots
+    except Exception as e:
+        rest_logger.error(f"Error getting base snapshots for {token_address}: {e}")
+        response.status_code = 500
+        return {"error": "Base snapshots not found"}
+
 
 @app.get('/snapshot/base/{pool_address}')
 @app.get('/snapshot/base/{pool_address}/{block_number}')
