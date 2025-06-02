@@ -2225,6 +2225,8 @@ async def get_uniswap_v3_pool_trades(
                     'trade_amount_usd': trade_amount_usd,
                     'trade_type': trade_type,
                     'trade_price_usd': price_of_non_base_token_usd,
+                    'token0_amount': token0_amount,
+                    'token1_amount': token1_amount,
                     'transaction_hash': transaction_hash,
                 }
                 processed_trades.append(processed_trade_entry)
