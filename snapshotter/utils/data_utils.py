@@ -2164,11 +2164,7 @@ async def get_uniswap_v3_pool_trades(
                 token0_amount_adjusted = abs(token0_amount) / 10 ** pool_metadata.token0.decimals
                 token1_amount_adjusted = abs(token1_amount) / 10 ** pool_metadata.token1.decimals
                 trade_amount_usd = trade.data['calculated_trade_amount_usd']
-
-                if base_token_num == 0:
-                    trade_type = "Sell" if token0_amount < 0 else "Buy"
-                else:
-                    trade_type = "Sell" if token1_amount < 0 else "Buy"
+                trade_type = "Swap"
                   
                 price_of_non_base_token_in_weth = 0.0
                 if base_token_num == 0:
