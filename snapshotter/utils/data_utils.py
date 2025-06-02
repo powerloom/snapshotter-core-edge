@@ -23,6 +23,7 @@ from snapshotter.utils.redis.redis_keys import cid_not_found_key
 from snapshotter.utils.redis.redis_keys import project_first_epoch_hmap
 from snapshotter.utils.redis.redis_keys import project_last_finalized_epoch_hmap
 from snapshotter.utils.redis.redis_keys import project_data_hmap
+from snapshotter.utils.redis.redis_keys import last_submitted_snapshot_data_key
 from snapshotter.utils.redis.redis_keys import source_chain_block_time_key
 from snapshotter.utils.redis.redis_keys import source_chain_epoch_size_key
 from snapshotter.utils.redis.redis_keys import source_chain_id_key
@@ -136,6 +137,13 @@ async def get_project_last_finalized_epoch(redis_conn: aioredis.Redis, state_con
     )
     await redis_conn.hset(project_last_finalized_epoch_hmap(), project_id, project_last_finalized_epoch)
     return project_last_finalized_epoch
+
+
+async def get_last_submitted_snapshot_data(redis_conn: aioredis.Redis, project_id: str):
+    last_submitted_snapshot_data = await redis_conn.get(last_submitted_snapshot_data_key(project_id))
+    if last_submitted_snapshot_data:
+        return json.loads(last_submitted_snapshot_data)
+    return None
 
 
 async def get_project_finalized_cids_bulk(
@@ -1040,12 +1048,25 @@ async def get_project_latest_snapshot(
     Returns:
         Optional[Dict[str, Any]]: The latest snapshot data for the given project, or None if not found.
     """
-    last_finalized_epoch = await get_project_last_finalized_epoch(redis_conn, state_contract_obj, rpc_helper, project_id)
-    if not last_finalized_epoch:
+    last_submitted_snapshot_data = await get_last_submitted_snapshot_data(redis_conn, project_id)
+    if last_submitted_snapshot_data:
+        target_epoch = last_submitted_snapshot_data['epochId']
+    else:
+        target_epoch = await get_project_last_finalized_epoch(
+            redis_conn=redis_conn,
+            state_contract_obj=state_contract_obj,
+            rpc_helper=rpc_helper,
+            project_id=project_id,
+        )
+
+    if not target_epoch:
+        logger.error(f"No last finalized epoch found for project {project_id}")
         return None
-    
+    else:
+        logger.info(f"Using epoch {target_epoch} for fetch against project {project_id}")
+
     snapshot_response = await get_project_epoch_snapshot(
-        redis_conn, state_contract_obj, rpc_helper, ipfs_reader, last_finalized_epoch, project_id
+        redis_conn, state_contract_obj, rpc_helper, ipfs_reader, target_epoch, project_id
     )
     
     if snapshot_response.exact_match:
@@ -1417,17 +1438,22 @@ async def get_uniswapv3_snapshot(
     # if block_number is not provided, get the last finalized epoch and use that
     seek = False
     if not block_number:
-        target_epoch = await get_project_last_finalized_epoch(
-            redis_conn=redis_conn,
-            state_contract_obj=protocol_state_contract,
-            rpc_helper=anchor_rpc_helper,
-            project_id=project_id,
-        )
+        last_submitted_snapshot_data = await get_last_submitted_snapshot_data(redis_conn, project_id)
+        if last_submitted_snapshot_data:
+            target_epoch = last_submitted_snapshot_data['epochId']
+        else:
+            target_epoch = await get_project_last_finalized_epoch(
+                redis_conn=redis_conn,
+                state_contract_obj=protocol_state_contract,
+                rpc_helper=anchor_rpc_helper,
+                project_id=project_id,
+            )
+
         if not target_epoch:
             logger.error(f"No last finalized epoch found for project {project_id}")
             return None
         else:
-            logger.info(f"Using last finalized epoch {target_epoch} for fetch against project {project_id}")
+            logger.info(f"Using epoch {target_epoch} for fetch against project {project_id}")
     # if block_number is provided, use that as the target epoch and seek around it if needed
     else:
         # TODO: assumes epoch is set to block number in data market contract, may need to add config flag for this and derive epoch from block number if false
