@@ -36,7 +36,7 @@ from snapshotter.utils.data_utils import (
 from snapshotter.utils.default_logger import default_logger
 from snapshotter.utils.file_utils import read_json_file
 from snapshotter.utils.redis.redis_conn import RedisPoolCache
-
+from computes.settings.config import settings as compute_settings
 
 rest_logger = default_logger.bind(module='UniswapV3API')
 
@@ -235,6 +235,11 @@ async def get_token_base_snapshots(
     token_address: str,
 ):
     token_address = Web3.to_checksum_address(token_address)
+    tokens_to_ignore = [compute_settings.contract_addresses.WETH]
+    if token_address in tokens_to_ignore:
+        response.status_code = 400
+        return {"error": "Invalid token address"}
+    
     try:
         base_snapshots = await get_uniswap_v3_base_snapshots_for_token(
             redis_conn=app.state.redis_conn,
@@ -350,8 +355,13 @@ async def get_trade_volume_agg_all_pools(
     response: Response,
     token_address: str,
     time_interval: int,
-):
-  
+):  
+    token_address = Web3.to_checksum_address(token_address)
+    tokens_to_ignore = [compute_settings.contract_addresses.WETH]
+    if token_address in tokens_to_ignore:
+        response.status_code = 400
+        return {"error": "Invalid token address"}
+    
     try:
         trade_volume_agg = await get_uniswap_trade_volume_agg_all_pools(
             redis_conn=app.state.redis_conn,
@@ -437,47 +447,14 @@ async def get_pool_trades(
         response.status_code = 200
         return pool_trades
     
-    
 
-@app.get('/timeSeries/{token_address}/{pool_address}/{time_interval}/{step_seconds}')
-async def get_token_price_series(
-    request: Request,
-    response: Response,
-    token_address: str,
-    pool_address: str,
-    time_interval: int,
-    step_seconds: int,
-):
-    token_address = Web3.to_checksum_address(token_address)
-    pool_address = Web3.to_checksum_address(pool_address)
-    project_id = f"baseSnapshot:{pool_address}:{settings.namespace}"
-    try:
-        token_price_series = await get_uniswap_price_series_agg(
-            redis_conn=app.state.redis_conn,
-            protocol_state_contract=app.state.protocol_state_contract,
-            rpc_helper=app.state.rpc_helper,
-            anchor_rpc_helper=app.state.anchor_rpc_helper,
-            ipfs_reader=app.state.ipfs_reader_client,
-            token_address=token_address,
-            time_interval=time_interval,
-            project_id=project_id,
-            step_seconds=step_seconds,
-        )
-        if not token_price_series:
-            response.status_code = 404
-            return {"error": "Token price series not found"}
-        else:
-            response.status_code = 200
-            return token_price_series
-    except Exception as e:
-        rest_logger.error(f"Error getting token price series for {token_address}: {e}")
-        response.status_code = 500
-        return {"error": "Token price series not found"}
-
-
-@app.get('/dailyActiveTokens', 
+@app.get(
+    '/dailyActiveTokens',
     summary="Get daily active tokens with pagination",
-    description="Retrieves a paginated list of active tokens for the current day, sorted by frequency. Use page and size parameters to control pagination.",
+    description=(
+        "Retrieves a paginated list of active tokens for the current day, "
+        "sorted by frequency. Use page and size parameters to control pagination."
+    ),
     response_description="Returns a paginated list of active tokens with their frequencies"
 )
 async def get_daily_active_tokens(
@@ -496,6 +473,11 @@ async def get_daily_active_tokens(
         description="Number of items per page (max 100)",
         example=50
     ),
+    metadata: bool = Query(
+        default=False,
+        description="Include token metadata in the response",
+        example=False
+    ),
 ):
     """
     Get a paginated list of active tokens for the current day.
@@ -503,9 +485,10 @@ async def get_daily_active_tokens(
     Parameters:
     - page: The page number to retrieve (starts at 1)
     - size: Number of items per page (default: 50, max: 100)
+    - metadata: Include token metadata in the response (default: False)
     
     Returns:
-    - List of active tokens with their frequencies
+    - List of active tokens with their frequencies and optional metadata
     - Pagination metadata including total count and pages
     """
     current_day = await app.state.redis_conn.get("current_day")
@@ -537,13 +520,64 @@ async def get_daily_active_tokens(
         )
         
         # Format the response
-        tokens_data = [
-            {
-                "token_address": token.decode('utf-8'),
+        tokens_data = []
+        for token, score in active_tokens:
+            token_address = token.decode('utf-8')
+            token_data = {
+                "token_address": token_address,
                 "frequency": int(score)
             }
-            for token, score in active_tokens
-        ]
+            tokens_data.append(token_data)
+        
+        # Add metadata if requested (parallelized in batches)
+        if metadata:
+            import asyncio
+            
+            # Process tokens in batches of 50
+            batch_size = 50
+            for i in range(0, len(tokens_data), batch_size):
+                batch = tokens_data[i:i + batch_size]
+                
+                # Create metadata fetch tasks for this batch
+                metadata_tasks = []
+                for token_data in batch:
+                    task = get_uniswap_v3_token_pools_snapshot(
+                        redis_conn=app.state.redis_conn,
+                        protocol_state_contract=app.state.protocol_state_contract,
+                        anchor_rpc_helper=app.state.anchor_rpc_helper,
+                        ipfs_reader=app.state.ipfs_reader_client,
+                        token_address=Web3.to_checksum_address(token_data["token_address"]),
+                    )
+                    metadata_tasks.append(task)
+                
+                # Fetch metadata for all tokens in this batch in parallel
+                try:
+                    metadata_results = await asyncio.gather(*metadata_tasks, return_exceptions=True)
+                    
+                    # Assign metadata results back to token data
+                    for j, metadata_result in enumerate(metadata_results):
+                        if isinstance(metadata_result, Exception):
+                            rest_logger.error(
+                                f"Exception fetching metadata for token {batch[j]['token_address']}: {metadata_result}"
+                            )
+                            batch[j]["metadata"] = None
+                        else:
+                            if metadata_result.pools:
+                                # Get any pool metadata from the pools dict
+                                token_pool_metadata = next(iter(metadata_result.pools.values()))
+                                if token_pool_metadata.token0.address == batch[j]["token_address"]:
+                                    batch[j]["metadata"] = token_pool_metadata.token0
+                                elif token_pool_metadata.token1.address == batch[j]["token_address"]:
+                                    batch[j]["metadata"] = token_pool_metadata.token1
+                                else:
+                                    batch[j]["metadata"] = None
+                            else:
+                                batch[j]["metadata"] = None
+                except Exception as e:
+                    rest_logger.opt(exception=True).error(f"Error in batch metadata fetch: {e}")
+                    # Set metadata to None for all tokens in this batch
+                    for token_data in batch:
+                        token_data["metadata"] = None
         
         response.status_code = 200
         return {
@@ -583,6 +617,11 @@ async def get_daily_active_pools(
         description="Number of items per page (max 100)",
         example=50
     ),
+    metadata: bool = Query(
+        default=False,
+        description="Include pool metadata in the response",
+        example=False
+    ),
 ):
     """
     Get a paginated list of active pools for the current day.
@@ -590,9 +629,10 @@ async def get_daily_active_pools(
     Parameters:
     - page: The page number to retrieve (starts at 1)
     - size: Number of items per page (default: 50, max: 100)
+    - metadata: Include pool metadata in the response (default: False)
     
     Returns:
-    - List of active pools with their frequencies
+    - List of active pools with their frequencies and optional metadata
     - Pagination metadata including total count and pages
     """
     current_day = await app.state.redis_conn.get("current_day")
@@ -611,26 +651,67 @@ async def get_daily_active_pools(
         start_idx = (page - 1) * size
         end_idx = start_idx + size - 1
         
-        # Get total count of tokens
+        # Get total count of pools
         total_pools = await app.state.redis_conn.zcard(redis_key)
         
-        # Get paginated tokens from the sorted set
+        # Get paginated pools from the sorted set
         active_pools = await app.state.redis_conn.zrange(
             redis_key,
             start_idx,
             end_idx,
             withscores=True,
-            desc=True  # Get highest frequency tokens first
+            desc=True  # Get highest frequency pools first
         )
         
         # Format the response
-        pools_data = [
-            {
-                "pool_address": pool.decode('utf-8'),
+        pools_data = []
+        for pool, score in active_pools:
+            pool_address = pool.decode('utf-8')
+            pool_data = {
+                "pool_address": pool_address,
                 "frequency": int(score)
             }
-            for pool, score in active_pools
-        ]
+            pools_data.append(pool_data)
+        
+        # Add metadata if requested (parallelized in batches)
+        if metadata:
+            import asyncio
+            
+            # Process pools in batches of 50
+            batch_size = 50
+            for i in range(0, len(pools_data), batch_size):
+                batch = pools_data[i:i + batch_size]
+                
+                # Create metadata fetch tasks for this batch
+                metadata_tasks = []
+                for pool_data in batch:
+                    task = get_uniswap_v3_pool_metadata(
+                        redis_conn=app.state.redis_conn,
+                        protocol_state_contract=app.state.protocol_state_contract,
+                        anchor_rpc_helper=app.state.anchor_rpc_helper,
+                        ipfs_reader=app.state.ipfs_reader_client,
+                        pool_address=Web3.to_checksum_address(pool_data["pool_address"]),
+                    )
+                    metadata_tasks.append(task)
+                
+                # Fetch metadata for all pools in this batch in parallel
+                try:
+                    metadata_results = await asyncio.gather(*metadata_tasks, return_exceptions=True)
+                    
+                    # Assign metadata results back to pool data
+                    for j, metadata_result in enumerate(metadata_results):
+                        if isinstance(metadata_result, Exception):
+                            rest_logger.error(
+                                f"Exception fetching metadata for pool {batch[j]['pool_address']}: {metadata_result}"
+                            )
+                            batch[j]["metadata"] = None
+                        else:
+                            batch[j]["metadata"] = metadata_result
+                except Exception as e:
+                    rest_logger.error(f"Error in batch metadata fetch: {e}")
+                    # Set metadata to None for all pools in this batch
+                    for pool_data in batch:
+                        pool_data["metadata"] = None
         
         response.status_code = 200
         return {
@@ -649,7 +730,6 @@ async def get_daily_active_pools(
         return {"error": "Failed to retrieve daily active pools"}
 
 
-    
 @app.get('/poolData/{pool_address}/{block_number}', summary='Returns the base snapshot for a given pool address and block number')
 @app.get('/poolData/{pool_address}', summary='Returns the base snapshot for a given pool address and last finalized epoch/block number')
 async def get_pool_data(
