@@ -1890,23 +1890,6 @@ async def get_uniswap_price_series_agg(
     snapshot_at_tail = None
 
     block_to_eth_price_map: Dict[int, float] = {}
-    sorted_eth_blocks: List[int] = []
-
-    def get_eth_price_for_block_local(
-        block_num: int, 
-        b_to_e_map: Dict[int, float], 
-        sorted_e_blocks_list: List[int]
-    ) -> Optional[float]:
-        if not b_to_e_map or not sorted_e_blocks_list: 
-            return None
-        if block_num in b_to_e_map:
-            return b_to_e_map[block_num]
-        
-        idx = bisect.bisect_left(sorted_e_blocks_list, block_num)
-        if idx > 0:
-            prev_block_with_price = sorted_e_blocks_list[idx-1]
-            return b_to_e_map[prev_block_with_price]
-        return None
 
     if snapshots:
         for snapshot_data_for_key_check in snapshots:
@@ -2024,20 +2007,17 @@ async def get_uniswap_price_series_agg(
     for item_raw in eth_prices_raw:
         try:
             item_data = json.loads(item_raw.decode('utf-8'))
-            block_h = int(item_data.get('blockHeight'))
+            block_height = int(item_data.get('blockHeight'))
             price_eth_val = float(item_data.get('price'))
-            block_to_eth_price_map[block_h] = price_eth_val
+            block_to_eth_price_map[block_height] = price_eth_val
         except (json.JSONDecodeError, TypeError, ValueError, AttributeError) as e:
             logger.warning(f"Could not parse ETH price data item: '{item_raw}'. Error: {e}")
     
     if block_to_eth_price_map:
-        sorted_eth_blocks = sorted(block_to_eth_price_map.keys())
-        logger.info(f"Loaded {len(block_to_eth_price_map)} ETH prices. Min block: {sorted_eth_blocks[0]}, Max block: {sorted_eth_blocks[-1]}")
+        logger.info(f"Loaded {len(block_to_eth_price_map)} ETH prices.") 
 
         if last_known_token_usd_price is not None and latest_relevant_block_num_in_tail != -1:
-            current_eth_price = get_eth_price_for_block_local(
-                latest_relevant_block_num_in_tail, block_to_eth_price_map, sorted_eth_blocks
-            )
+            current_eth_price = block_to_eth_price_map.get(latest_relevant_block_num_in_tail)
             if current_eth_price is not None:
                 eth_price_at_last_token_usd_snapshot_block = current_eth_price
             else:
@@ -2088,21 +2068,18 @@ async def get_uniswap_price_series_agg(
                 price_to_add = actual_token_price_usd_from_snapshot
                 last_known_token_usd_price = actual_token_price_usd_from_snapshot
                 
-                current_eth_price = get_eth_price_for_block_local(
-                    current_block_num, block_to_eth_price_map, sorted_eth_blocks
-                )
-                if current_eth_price is not None:
-                    eth_price_at_last_token_usd_snapshot_block = current_eth_price
+                current_eth_price_for_new_anchor = block_to_eth_price_map.get(current_block_num)
+                if current_eth_price_for_new_anchor is not None:
+                    eth_price_at_last_token_usd_snapshot_block = current_eth_price_for_new_anchor
                 else:
-                     logger.warning(
-                        f"ETH price not found for block {current_block_num} (which has token snapshot {price_to_add:.4f}). "
-                        f"Future backfills for project {project_id} might be less accurate."
+                    logger.warning(
+                        f"ETH price not found for block {current_block_num} which has a new token snapshot price ({last_known_token_usd_price:.4f}). "
+                        f"Setting ETH anchor to None. Subsequent backfills will be skipped until a new ETH anchor is found."
                     )
+                    eth_price_at_last_token_usd_snapshot_block = None
 
-            elif last_known_token_usd_price is not None: 
-                eth_price_for_current_backfill_block = get_eth_price_for_block_local(
-                    current_block_num, block_to_eth_price_map, sorted_eth_blocks
-                )
+            elif last_known_token_usd_price is not None:
+                eth_price_for_current_backfill_block = block_to_eth_price_map.get(current_block_num)
 
                 if (eth_price_for_current_backfill_block is not None and
                     eth_price_at_last_token_usd_snapshot_block is not None):
@@ -2116,12 +2093,12 @@ async def get_uniswap_price_series_agg(
                         f"-> NewTokenUSD={adjusted_backfilled_price:.4f}"
                     )
                 else:
-                    price_to_add = last_known_token_usd_price 
                     logger.warning(
                         f"Could not perform ETH price adjustment for backfilled block {current_block_num} "
-                        f"for project {project_id}. Using simple backfill ({price_to_add:.4f}). "
+                        f"for project {project_id}. Skipping this block."
                         f"Reason: ETH@SnapBlock={eth_price_at_last_token_usd_snapshot_block}, ETH@CurrBlock={eth_price_for_current_backfill_block}"
                     )
+                    continue
             else:
                 logger.warning(
                     f"No price data available for block {current_block_num} (project {project_id}) "
