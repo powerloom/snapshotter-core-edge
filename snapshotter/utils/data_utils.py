@@ -16,6 +16,7 @@ from web3 import Web3
 from ipfs_client.main import AsyncIPFSClient
 
 from computes.redis_keys import uniswap_eth_usd_price_zset
+from computes.settings.config import settings as computes_settings
 from computes.utils.models.message_models import UniswapBaseSnapshot, UniswapTradesSnapshot, TradeType
 from snapshotter.utils.models.data_models import UniswapPoolMetadata, UniswapTokenPoolsSnapshot, UniswapEthPriceSnapshot, EpochSnapshotResponse, ExactEpochSnapshot, ClosestEpochs, EpochIdentifier
 from snapshotter.settings.config import settings
@@ -38,7 +39,7 @@ from snapshotter.settings.config import projects_config
 
 logger = default_logger.bind(module='data_helper')
 PROJECT_DATA_ENTRY_EXPIRY = 60 * 60 * 24 * 7  # 7 days in seconds
-WETH = Web3.to_checksum_address('0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2')
+WETH = Web3.to_checksum_address(computes_settings.contract_addresses.WETH)
 BLOCK_SHIFT_FOR_BITMAP_INDEX = 22400000
 
 redis_bitmap = RedisBitmap(epoch_offset=BLOCK_SHIFT_FOR_BITMAP_INDEX)
