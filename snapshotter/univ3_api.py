@@ -31,6 +31,7 @@ from snapshotter.utils.data_utils import (
     get_uniswap_v3_pool_metadata,
     get_uniswap_v3_pool_trades,
     get_uniswap_v3_base_snapshots_for_token,
+    get_uniswap_trade_volume_agg_all_pools
 )
 from snapshotter.utils.default_logger import default_logger
 from snapshotter.utils.file_utils import read_json_file
@@ -341,6 +342,35 @@ async def get_token_price_all(
         rest_logger.error(f"Error getting token price snapshot for {token_address} at block {block_number}: {e}")
         response.status_code = 500
         return {"error": "Token price snapshot not found"}
+
+
+@app.get('/tradeVolumeAllPools/{token_address}/{time_interval}')
+async def get_trade_volume_agg_all_pools(
+    request: Request,
+    response: Response,
+    token_address: str,
+    time_interval: int,
+):
+  
+    try:
+        trade_volume_agg = await get_uniswap_trade_volume_agg_all_pools(
+            redis_conn=app.state.redis_conn,
+            anchor_rpc_helper=app.state.anchor_rpc_helper,
+            ipfs_reader=app.state.ipfs_reader_client,
+            protocol_state_contract=app.state.protocol_state_contract,
+            time_interval=time_interval,
+            token_address=token_address,
+        )
+    except Exception as e:
+        rest_logger.opt(exception=True).error(f"Error getting trade volume agg for {token_address}: {e}")
+        response.status_code = 500
+        return {"error": "Trade volume agg not found"}
+    if not trade_volume_agg:
+        response.status_code = 404
+        return {"error": "Trade volume agg not found"}
+    else:
+        response.status_code = 200
+        return trade_volume_agg
 
 
 @app.get('/tradeVolume/{pool_address}/{time_interval}')

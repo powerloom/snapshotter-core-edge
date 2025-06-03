@@ -1773,7 +1773,6 @@ async def get_uniswap_v3_token_prices_all_snapshot(
     return results
 
 
-
 async def get_uniswap_trade_volume_agg(
     redis_conn: aioredis.Redis,
     anchor_rpc_helper: RpcHelper,
@@ -1807,6 +1806,49 @@ async def get_uniswap_trade_volume_agg(
         'totalTradeVolume': total_trade_volume,
         'timeInterval': time_interval,
     }
+
+
+async def get_uniswap_trade_volume_agg_all_pools(
+    redis_conn: aioredis.Redis,
+    anchor_rpc_helper: RpcHelper,
+    ipfs_reader: AsyncIPFSClient,
+    protocol_state_contract,
+    time_interval: int,
+    token_address: str,
+):
+    token_address = Web3.to_checksum_address(token_address)
+    token_pools = await get_uniswap_v3_token_pools_snapshot(
+        redis_conn=redis_conn,
+        anchor_rpc_helper=anchor_rpc_helper,
+        ipfs_reader=ipfs_reader,
+        protocol_state_contract=protocol_state_contract,
+        token_address=token_address,
+    )
+
+    tasks = []
+    if not token_pools:
+        logger.error(f"No token pools found for token {token_address}")
+        return None
+    
+    for pool in token_pools.pools:
+        tasks.append(get_uniswap_trade_volume_agg(
+            redis_conn=redis_conn,
+            anchor_rpc_helper=anchor_rpc_helper,
+            ipfs_reader=ipfs_reader,
+            protocol_state_contract=protocol_state_contract,
+            time_interval=time_interval,
+            project_id=f"baseSnapshot:{pool}:{settings.namespace}",
+        ))
+    results = await asyncio.gather(*tasks)
+    
+    cumulative_trade = {
+        'totalTradeVolume': 0,
+        'timeInterval': time_interval,
+    }
+    for data in results:
+        cumulative_trade['totalTradeVolume'] += data['totalTradeVolume']
+
+    return cumulative_trade
 
 
 async def get_uniswap_price_series_agg(
