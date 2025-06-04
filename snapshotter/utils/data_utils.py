@@ -14,6 +14,8 @@ from typing import List, Optional, Tuple, Type, Dict, Any
 from web3 import Web3
 from ipfs_client.main import AsyncIPFSClient
 
+from computes.redis_keys import uniswap_eth_usd_price_zset
+from computes.settings.config import settings as computes_settings
 from computes.utils.models.message_models import UniswapBaseSnapshot, UniswapTradesSnapshot, TradeType
 from snapshotter.utils.models.data_models import UniswapPoolMetadata, UniswapTokenPoolsSnapshot, UniswapEthPriceSnapshot, EpochSnapshotResponse, ExactEpochSnapshot, ClosestEpochs, EpochIdentifier
 from snapshotter.settings.config import settings
@@ -36,7 +38,7 @@ from snapshotter.settings.config import projects_config
 
 logger = default_logger.bind(module='data_helper')
 PROJECT_DATA_ENTRY_EXPIRY = 60 * 60 * 24 * 7  # 7 days in seconds
-WETH = Web3.to_checksum_address('0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2')
+WETH = Web3.to_checksum_address(computes_settings.contract_addresses.WETH)
 BLOCK_SHIFT_FOR_BITMAP_INDEX = 22400000
 
 redis_bitmap = RedisBitmap(epoch_offset=BLOCK_SHIFT_FOR_BITMAP_INDEX)
@@ -2232,49 +2234,49 @@ async def get_uniswap_price_series_agg(
     tail_epoch_id, _ = await get_tail_epoch_id(
         redis_conn, protocol_state_contract, anchor_rpc_helper, current_epoch, time_interval, project_id,
     )
+    
+    if current_epoch < tail_epoch_id:
+        msg = f"Invalid epoch range: current_epoch ({current_epoch}) is less than tail_epoch_id ({tail_epoch_id})."
+        logger.error(msg)
+        raise ValueError(msg)
 
-    # Initialize block-to-timestamp mapping from Redis cache
     block_to_timestamp_map = {}
-    if tail_epoch_id <= current_epoch:
-        try:
-            timestamp_data_with_scores = await redis_conn.zrangebyscore(
-                block_number_to_timestamp_key(settings.namespace),
-                min=tail_epoch_id,
-                max=current_epoch,
-                withscores=True
-            )
-            
-            # Process cached timestamp data
-            for json_timestamp_str, block_num_score in timestamp_data_with_scores:
-                if json_timestamp_str:
-                    try:
-                        block_num = int(block_num_score) 
-                        timestamp = json.loads(json_timestamp_str) 
-                        if isinstance(timestamp, int):
-                            block_to_timestamp_map[block_num] = timestamp
-                        else:
-                            logger.warning(
-                                f"Decoded timestamp for block {block_num} is not an int: {timestamp} "
-                                f"(type: {type(timestamp)}) from key {block_number_to_timestamp_key(settings.namespace)}"
-                            )
-                    except json.JSONDecodeError as jde:
+    try:
+        timestamp_data_with_scores = await redis_conn.zrangebyscore(
+            block_number_to_timestamp_key(settings.namespace),
+            min=tail_epoch_id,
+            max=current_epoch,
+            withscores=True
+        )
+        
+        for json_timestamp_str, block_num_score in timestamp_data_with_scores:
+            if json_timestamp_str:
+                try:
+                    block_num = int(block_num_score) 
+                    timestamp = json.loads(json_timestamp_str) 
+                    if isinstance(timestamp, int):
+                        block_to_timestamp_map[block_num] = timestamp
+                    else:
                         logger.warning(
-                            f"Failed to decode JSON for timestamp data: {json_timestamp_str}. "
-                            f"Block score: {block_num_score}. Error: {jde}. Key: {block_number_to_timestamp_key(settings.namespace)}"
+                            f"Decoded timestamp for block {block_num} is not an int: {timestamp} "
+                            f"(type: {type(timestamp)}) from key {block_number_to_timestamp_key(settings.namespace)}"
                         )
-                    except (TypeError, ValueError) as e:
-                        logger.warning(
-                            f"TypeError or ValueError during processing of cached timestamp data: {json_timestamp_str}. "
-                            f"Block score: {block_num_score}. Error: {e}. Key: {block_number_to_timestamp_key(settings.namespace)}"
-                        )
-        except Exception as e:
-            logger.opt(exception=True).error(
-                f"Error fetching block timestamps from Redis for key {block_number_to_timestamp_key(settings.namespace)} "
-                f"in range {tail_epoch_id}-{current_epoch}: {e}"
-            )
+                except json.JSONDecodeError as jde:
+                    logger.warning(
+                        f"Failed to decode JSON for timestamp data: {json_timestamp_str}. "
+                        f"Block score: {block_num_score}. Error: {jde}. Key: {block_number_to_timestamp_key(settings.namespace)}"
+                    )
+                except (TypeError, ValueError) as e:
+                    logger.warning(
+                        f"TypeError or ValueError during processing of cached timestamp data: {json_timestamp_str}. "
+                        f"Block score: {block_num_score}. Error: {e}. Key: {block_number_to_timestamp_key(settings.namespace)}"
+                    )
+    except Exception as e:
+        logger.opt(exception=True).error(
+            f"Error fetching block timestamps from Redis for key {block_number_to_timestamp_key(settings.namespace)} "
+            f"in range {tail_epoch_id}-{current_epoch}: {e}"
+        )
 
-
-    # Fetch all snapshots for the epoch range
     snapshots = await get_project_epoch_snapshot_bulk(
         redis_conn, protocol_state_contract, anchor_rpc_helper, ipfs_reader, tail_epoch_id, current_epoch, project_id,
     )
@@ -2286,6 +2288,8 @@ async def get_uniswap_price_series_agg(
     snapshot_prices_map = {}
     tail_epoch_covered_by_bulk = False
     snapshot_at_tail = None
+
+    block_to_eth_price_map: Dict[int, float] = {}
 
     # Determine which price key to use (token0PricesUSD or token1PricesUSD)
     if snapshots:
@@ -2344,7 +2348,6 @@ async def get_uniswap_price_series_agg(
                 logger.info(f"Snapshot response for project {project_id} at tail_epoch_id {tail_epoch_id}: {snapshot_response.model_dump_json()}")
                 
                 if snapshot_response.exact_match:
-                    # This shouldn't happen, but just in case
                     snapshot_at_tail = snapshot_response.exact_match.data
                 elif snapshot_response.has_closest_epochs:
                     previous_epoch = snapshot_response.closest_epochs.previous
@@ -2365,51 +2368,73 @@ async def get_uniswap_price_series_agg(
             logger.error(msg)
             raise ValueError(msg)
 
-    # Initialize last known price from tail snapshot if needed
-    last_known_price = None
+    last_known_token_usd_price: Optional[float] = None
+    eth_price_at_last_token_usd_snapshot_block: Optional[float] = None
+    latest_relevant_block_num_in_tail = -1
+    eth_price_fetch_min_block = tail_epoch_id
+    eth_price_fetch_max_block = current_epoch
+
     if snapshot_at_tail and target_token_price_key and not tail_epoch_covered_by_bulk:
         prices_from_tail_snapshot = snapshot_at_tail.get(target_token_price_key)
         if isinstance(prices_from_tail_snapshot, dict):
-            latest_relevant_block_num_in_tail = -1
             for block_num_str in prices_from_tail_snapshot.keys():
                 try:
-                    block_num = int(block_num_str)
-                    if block_num <= tail_epoch_id and block_num > latest_relevant_block_num_in_tail:
-                        latest_relevant_block_num_in_tail = block_num
+                    block_num_int = int(block_num_str)
+                    if block_num_int <= tail_epoch_id and block_num_int > latest_relevant_block_num_in_tail:
+                        latest_relevant_block_num_in_tail = block_num_int
                 except ValueError:
                     logger.warning(f"Could not parse block_num_str '{block_num_str}' from snapshot_at_tail for project {project_id}.")
                     continue
             
-            # Extract price from the most relevant block
-            if latest_relevant_block_num_in_tail == -1:
-                logger.warning(f"No relevant block (<= tail_epoch_id) with a valid price found in snapshot_at_tail for project {project_id}.")
-            else:
-                price_value = prices_from_tail_snapshot.get(str(latest_relevant_block_num_in_tail))  # Keys are strings
-                if price_value is not None:
+            if latest_relevant_block_num_in_tail != -1:
+                eth_price_fetch_min_block = min(eth_price_fetch_min_block, latest_relevant_block_num_in_tail)
+                
+                price_value_str = prices_from_tail_snapshot.get(str(latest_relevant_block_num_in_tail))
+                if price_value_str is not None:
                     try:
-                        last_known_price = float(price_value)
-                        logger.info(
-                            f"Initialized last_known_price to {last_known_price} from block {latest_relevant_block_num_in_tail} "
-                            f"in snapshot_at_tail for project {project_id} (tail_epoch_id {tail_epoch_id})."
-                        )
+                        last_known_token_usd_price = float(price_value_str)
                     except (ValueError, TypeError):
                         logger.warning(
-                            f"Could not convert price '{price_value}' to float for block {latest_relevant_block_num_in_tail} "
+                            f"Could not convert price '{price_value_str}' to float for block {latest_relevant_block_num_in_tail} "
                             f"from snapshot_at_tail for project {project_id}."
                         )
-        
-        # Validate that we have initial price data
-        if last_known_price is None:
-            msg = f"No last known price data available for project {project_id} and token {token_address}."
-            logger.error(msg)
-            raise ValueError(msg)
+                        last_known_token_usd_price = None 
+    
+    logger.info(f"Fetching ETH prices from ZSET '{uniswap_eth_usd_price_zset}' for block range [{eth_price_fetch_min_block} - {eth_price_fetch_max_block}]")
+    eth_prices_raw = await redis_conn.zrangebyscore(
+        uniswap_eth_usd_price_zset,
+        min=eth_price_fetch_min_block,
+        max=eth_price_fetch_max_block,
+        withscores=False 
+    )
+    for item_raw in eth_prices_raw:
+        try:
+            item_data = json.loads(item_raw.decode('utf-8'))
+            block_height = int(item_data.get('blockHeight'))
+            price_eth_val = float(item_data.get('price'))
+            block_to_eth_price_map[block_height] = price_eth_val
+        except (json.JSONDecodeError, TypeError, ValueError, AttributeError) as e:
+            logger.warning(f"Could not parse ETH price data item: '{item_raw}'. Error: {e}")
+    
+    if block_to_eth_price_map:
+        logger.info(f"Loaded {len(block_to_eth_price_map)} ETH prices.") 
+
+        if last_known_token_usd_price is not None and latest_relevant_block_num_in_tail != -1:
+            current_eth_price = block_to_eth_price_map.get(latest_relevant_block_num_in_tail)
+            if current_eth_price is not None:
+                eth_price_at_last_token_usd_snapshot_block = current_eth_price
+            else:
+                logger.warning(
+                    f"ETH price for initial token price from snapshot_at_tail (block {latest_relevant_block_num_in_tail}) not found. "
+                    f"Adjustments may be impaired. Initial token price {last_known_token_usd_price} will be used as is if no other snapshot provides an anchor."
+                )
+            logger.info(
+                f"Initial anchor: TokenUSD={last_known_token_usd_price:.4f} (Block {latest_relevant_block_num_in_tail}), "
+                f"ETH@AnchorBlock={eth_price_at_last_token_usd_snapshot_block if eth_price_at_last_token_usd_snapshot_block is not None else 'N/A'}"
+            )
 
     price_data = []
-    
-    # Generate list of all block numbers in the range
-    all_block_numbers_in_range = []
-    if tail_epoch_id <= current_epoch:
-        all_block_numbers_in_range = list(range(tail_epoch_id, current_epoch + 1))
+    all_block_numbers_in_range = list(range(tail_epoch_id, current_epoch + 1))
 
     # Identify blocks missing timestamp data
     block_timestamps_to_fetch_rpc = []
@@ -2440,33 +2465,69 @@ async def get_uniswap_price_series_agg(
             current_timestamp = block_to_timestamp_map.get(current_block_num, None)
 
             if current_timestamp is None:
-                # Skip blocks without timestamp data
-                # logger.warning(f"Unable to determine timestamp for block {current_block_num} in project {project_id}, even after RPC attempt. Skipping this block in price series.")
                 continue
 
-            # Use snapshot price if available, otherwise use last known price
-            price_from_bulk = snapshot_prices_map.get(current_block_num)
-            if price_from_bulk is not None:
-                last_known_price = price_from_bulk 
-                price_data.append({
-                    'blockNumber': current_block_num,
-                    'price': price_from_bulk,
-                    'timestamp': current_timestamp,
-                })
-            elif last_known_price is not None: 
-                price_data.append({
-                    'blockNumber': current_block_num,
-                    'price': last_known_price,
-                    'timestamp': current_timestamp,
-                })
+            actual_token_price_usd_from_snapshot = snapshot_prices_map.get(current_block_num)
+            price_to_add = None
+
+            if actual_token_price_usd_from_snapshot is not None:
+                price_to_add = actual_token_price_usd_from_snapshot
+                last_known_token_usd_price = actual_token_price_usd_from_snapshot
+                
+                current_eth_price_for_new_anchor = block_to_eth_price_map.get(current_block_num)
+                if current_eth_price_for_new_anchor is not None:
+                    eth_price_at_last_token_usd_snapshot_block = current_eth_price_for_new_anchor
+                else:
+                    logger.warning(
+                        f"ETH price not found for block {current_block_num} which has a new token snapshot price ({last_known_token_usd_price:.4f}). "
+                        f"Setting ETH anchor to None. Subsequent backfills will be skipped until a new ETH anchor is found."
+                    )
+                    eth_price_at_last_token_usd_snapshot_block = None
+
+            elif last_known_token_usd_price is not None:
+                eth_price_for_current_backfill_block = block_to_eth_price_map.get(current_block_num)
+
+                if (eth_price_for_current_backfill_block is not None and
+                    eth_price_at_last_token_usd_snapshot_block is not None):
+                    
+                    adjusted_backfilled_price = (last_known_token_usd_price / eth_price_at_last_token_usd_snapshot_block) * eth_price_for_current_backfill_block
+                    price_to_add = adjusted_backfilled_price
+                    logger.debug(
+                        f"Backfilled price for block {current_block_num} for project {project_id} "
+                        f"adjusted with ETH prices: PrevTokenUSD={last_known_token_usd_price:.4f}, "
+                        f"ETH@SnapBlock={eth_price_at_last_token_usd_snapshot_block:.2f}, ETH@CurrBlock={eth_price_for_current_backfill_block:.2f} "
+                        f"-> NewTokenUSD={adjusted_backfilled_price:.4f}"
+                    )
+                else:
+                    logger.warning(
+                        f"Could not perform ETH price adjustment for backfilled block {current_block_num} "
+                        f"for project {project_id}. Skipping this block."
+                        f"Reason: ETH@SnapBlock={eth_price_at_last_token_usd_snapshot_block}, ETH@CurrBlock={eth_price_for_current_backfill_block}"
+                    )
+                    continue
             else:
-                # Log warning for blocks without any price data
                 logger.warning(
                     f"No price data available for block {current_block_num} (project {project_id}) "
-                    f"and no preceding price established (last_known_price is None). Skipping this block."
+                    f"and no preceding price established to backfill. Skipping this block."
                 )
- 
-    # Create evenly spaced price data based on step_seconds
+                continue 
+            
+            if price_to_add is not None:
+                price_data.append({
+                    'blockNumber': current_block_num,
+                    'price': price_to_add,
+                    'timestamp': current_timestamp,
+                })
+
+    if not price_data:
+        msg = (
+            f"No price data could be generated for project {project_id} and token {token_address} "
+            f"in the range {tail_epoch_id}-{current_epoch}. "
+            "This might be due to missing initial price anchor or missing ETH prices for adjustment."
+        )
+        logger.error(msg)
+        raise ValueError(msg)
+        
     spaced_price_data = []
     if price_data: 
         spaced_price_data.append(price_data[0]) 

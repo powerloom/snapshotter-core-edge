@@ -449,7 +449,42 @@ async def get_pool_trades(
     else:
         response.status_code = 200
         return pool_trades
-    
+
+
+@app.get('/timeSeries/{token_address}/{pool_address}/{time_interval}/{step_seconds}')
+async def get_token_price_series(
+    request: Request,
+    response: Response,
+    token_address: str,
+    pool_address: str,
+    time_interval: int,
+    step_seconds: int,
+):
+    token_address = Web3.to_checksum_address(token_address)
+    pool_address = Web3.to_checksum_address(pool_address)
+    project_id = f"baseSnapshot:{pool_address}:{settings.namespace}"
+    try:
+        token_price_series = await get_uniswap_price_series_agg(
+            redis_conn=app.state.redis_conn,
+            protocol_state_contract=app.state.protocol_state_contract,
+            rpc_helper=app.state.rpc_helper,
+            anchor_rpc_helper=app.state.anchor_rpc_helper,
+            ipfs_reader=app.state.ipfs_reader_client,
+            token_address=token_address,
+            time_interval=time_interval,
+            project_id=project_id,
+            step_seconds=step_seconds,
+        )
+        if not token_price_series:
+            response.status_code = 404
+            return {"error": "Token price series not found"}
+        else:
+            response.status_code = 200
+            return token_price_series
+    except Exception as e:
+        rest_logger.error(f"Error getting token price series for {token_address}: {e}")
+        response.status_code = 500
+        return {"error": "Token price series not found"}
 
 @app.get(
     '/dailyActiveTokens',
