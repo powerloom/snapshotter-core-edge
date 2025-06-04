@@ -2,7 +2,6 @@ import asyncio
 import json
 import time
 import tenacity
-import bisect
 
 from pydantic import BaseModel
 from redis import asyncio as aioredis
