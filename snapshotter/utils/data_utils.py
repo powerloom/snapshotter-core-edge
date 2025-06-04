@@ -1843,6 +1843,35 @@ async def get_active_pools(
     return active_pool_data
 
 
+async def get_active_tokens(
+    redis_conn: aioredis.Redis,
+    anchor_rpc_helper: RpcHelper,
+    ipfs_reader: AsyncIPFSClient,
+    protocol_state_contract,
+    time_interval: int,
+):
+    project_id = f"activeTokens:{settings.namespace}"
+    current_epoch = await get_current_epoch_id(anchor_rpc_helper, protocol_state_contract)
+
+    tail_epoch_id, _ = await get_tail_epoch_id(
+        redis_conn, protocol_state_contract, anchor_rpc_helper, current_epoch, time_interval, project_id,
+    )
+    
+    snapshots = await get_project_epoch_snapshot_bulk(
+        redis_conn, protocol_state_contract, anchor_rpc_helper, ipfs_reader, tail_epoch_id, current_epoch, project_id,
+    )
+    active_tokens = {}
+    for snapshot in snapshots:
+        if snapshot:
+            for token_address, frequency in snapshot['tokens'].items():
+                if token_address not in active_tokens:
+                    active_tokens[token_address] = 0
+                active_tokens[token_address] += frequency
+    active_token_data = [(token_address, frequency) for token_address, frequency in active_tokens.items()]
+    active_token_data.sort(key=lambda x: x[1], reverse=True)
+    return active_token_data
+
+
 async def get_uniswap_trade_volume_agg_all_pools(
     redis_conn: aioredis.Redis,
     anchor_rpc_helper: RpcHelper,

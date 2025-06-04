@@ -34,6 +34,7 @@ from snapshotter.utils.data_utils import (
     get_uniswap_v3_base_snapshots_for_token,
     get_uniswap_trade_volume_agg_all_pools,
     get_active_pools,
+    get_active_tokens,
 )
 from snapshotter.utils.default_logger import default_logger
 from snapshotter.utils.file_utils import read_json_file
@@ -480,6 +481,11 @@ async def get_daily_active_tokens(
         description="Include token metadata in the response",
         example=False
     ),
+    time_interval: int = Query(
+        default=86400,
+        description="Time interval in seconds",
+        example=86400
+    ),
 ):
     """
     Get a paginated list of active tokens for the current day.
@@ -493,47 +499,37 @@ async def get_daily_active_tokens(
     - List of active tokens with their frequencies and optional metadata
     - Pagination metadata including total count and pages
     """
-    current_day = await app.state.redis_conn.get("current_day")
-    if not current_day:
-        response.status_code = 404
-        return {"error": "Current day not found"}
     
     try:
-        # Decode current_day if it's bytes
-        if isinstance(current_day, bytes):
-            current_day = current_day.decode('utf-8')
-        
-        redis_key = f"active_tokens:day_{current_day}"
+        active_tokens = await get_active_tokens(
+            redis_conn=app.state.redis_conn,
+            protocol_state_contract=app.state.protocol_state_contract,
+            anchor_rpc_helper=app.state.anchor_rpc_helper,
+            ipfs_reader=app.state.ipfs_reader_client,
+            time_interval=time_interval,
+        )
         
         # Calculate start and end indices for pagination
         start_idx = (page - 1) * size
         end_idx = start_idx + size - 1
         
         # Get total count of tokens
-        total_tokens = await app.state.redis_conn.zcard(redis_key)
+        total_tokens = len(active_tokens)
         
         # Get paginated tokens from the sorted set
-        active_tokens = await app.state.redis_conn.zrange(
-            redis_key,
-            start_idx,
-            end_idx,
-            withscores=True,
-            desc=True  # Get highest frequency tokens first
-        )
+        active_tokens = active_tokens[start_idx:end_idx+1]
         
         # Format the response
         tokens_data = []
         for token, score in active_tokens:
-            token_address = token.decode('utf-8')
             token_data = {
-                "token_address": token_address,
-                "frequency": int(score)
+                "token_address": token,
+                "frequency": score
             }
             tokens_data.append(token_data)
         
         # Add metadata if requested (parallelized in batches)
         if metadata:
-            import asyncio
             
             # Process tokens in batches of 50
             batch_size = 50
@@ -583,7 +579,6 @@ async def get_daily_active_tokens(
         
         response.status_code = 200
         return {
-            "day": int(current_day),
             "active_tokens": tokens_data,
             "pagination": {
                 "page": page,
