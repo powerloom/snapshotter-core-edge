@@ -2200,6 +2200,9 @@ async def get_uniswap_v3_pool_trades(
         Exception: If pool metadata or essential block information cannot be retrieved.
     """
     
+    if start_timestamp >= end_timestamp:
+        raise ValueError(f"start_timestamp ({start_timestamp}) must be less than end_timestamp ({end_timestamp})")
+
     pool_metadata = await get_uniswap_v3_pool_metadata(
         pool_address=pool_address,
         redis_conn=redis_conn,
@@ -2285,8 +2288,11 @@ async def get_uniswap_v3_pool_trades(
 
     if Web3.to_checksum_address(pool_metadata.token0.address) == WETH:
         base_token_num = 0
-    else:
+    elif Web3.to_checksum_address(pool_metadata.token1.address) == WETH:
         base_token_num = 1
+    else:
+        logger.error(f"Neither token in pool {pool_address} is WETH. Cannot determine base token.")
+        raise Exception(f"Pool {pool_address} does not contain WETH")
 
     token0_symbol = pool_metadata.token0.symbol
     token1_symbol = pool_metadata.token1.symbol
