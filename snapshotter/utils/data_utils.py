@@ -19,6 +19,7 @@ from computes.settings.config import settings as computes_settings
 from computes.utils.models.message_models import UniswapBaseSnapshot, UniswapTradesSnapshot, TradeType
 from snapshotter.utils.models.data_models import UniswapPoolMetadata, UniswapTokenPoolsSnapshot, UniswapEthPriceSnapshot, EpochSnapshotResponse, ExactEpochSnapshot, ClosestEpochs, EpochIdentifier
 from snapshotter.settings.config import settings
+from snapshotter.utils.models.data_models import BlockSearchType
 from snapshotter.utils.default_logger import default_logger
 from snapshotter.utils.redis.redis_keys import block_number_to_timestamp_key
 from snapshotter.utils.redis.redis_keys import cid_not_found_key
@@ -1346,52 +1347,71 @@ async def fetch_block_timestamps(
 async def get_block_number_closest_to_timestamp(
     redis_conn: aioredis.Redis,
     target_timestamp: int,
+    search_type: BlockSearchType = BlockSearchType.BEFORE_OR_AT,
 ) -> Optional[int]:
-    """Finds the block number with the largest timestamp that is less than or equal to
-    the target_timestamp using a Redis ZSET.
+    """Finds the block number closest to the target_timestamp using a Redis ZSET.
 
     The ZSET is expected to have timestamps as scores and block numbers (as strings) as values.
 
     Args:
         redis_conn: Async Redis connection object.
-        target_timestamp: The Unix timestamp to find the closest block at or before.
+        target_timestamp: The Unix timestamp to find the closest block.
+        search_type: Determines the search direction.
+                     BlockSearchType.BEFORE_OR_AT: finds the block with the largest timestamp <= target_timestamp.
+                     BlockSearchType.AFTER_OR_AT: finds the block with the smallest timestamp >= target_timestamp.
 
     Returns:
-        The block number at or immediately before the target timestamp, 
-        or None if no such block is found.
+        The block number, or None if no such block is found.
     """
     key = timestamp_to_block_number_key(settings.namespace)
     
     try:
-        # Find block with the largest timestamp <= target_timestamp
-        result_before_raw = await redis_conn.zrevrangebyscore(
-            key, 
-            max=target_timestamp, 
-            min='-inf', 
-            start=0, 
-            num=1, 
-            withscores=True
-        )
+        if search_type == BlockSearchType.BEFORE_OR_AT:
+            # Find block with the largest timestamp <= target_timestamp
+            result_raw = await redis_conn.zrevrangebyscore(
+                key, 
+                max=target_timestamp, 
+                min='-inf', 
+                start=0, 
+                num=1, 
+                withscores=True
+            )
+            log_message_prefix = f"Closest block at or before {target_timestamp}"
+            warning_message_suffix = "too old or data is missing."
+        elif search_type == BlockSearchType.AFTER_OR_AT:
+            # Find block with the smallest timestamp >= target_timestamp
+            result_raw = await redis_conn.zrangebyscore(
+                key, 
+                min=target_timestamp, 
+                max='+inf', 
+                start=0, 
+                num=1, 
+                withscores=True
+            )
+            log_message_prefix = f"Closest block at or after {target_timestamp}"
+            warning_message_suffix = "too new or data is missing."
+        else:
+            raise ValueError(f"Invalid search_type: {search_type}")
         
-        if result_before_raw:
-            block_num_bytes, ts_before_float = result_before_raw[0]
+        if result_raw:
+            block_num_bytes, ts_float = result_raw[0]
             block_number = int(block_num_bytes.decode('utf-8'))
-            timestamp_of_block = int(ts_before_float)
+            timestamp_of_block = int(ts_float)
             logger.debug(
-                f"Closest block at or before {target_timestamp} is {block_number} "
+                f"{log_message_prefix} is {block_number} "
                 f"(ts: {timestamp_of_block}) from key {key}"
             )
             return block_number
         else:
             logger.warning(
-                f"No block found at or before timestamp {target_timestamp} in ZSET {key}. "
-                f"This may mean the target timestamp is too old or data is missing."
+                f"No block found for timestamp {target_timestamp} with search_type {search_type.name} in ZSET {key}. "
+                f"This may mean the target timestamp is {warning_message_suffix}"
             )
             return None
 
     except Exception as e:
         logger.error(
-            f"Error querying Redis for closest block at or before timestamp {target_timestamp} "
+            f"Error querying Redis for closest block for timestamp {target_timestamp} (search_type: {search_type.name}) "
             f"using key {key}: {e}", exc_info=True
         )
         return None
@@ -2556,45 +2576,31 @@ async def get_uniswap_v3_pool_trades(
     end_timestamp: int,
     protocol_state_contract,
 ) -> List[Dict]:
-    """
-    Retrieves detailed trade information for a Uniswap V3 pool within a time range.
-    
-    This function fetches pool metadata, determines the appropriate block range based
-    on timestamps, retrieves trade snapshots, and processes individual trades with
-    calculated prices and USD values.
-    
+    """Fetches Uniswap V3 pool trades for a given pool and time range.
+
+    The time range is inclusive of the start_timestamp and exclusive of the end_timestamp, i.e., [start_timestamp, end_timestamp).
+
     Args:
-        redis_conn (aioredis.Redis): Redis connection for data access
-        anchor_rpc_helper (RpcHelper): RPC helper for blockchain interactions
-        rpc_helper (RpcHelper): Additional RPC helper for block data fetching
-        ipfs_reader (AsyncIPFSClient): IPFS client for reading snapshot data
-        project_id (str): Project identifier for the trades data
-        pool_address (str): Ethereum address of the pool to analyze
-        start_timestamp (int): Start timestamp for the trade query range
-        end_timestamp (int): End timestamp for the trade query range
-        protocol_state_contract: Smart contract object for protocol state
-        
+        redis_conn: Async Redis connection object.
+        anchor_rpc_helper: RPC helper for anchor chain.
+        rpc_helper: RPC helper for source chain.
+        ipfs_reader: Async IPFS client.
+        project_id: Project ID for fetching trade snapshots.
+        pool_address: Address of the Uniswap V3 pool.
+        start_timestamp: Unix timestamp for the start of the period (inclusive).
+        end_timestamp: Unix timestamp for the end of the period (exclusive).
+        protocol_state_contract: Protocol state contract object.
+
     Returns:
-        List[Dict]: List of processed trade dictionaries containing:
-                   - timestamp: Trade timestamp
-                   - tokens: Token amounts for both tokens in the pair
-                   - trade_amount_usd: USD value of the trade
-                   - trade_type: Type of trade (e.g., "Swap")
-                   - trade_price_usd: USD price of the non-base token
-                   - token0_amount: Raw token0 amount
-                   - token1_amount: Raw token1 amount
-                   - transaction_hash: Transaction hash of the trade
-                   
+        A list of dictionaries, each representing a trade.
+    
     Raises:
-        Exception: If pool metadata cannot be found, block timestamp lookup fails,
-                  or trade snapshot fetching encounters errors
-                  
-    Note:
-        The function implements a fallback mechanism for timestamp-to-block conversion
-        when initial Redis cache lookup fails.
+        Exception: If pool metadata or essential block information cannot be retrieved.
     """
     
-    # Get pool metadata for token information and decimals
+    if start_timestamp >= end_timestamp:
+        raise ValueError(f"start_timestamp ({start_timestamp}) must be less than end_timestamp ({end_timestamp})")
+
     pool_metadata = await get_uniswap_v3_pool_metadata(
         pool_address=pool_address,
         redis_conn=redis_conn,
@@ -2607,114 +2613,107 @@ async def get_uniswap_v3_pool_trades(
         logger.error(f"No pool metadata found for project {project_id} and pool {pool_address}.")
         raise Exception(f"No pool metadata found for project {project_id} and pool {pool_address}.")
 
-    # Find the closest block to the start timestamp
-    closest_start_block = await get_block_number_closest_to_timestamp(
+    # Determine start_block (timestamp >= start_timestamp)
+    start_block = await get_block_number_closest_to_timestamp(
         redis_conn=redis_conn,
         target_timestamp=start_timestamp,
+        search_type=BlockSearchType.AFTER_OR_AT,
     )
 
-    # Implement fallback mechanism if block lookup fails
-    if not closest_start_block:
-        logger.warning(f"No closest start block found in Redis for project {project_id}, pool {pool_address}, target timestamp {start_timestamp}. Attempting fallback.")
+    if not start_block:
+        logger.warning(f"No closest start block found for project {project_id}, pool {pool_address}, timestamp {start_timestamp}. Attempting fallback.")
         try:
-            # Fallback: Estimate block, fetch a range, and retry
-            source_chain_block_time = await get_source_chain_block_time(redis_conn, protocol_state_contract, anchor_rpc_helper)
-            if not source_chain_block_time or source_chain_block_time <= 0:
-                logger.error("Invalid source_chain_block_time for fallback. Cannot estimate target block.")
-                raise Exception(f"Fallback failed: Invalid source_chain_block_time for project {project_id}.")
-
-            latest_block_data = await rpc_helper.eth_get_block()
-            if not latest_block_data or not isinstance(latest_block_data, dict) or \
-               'number' not in latest_block_data or 'timestamp' not in latest_block_data:
-                logger.error(f"Could not fetch valid latest block data for fallback estimation. Received: {latest_block_data}")
-                raise Exception(f"Fallback failed: Could not fetch latest block with number and timestamp for project {project_id}.")
-            
-            current_block_number = int(latest_block_data['number'], 16)
-            current_block_timestamp = int(latest_block_data['timestamp'], 16)
-
-            # Estimate target block based on time difference
-            timestamp_diff = current_block_timestamp - start_timestamp
-            block_diff_estimate = int(timestamp_diff / source_chain_block_time)
-            estimated_target_block = current_block_number - block_diff_estimate
-
-            # Define a range around the estimate to fetch (e.g., +/- 50 blocks)
-            # This range can be adjusted based on chain specifics and desired accuracy vs. RPC load.
-            BLOCK_RANGE_FOR_FALLBACK = 50 
-            fetch_start_block = max(0, estimated_target_block - BLOCK_RANGE_FOR_FALLBACK)
-            fetch_end_block = estimated_target_block + BLOCK_RANGE_FOR_FALLBACK
-            
-            blocks_to_fetch = list(range(fetch_start_block, fetch_end_block + 1))
-            if not blocks_to_fetch:
-                logger.error("No blocks to fetch in fallback range.")
-                raise Exception(f"Fallback failed: No blocks to fetch for project {project_id}.")
-
-            logger.info(f"Fallback: Fetching block timestamps for range [{fetch_start_block}, {fetch_end_block}] around estimated target {estimated_target_block} for start_timestamp {start_timestamp}.")
-            await fetch_block_timestamps(redis_conn, rpc_helper, blocks_to_fetch)
-
-            # Retry block lookup after fallback
-            closest_start_block = await get_block_number_closest_to_timestamp(
+            start_block = await _fallback_fetch_block_at_timestamp(
                 redis_conn=redis_conn,
+                anchor_rpc_helper=anchor_rpc_helper,
+                rpc_helper=rpc_helper,
+                protocol_state_contract=protocol_state_contract,
                 target_timestamp=start_timestamp,
+                search_type=BlockSearchType.AFTER_OR_AT,
             )
-            
-            if not closest_start_block:
-                logger.error(f"Fallback attempt for project {project_id}, pool {pool_address} also failed to find a closest start block after fetching range [{fetch_start_block}-{fetch_end_block}].")
-                raise Exception(f"No closest start block found even after fallback for project {project_id}, pool {pool_address}.")
-            else:
-                logger.info(f"Fallback successful: Found closest_start_block {closest_start_block} after fetching block data.")
-
         except Exception as e:
-            logger.error(f"Error during fallback mechanism for project {project_id}, pool {pool_address}: {e}", exc_info=True)
+            err_msg = f"Error during fallback mechanism for start_block for project {project_id}, pool {pool_address}: {e}"
+            logger.error(err_msg, exc_info=True)
             raise Exception(f"No closest start block found for project {project_id} and pool {pool_address}, and fallback failed: {e}")
 
-    
-    logger.info(f"Closest start block for project {project_id} and pool {pool_address} is {closest_start_block}.")
+    # Determine end_block (timestamp < end_timestamp, so target is end_timestamp - 1)
+    effective_end_target_timestamp = end_timestamp - 1
 
-    # Calculate time interval and tail epoch for data fetching
-    time_interval = end_timestamp - start_timestamp
-
-    tail_epoch_id, _ = await get_tail_epoch_id(
-        redis_conn, protocol_state_contract, anchor_rpc_helper, closest_start_block, time_interval, project_id,
+    end_block = await get_block_number_closest_to_timestamp(
+        redis_conn=redis_conn,
+        target_timestamp=effective_end_target_timestamp,
+        search_type=BlockSearchType.BEFORE_OR_AT,
     )
 
-    logger.info(f"Tail epoch ID for project {project_id} and pool {pool_address} is {tail_epoch_id}.")
+    if not end_block:
+        logger.warning(f"No closest end block found for project {project_id}, pool {pool_address}, timestamp {effective_end_target_timestamp}. Attempting fallback.")
+        try:
+            end_block = await _fallback_fetch_block_at_timestamp(
+                redis_conn=redis_conn,
+                anchor_rpc_helper=anchor_rpc_helper,
+                rpc_helper=rpc_helper,
+                protocol_state_contract=protocol_state_contract,
+                target_timestamp=effective_end_target_timestamp,
+                search_type=BlockSearchType.BEFORE_OR_AT,
+            )
+        except Exception as e:
+            err_msg = f"Error during fallback mechanism for end_block for project {project_id}, pool {pool_address} (end_timestamp: {end_timestamp}): {e}"
+            logger.error(err_msg, exc_info=True)
+            raise Exception(f"No closest end block found for project {project_id} and pool {pool_address} (end_timestamp: {end_timestamp}), and fallback failed: {e}")
+    
+    logger.info(f"Determined block range for project {project_id}, pool {pool_address}: start_block={start_block}, end_block={end_block}.")
+
+    if start_block is None or end_block is None:
+        err_msg = f"Could not determine valid start_block ({start_block}) or end_block ({end_block}) for project {project_id}, pool {pool_address}."
+        logger.error(err_msg)
+        raise Exception(err_msg)
+
+    if start_block > end_block:
+        logger.warning(
+            f"Calculated start_block {start_block} is after end_block {end_block} for project {project_id}, pool {pool_address}. "
+            f"Timestamps: start={start_timestamp}, end={end_timestamp}."
+        )
+        return []
 
     # Fetch trade snapshot data for the determined range
     try:
         trade_snapshots_raw = await get_project_epoch_snapshot_bulk(
-            redis_conn, protocol_state_contract, anchor_rpc_helper, ipfs_reader, tail_epoch_id, closest_start_block, project_id,
+            redis_conn, protocol_state_contract, anchor_rpc_helper, ipfs_reader, start_block, end_block, project_id,
         )
     except Exception as e:
-        logger.error(f"Error fetching trade snapshots for project {project_id} and pool {pool_address}: {e}")
-        raise Exception(f"Error fetching trade snapshots for project {project_id} and pool {pool_address}: {e}")
+        err_msg = f"Error fetching trade snapshots for project {project_id} and pool {pool_address} covering blocks {start_block} to {end_block}: {e}"
+        logger.error(err_msg)
+        raise Exception(err_msg)
 
     # Determine base token (WETH is typically the base)
     if Web3.to_checksum_address(pool_metadata.token0.address) == WETH:
         base_token_num = 0
-    else:
+    elif Web3.to_checksum_address(pool_metadata.token1.address) == WETH:
         base_token_num = 1
+    else:
+        logger.error(f"Neither token in pool {pool_address} is WETH. Cannot determine base token.")
+        raise Exception(f"Pool {pool_address} does not contain WETH")
 
     token0_symbol = pool_metadata.token0.symbol
     token1_symbol = pool_metadata.token1.symbol
 
     processed_trades = []
 
-    # Process each trade snapshot
-    for trade_snapshot_raw in trade_snapshots_raw:
-        if not trade_snapshot_raw:
+    for trade_snapshot_raw_item in trade_snapshots_raw:
+        if not trade_snapshot_raw_item:
             continue
 
         try:
-            trade_snapshot = UniswapTradesSnapshot.model_validate(trade_snapshot_raw)
+            trade_snapshot = UniswapTradesSnapshot.model_validate(trade_snapshot_raw_item)
         except Exception as e:
-            logger.error(f"Error validating trade snapshot for project {project_id} and pool {pool_address}: {e}")
+            logger.error(f"Error validating trade snapshot for project {project_id} and pool {pool_address}: {e}. Data: {str(trade_snapshot_raw_item)[:200]}")
             continue
 
         # Process individual trades within the snapshot
         for trade in trade_snapshot.trades:
+
             if trade.tradeType == TradeType.SWAP:
-                # Extract trade data
-                block_timestamp = trade.data['block_timestamp']
+                block_timestamp = trade.data.get('block_timestamp')
                 token0_amount = trade.data['amount0']
                 token1_amount = trade.data['amount1']
                 transaction_hash = trade.log['transactionHash']
@@ -2722,25 +2721,28 @@ async def get_uniswap_v3_pool_trades(
                 # Adjust amounts for token decimals
                 token0_amount_adjusted = abs(token0_amount) / 10 ** pool_metadata.token0.decimals
                 token1_amount_adjusted = abs(token1_amount) / 10 ** pool_metadata.token1.decimals
-                trade_amount_usd = trade.data['calculated_trade_amount_usd']
-                trade_type = "Swap"
-                  
-                # Calculate price of non-base token in terms of base token
+                trade_amount_usd = trade.data.get('calculated_trade_amount_usd', 0.0)
+                trade_type_str = "Swap"
+
                 price_of_non_base_token_in_weth = 0.0
                 if base_token_num == 0:
-                    if token1_amount_adjusted > 1e-18:  # Avoid division by zero or near-zero
+                    if token1_amount_adjusted > 1e-18: 
                         price_of_non_base_token_in_weth = token0_amount_adjusted / token1_amount_adjusted
+                    elif token0_amount_adjusted > 1e-18:
+                        logger.warning(f"Token1 amount is zero for trade where WETH is token0. Pool: {pool_address}, tx: {transaction_hash}")
                     else:
-                        logger.warning(f"Non-base token (token1: {token1_symbol}) amount is effectively zero for trade. Pool: {pool_address}, ts: {block_timestamp}")
+                        logger.warning(f"Both token amounts are zero for trade where WETH is token0. Pool: {pool_address}, tx: {transaction_hash}")
                 else:
                     if token0_amount_adjusted > 1e-18:
                         price_of_non_base_token_in_weth = token1_amount_adjusted / token0_amount_adjusted
+                    elif token1_amount_adjusted > 1e-18:
+                        logger.warning(f"Token0 amount is zero for trade where WETH is token1. Pool: {pool_address}, tx: {transaction_hash}")
                     else:
-                        logger.warning(f"Non-base token (token0: {token0_symbol}) amount is effectively zero for trade. Pool: {pool_address}, ts: {block_timestamp}")
+                        logger.warning(f"Both token amounts are zero for trade where WETH is token1. Pool: {pool_address}, tx: {transaction_hash}")
+
 
                 # Calculate USD price using ETH price from trade data
                 eth_price_usd = trade.data.get('calculated_eth_price', 0.0)
-                logger.info(f"ETH price for block {trade.log['blockNumber']} is {eth_price_usd}")
                 price_of_non_base_token_usd = price_of_non_base_token_in_weth * eth_price_usd
                 
                 # Create processed trade entry
@@ -2751,7 +2753,7 @@ async def get_uniswap_v3_pool_trades(
                         token1_symbol: token1_amount_adjusted,
                     },
                     'trade_amount_usd': trade_amount_usd,
-                    'trade_type': trade_type,
+                    'trade_type': trade_type_str,
                     'trade_price_usd': price_of_non_base_token_usd,
                     'token0_amount': token0_amount,
                     'token1_amount': token1_amount,
@@ -2760,5 +2762,70 @@ async def get_uniswap_v3_pool_trades(
                 processed_trades.append(processed_trade_entry)
 
     return processed_trades
+
+
+async def _fallback_fetch_block_at_timestamp(
+    redis_conn: aioredis.Redis,
+    anchor_rpc_helper: RpcHelper,
+    rpc_helper: RpcHelper,
+    protocol_state_contract,
+    target_timestamp: int,
+    search_type: BlockSearchType,
+) -> int:
+    """Common fallback logic for fetching block numbers when not found in cache."""
+
+    BLOCK_RANGE_FOR_FALLBACK = 50
+
+    source_chain_block_time = await get_source_chain_block_time(redis_conn, protocol_state_contract, anchor_rpc_helper)
+    if not source_chain_block_time or source_chain_block_time <= 0:
+        err_msg = f"Invalid source_chain_block_time for fallback."
+        logger.error(err_msg)
+        raise Exception(err_msg)
+
+    latest_block_data = await rpc_helper.eth_get_block()
+    if not latest_block_data:
+        err_msg = f"Could not fetch valid latest block data for fallback estimation. Received: {latest_block_data}"
+        logger.error(err_msg)
+        raise Exception(err_msg)
+ 
+    if not latest_block_data or not isinstance(latest_block_data, dict) or \
+       'number' not in latest_block_data or 'timestamp' not in latest_block_data:
+        err_msg = f"Could not fetch valid latest block data for fallback estimation. Received: {latest_block_data}"
+        logger.error(err_msg)
+        raise Exception(err_msg)
+
+    current_block_number = int(latest_block_data['number'], 16)
+    current_block_timestamp = int(latest_block_data['timestamp'], 16)
+
+    timestamp_diff = current_block_timestamp - target_timestamp
+    block_diff_estimate = int(timestamp_diff / source_chain_block_time)
+    estimated_target_block = current_block_number - block_diff_estimate
+    
+    fetch_start_block = max(0, estimated_target_block - BLOCK_RANGE_FOR_FALLBACK)
+    fetch_end_block = estimated_target_block + BLOCK_RANGE_FOR_FALLBACK
+
+    blocks_to_fetch = list(range(fetch_start_block, fetch_end_block + 1))
+    if not blocks_to_fetch:
+        err_msg = f"No blocks to fetch in fallback range."
+        logger.error(err_msg)
+        raise Exception(err_msg)
+
+    logger.info(f"Fallback for fetching block timestamps for range [{fetch_start_block}, {fetch_end_block}].")
+    await fetch_block_timestamps(redis_conn, rpc_helper, blocks_to_fetch)
+
+    block_number = await get_block_number_closest_to_timestamp(
+        redis_conn=redis_conn,
+        target_timestamp=target_timestamp,
+        search_type=search_type,
+    )
+    
+    if not block_number:
+        err_msg = f"Fallback attempt failed to find a closest block."
+        logger.error(err_msg)
+        raise Exception(err_msg)
+    else:
+        logger.info(f"Fallback successful: Found block {block_number} after fetching block data.")
+    
+    return block_number
 
     
