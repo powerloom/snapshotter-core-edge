@@ -2053,7 +2053,7 @@ async def get_active_pools(
                               sorted by frequency in descending order
     """
     # check if data is already in redis
-    active_pool_data = await redis_conn.get(f"active_pool_data:{settings.namespace}")
+    active_pool_data = await redis_conn.get(f"active_pool_data:{time_interval}:{settings.namespace}")
     if active_pool_data:
         return json.loads(active_pool_data)
     
@@ -2077,7 +2077,7 @@ async def get_active_pools(
     active_pool_data = [(pool_address, frequency) for pool_address, frequency in active_pools.items()]
     active_pool_data.sort(key=lambda x: x[1], reverse=True)
     # set in redis with 1 min expiry
-    await redis_conn.set(f"active_pool_data:{settings.namespace}", json.dumps(active_pool_data), ex=300)
+    await redis_conn.set(f"active_pool_data:{time_interval}:{settings.namespace}", json.dumps(active_pool_data), ex=300)
     return active_pool_data
 
 
@@ -2106,7 +2106,7 @@ async def get_active_tokens(
                               sorted by frequency in descending order
     """
     # check if data is already in redis
-    active_token_data = await redis_conn.get(f"active_token_data:{settings.namespace}")
+    active_token_data = await redis_conn.get(f"active_token_data:{time_interval}:{settings.namespace}")
     if active_token_data:
         return json.loads(active_token_data)
     
@@ -2130,7 +2130,7 @@ async def get_active_tokens(
     active_token_data = [(token_address, frequency) for token_address, frequency in active_tokens.items()]
     active_token_data.sort(key=lambda x: x[1], reverse=True)
     # set in redis with 1 min expiry
-    await redis_conn.set(f"active_token_data:{settings.namespace}", json.dumps(active_token_data), ex=300)
+    await redis_conn.set(f"active_token_data:{time_interval}:{settings.namespace}", json.dumps(active_token_data), ex=300)
     return active_token_data
 
 
