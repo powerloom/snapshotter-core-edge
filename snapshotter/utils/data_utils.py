@@ -33,7 +33,6 @@ from snapshotter.utils.redis.redis_keys import blank_epochs_bitmap
 from snapshotter.utils.redis.redis_bitmap import RedisBitmap
 from snapshotter.utils.redis.redis_keys import timestamp_to_block_number_key
 from snapshotter.settings.config import projects_config
-from functools import lru_cache
 
 logger = default_logger.bind(module='data_helper')
 PROJECT_DATA_ENTRY_EXPIRY = 60 * 60 * 24 * 7  # 7 days in seconds
@@ -1398,7 +1397,6 @@ async def get_block_number_closest_to_timestamp(
 
 ### UNISWAP V3 SPECIFIC LOGIC ###
 # TODO: consider packaging this as a separate plugin like computes since it uses compute specific logic and cache access
-@lru_cache(maxsize=10000)
 async def get_uniswap_v3_pool_metadata(
         pool_address: str, 
         redis_conn: aioredis.Redis, 
