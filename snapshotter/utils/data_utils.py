@@ -2650,12 +2650,9 @@ async def get_uniswap_v3_pool_trades(
 
         # Process individual trades within the snapshot
         for trade in trade_snapshot.trades:
-            block_timestamp = trade.data.get('block_timestamp')
-            if block_timestamp is None:
-                logger.warning(f"Trade data missing 'block_timestamp' in project {project_id}, pool {pool_address}. Trade: {trade.log.get('transactionHash', 'N/A')}")
-                continue
 
             if trade.tradeType == TradeType.SWAP:
+                block_timestamp = trade.data.get('block_timestamp')
                 token0_amount = trade.data['amount0']
                 token1_amount = trade.data['amount1']
                 transaction_hash = trade.log['transactionHash']
