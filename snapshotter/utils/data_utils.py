@@ -33,6 +33,7 @@ from snapshotter.utils.redis.redis_keys import blank_epochs_bitmap
 from snapshotter.utils.redis.redis_bitmap import RedisBitmap
 from snapshotter.utils.redis.redis_keys import timestamp_to_block_number_key
 from snapshotter.settings.config import projects_config
+from functools import lru_cache
 
 logger = default_logger.bind(module='data_helper')
 PROJECT_DATA_ENTRY_EXPIRY = 60 * 60 * 24 * 7  # 7 days in seconds
@@ -1397,7 +1398,7 @@ async def get_block_number_closest_to_timestamp(
 
 ### UNISWAP V3 SPECIFIC LOGIC ###
 # TODO: consider packaging this as a separate plugin like computes since it uses compute specific logic and cache access
- 
+@lru_cache(maxsize=10000)
 async def get_uniswap_v3_pool_metadata(
         pool_address: str, 
         redis_conn: aioredis.Redis, 
@@ -2056,7 +2057,7 @@ async def get_active_pools(
     active_pool_data = [(pool_address, frequency) for pool_address, frequency in active_pools.items()]
     active_pool_data.sort(key=lambda x: x[1], reverse=True)
     # set in redis with 1 min expiry
-    await redis_conn.set(f"active_pool_data:{settings.namespace}", json.dumps(active_pool_data), ex=60)
+    await redis_conn.set(f"active_pool_data:{settings.namespace}", json.dumps(active_pool_data), ex=300)
     return active_pool_data
 
 
@@ -2109,7 +2110,7 @@ async def get_active_tokens(
     active_token_data = [(token_address, frequency) for token_address, frequency in active_tokens.items()]
     active_token_data.sort(key=lambda x: x[1], reverse=True)
     # set in redis with 1 min expiry
-    await redis_conn.set(f"active_token_data:{settings.namespace}", json.dumps(active_token_data), ex=60)
+    await redis_conn.set(f"active_token_data:{settings.namespace}", json.dumps(active_token_data), ex=300
     return active_token_data
 
 
