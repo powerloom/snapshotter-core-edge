@@ -247,4 +247,11 @@ class EpochSnapshotResponse(BaseModel):
             self.closest_epochs.previous is not None or 
             self.closest_epochs.next is not None
         )
+    
+class BlockSearchType(Enum):
+    """
+    Represents the type of block search to perform when fetching a block at a given timestamp.
+    """
+    BEFORE_OR_AT = 1
+    AFTER_OR_AT = 2
 
