@@ -1399,7 +1399,6 @@ async def get_block_number_closest_to_timestamp(
 
 ### UNISWAP V3 SPECIFIC LOGIC ###
 # TODO: consider packaging this as a separate plugin like computes since it uses compute specific logic and cache access
- 
 async def get_uniswap_v3_pool_metadata(
         pool_address: str, 
         redis_conn: aioredis.Redis, 
@@ -1408,24 +1407,46 @@ async def get_uniswap_v3_pool_metadata(
         protocol_state_contract,
         
     ) -> Optional[UniswapPoolMetadata]:
-        # check redis cache first
+    """
+    Retrieves metadata for a Uniswap V3 pool from the snapshotter system.
+    
+    This function first checks the Redis cache for existing pool metadata. If not found,
+    it fetches the latest snapshot data for the pool from the protocol state and 
+    constructs the metadata object.
+    
+    Args:
+        pool_address (str): The Ethereum address of the Uniswap V3 pool
+        redis_conn (aioredis.Redis): Redis connection for caching
+        anchor_rpc_helper (RpcHelper): RPC helper for blockchain interactions
+        ipfs_reader (AsyncIPFSClient): IPFS client for reading snapshot data
+        protocol_state_contract: Smart contract object for protocol state
         
-        project_id: str = 'metadata:{poolAddress}:{Namespace}'
-        cache_key = f'pool_metadata:{pool_address}'
-        cached_data = await redis_conn.get(cache_key)
-        
-        if cached_data:
-            logger.info(f"Found cached metadata for pool {pool_address}")
-            return UniswapPoolMetadata(**json.loads(cached_data))
+    Returns:
+        Optional[UniswapPoolMetadata]: Pool metadata object containing token information,
+                                     decimals, symbols, etc. Returns None if metadata 
+                                     cannot be retrieved.
+                                     
+    Raises:
+        Exception: If there's an error fetching the latest snapshot data
+    """
+    # Check redis cache first for existing metadata
+    project_id: str = 'metadata:{poolAddress}:{Namespace}'
+    cache_key = f'pool_metadata:{pool_address}'
+    cached_data = await redis_conn.get(cache_key)
+    
+    if cached_data:
+        logger.info(f"Found cached metadata for pool {pool_address}")
+        return UniswapPoolMetadata(**json.loads(cached_data))
 
-        try:
-            latest_snapshot = await get_project_latest_snapshot(
-                redis_conn, protocol_state_contract, anchor_rpc_helper, ipfs_reader, project_id.format(poolAddress=pool_address, Namespace=settings.namespace)
-            )
-        except Exception as e:
-            logger.opt(exception=e).error(f"Error getting latest snapshot for pool {pool_address} while processing metadata")
-            return None
-        return UniswapPoolMetadata(**latest_snapshot)
+    # If not cached, fetch from latest snapshot
+    try:
+        latest_snapshot = await get_project_latest_snapshot(
+            redis_conn, protocol_state_contract, anchor_rpc_helper, ipfs_reader, project_id.format(poolAddress=pool_address, Namespace=settings.namespace)
+        )
+    except Exception as e:
+        logger.opt(exception=e).error(f"Error getting latest snapshot for pool {pool_address} while processing metadata")
+        return None
+    return UniswapPoolMetadata(**latest_snapshot)
 
 
 async def get_uniswapv3_snapshot(
@@ -1437,9 +1458,34 @@ async def get_uniswapv3_snapshot(
     message_model: Type[BaseModel],
     block_number: Optional[int] = None,
 ) -> Optional[Tuple[int, BaseModel]]:
-    # if block_number is not provided, get the last finalized epoch and use that
+    """
+    Retrieves a Uniswap V3 snapshot for a given project and optionally a specific block number.
+    
+    This function handles the logic of determining the target epoch based on whether a block_number
+    is provided or not. If no block_number is given, it uses the last finalized epoch. If a 
+    block_number is provided, it seeks around that epoch to find the closest available data.
+    
+    Args:
+        redis_conn (aioredis.Redis): Redis connection for data access
+        anchor_rpc_helper (RpcHelper): RPC helper for blockchain interactions  
+        ipfs_reader (AsyncIPFSClient): IPFS client for reading snapshot data
+        protocol_state_contract: Smart contract object for protocol state
+        project_id (str): The project identifier for the snapshot
+        message_model (Type[BaseModel]): Pydantic model class to parse the snapshot data
+        block_number (Optional[int]): Specific block number to target, if None uses latest
+        
+    Returns:
+        Optional[Tuple[int, BaseModel]]: Tuple of (epoch_id, parsed_snapshot) if found,
+                                        None if no valid snapshot data is available
+                                        
+    Note:
+        When block_number is provided, the function assumes epoch equals block number
+        in the data market contract configuration.
+    """
+    # Determine target epoch based on input parameters
     seek = False
     if not block_number:
+        # Use last submitted or finalized epoch when no specific block requested
         last_submitted_snapshot_data = await get_last_submitted_snapshot_data(redis_conn, project_id)
         if last_submitted_snapshot_data:
             target_epoch = last_submitted_snapshot_data['epochId']
@@ -1461,6 +1507,8 @@ async def get_uniswapv3_snapshot(
         # TODO: assumes epoch is set to block number in data market contract, may need to add config flag for this and derive epoch from block number if false
         target_epoch = block_number
         seek = True
+        
+    # Fetch snapshot data for the determined epoch
     snapshot_response = await get_project_epoch_snapshot(
         redis_conn=redis_conn,
         state_contract_obj=protocol_state_contract,
@@ -1470,6 +1518,8 @@ async def get_uniswapv3_snapshot(
         project_id=project_id,
         seek=seek
     )
+    
+    # Process exact match response
     if snapshot_response.exact_match:
         try:
             parsed_snapshot = message_model(**snapshot_response.exact_match.data)
@@ -1478,9 +1528,11 @@ async def get_uniswapv3_snapshot(
             logger.error(f"Failed to parse snapshot data for project {project_id} against epoch {target_epoch}: {e}")
             return None
     else:
-        # if exact match is not found, check if nearby epochs are included in the response
+        # Handle case when exact match not found but nearby epochs available
         if snapshot_response.has_closest_epochs:
             logger.info(f"No exact match found for project {project_id} against epoch {target_epoch}, but nearby epochs found: {snapshot_response.closest_epochs}") 
+            
+            # Try previous epoch first
             previous_epoch = snapshot_response.closest_epochs.previous        
             if previous_epoch:
                 logger.info(f"Fetching previous epoch {previous_epoch} CID for project {project_id} against actual sought epoch {target_epoch}")
@@ -1495,6 +1547,8 @@ async def get_uniswapv3_snapshot(
                 else:
                     logger.error(f"No snapshot data found for project {project_id} against nearby epoch {previous_epoch.epoch_id} with CID {previous_epoch.snapshot_cid}")
                     return None
+                    
+            # Fallback to next epoch if previous not available        
             next_epoch = snapshot_response.closest_epochs.next
             if next_epoch:
                 logger.info(f"Fetching next epoch {next_epoch} CID for project {project_id} against actual sought epoch {target_epoch}")
@@ -1520,7 +1574,21 @@ async def get_uniswap_v3_token_pools_snapshot(
     token_address: str,
 ):
     """
-    Get the snapshot of token pools for a Uniswap pair.
+    Retrieves the token pools snapshot for a specific token on Uniswap V3.
+    
+    This function fetches snapshot data that contains information about all pools
+    that include the specified token address.
+    
+    Args:
+        redis_conn (aioredis.Redis): Redis connection for data access
+        anchor_rpc_helper (RpcHelper): RPC helper for blockchain interactions
+        ipfs_reader (AsyncIPFSClient): IPFS client for reading snapshot data
+        protocol_state_contract: Smart contract object for protocol state
+        token_address (str): Ethereum address of the token to get pools for
+        
+    Returns:
+        Optional[UniswapTokenPoolsSnapshot]: Snapshot containing pool information
+                                           for the token, or None if not found
     """
     token_address = Web3.to_checksum_address(token_address)
     project_id = f"tokenPools:{token_address}:{settings.namespace}"
@@ -1551,6 +1619,24 @@ async def get_uniswap_v3_base_snapshots_for_token(
     token_address: str,
 
 ):
+    """
+    Retrieves base snapshots for all pools containing a specific token.
+    
+    This function first gets the list of pools for a token, then fetches
+    the base snapshot data for each of those pools.
+    
+    Args:
+        redis_conn (aioredis.Redis): Redis connection for data access
+        anchor_rpc_helper (RpcHelper): RPC helper for blockchain interactions
+        ipfs_reader (AsyncIPFSClient): IPFS client for reading snapshot data
+        protocol_state_contract: Smart contract object for protocol state
+        token_address (str): Ethereum address of the token
+        
+    Returns:
+        Optional[Dict[str, UniswapBaseSnapshot]]: Dictionary mapping pool addresses
+                                                to their base snapshots, or None if
+                                                no pools found for the token
+    """
     token_pools = await get_uniswap_v3_token_pools_snapshot(
         redis_conn=redis_conn,
         anchor_rpc_helper=anchor_rpc_helper,
@@ -1585,6 +1671,24 @@ async def get_uniswap_v3_base_snapshot(
     pool_address: str,
     block_number: Optional[int] = None,
 ):
+    """
+    Retrieves the base snapshot for a specific Uniswap V3 pool.
+    
+    Base snapshots contain fundamental pool data including token information,
+    liquidity, pricing data, and other core metrics.
+    
+    Args:
+        redis_conn (aioredis.Redis): Redis connection for data access
+        anchor_rpc_helper (RpcHelper): RPC helper for blockchain interactions
+        ipfs_reader (AsyncIPFSClient): IPFS client for reading snapshot data
+        protocol_state_contract: Smart contract object for protocol state
+        pool_address (str): Ethereum address of the pool
+        block_number (Optional[int]): Specific block to target, uses latest if None
+        
+    Returns:
+        Optional[UniswapBaseSnapshot]: Base snapshot data for the pool,
+                                     or None if not found
+    """
     project_id = f"baseSnapshot:{pool_address}:{settings.namespace}"
     result = await get_uniswapv3_snapshot(
         redis_conn=redis_conn,
@@ -1611,6 +1715,24 @@ async def get_uniswap_v3_trades_snapshot(
     pool_address: str,
     block_number: Optional[int] = None,
 ):
+    """
+    Retrieves the trades snapshot for a specific Uniswap V3 pool.
+    
+    Trade snapshots contain information about individual trades/swaps
+    that occurred in the pool during the snapshot period.
+    
+    Args:
+        redis_conn (aioredis.Redis): Redis connection for data access
+        anchor_rpc_helper (RpcHelper): RPC helper for blockchain interactions
+        ipfs_reader (AsyncIPFSClient): IPFS client for reading snapshot data
+        protocol_state_contract: Smart contract object for protocol state
+        pool_address (str): Ethereum address of the pool
+        block_number (Optional[int]): Specific block to target, uses latest if None
+        
+    Returns:
+        Optional[UniswapTradesSnapshot]: Trades snapshot data for the pool,
+                                       or None if not found
+    """
     project_id = f"tradesSnapshot:{pool_address}:{settings.namespace}"
     result = await get_uniswapv3_snapshot(
         redis_conn=redis_conn,
@@ -1637,6 +1759,23 @@ async def get_uniswap_v3_eth_price_snapshot(
     protocol_state_contract,
     block_number: Optional[int] = None,
 ):
+    """
+    Retrieves the ETH price snapshot from the Uniswap V3 ecosystem.
+    
+    This function fetches the latest ETH price data as captured by the
+    snapshotter system from various Uniswap V3 pools.
+    
+    Args:
+        redis_conn (aioredis.Redis): Redis connection for data access
+        anchor_rpc_helper (RpcHelper): RPC helper for blockchain interactions
+        ipfs_reader (AsyncIPFSClient): IPFS client for reading snapshot data
+        protocol_state_contract: Smart contract object for protocol state
+        block_number (Optional[int]): Specific block to target, uses latest if None
+        
+    Returns:
+        Optional[UniswapEthPriceSnapshot]: ETH price snapshot data,
+                                         or None if not found
+    """
     project_id = f'price:ETH:{settings.namespace}'
     result = await get_uniswapv3_snapshot(
         redis_conn=redis_conn,
@@ -1667,6 +1806,30 @@ async def get_uniswap_v3_token_price_pool(
     pool_address: str,
     block_number: Optional[int] = None,
 ):
+    """
+    Retrieves the USD price of a specific token from a specific pool.
+    
+    This function fetches the base snapshot for a pool and extracts the USD price
+    for the specified token. It determines if the token is token0 or token1 in
+    the pool and returns the appropriate price data.
+    
+    Args:
+        redis_conn (aioredis.Redis): Redis connection for data access
+        anchor_rpc_helper (RpcHelper): RPC helper for blockchain interactions
+        ipfs_reader (AsyncIPFSClient): IPFS client for reading snapshot data
+        protocol_state_contract: Smart contract object for protocol state
+        token_address (str): Ethereum address of the token to get price for
+        pool_address (str): Ethereum address of the pool to get price from
+        block_number (Optional[int]): Specific block to target, uses latest if None
+        
+    Returns:
+        Optional[float]: USD price of the token in the specified pool,
+                        or None if token not found in pool or data unavailable
+                        
+    Note:
+        Assumes snapshot_epoch corresponds to the block number when accessing
+        price data from the snapshot.
+    """
     base_project_id = f"baseSnapshot:{pool_address}:{settings.namespace}"
 
     result = await get_uniswapv3_snapshot(
@@ -1687,6 +1850,7 @@ async def get_uniswap_v3_token_price_pool(
         logger.error(f"No base snapshot data found for project {base_project_id} against epoch {snapshot_epoch}")
         return None
 
+    # Determine which token in the pair and extract its price
     if Web3.to_checksum_address(token_address) == snapshot_data.token0:
         # NOTE: assumes snapshot_epoch is the block number
         token_price = snapshot_data.token0PricesUSD[snapshot_epoch]
@@ -1775,6 +1939,29 @@ async def get_uniswap_v3_token_prices_all_snapshot(
     return results
 
 
+async def get_current_epoch_id(
+    anchor_rpc_helper: RpcHelper,
+    protocol_state_contract,
+):
+    """
+    Retrieves the current epoch ID from the protocol state contract.
+    
+    Args:
+        anchor_rpc_helper (RpcHelper): RPC helper for blockchain interactions
+        protocol_state_contract: Smart contract object for protocol state
+        
+    Returns:
+        int: The current epoch ID from the blockchain
+    """
+    [current_epoch_data] = await anchor_rpc_helper.web3_call(
+        tasks=[
+            ('currentEpoch', [Web3.to_checksum_address(settings.data_market)]),
+        ],
+        contract_addr=protocol_state_contract.address,
+        abi=protocol_state_contract.abi,
+    )
+    return current_epoch_data[2]
+
 
 async def get_uniswap_trade_volume_agg(
     redis_conn: aioredis.Redis,
@@ -1784,15 +1971,25 @@ async def get_uniswap_trade_volume_agg(
     time_interval: int,
     project_id: str,
 ):
-    [current_epoch_data] = await anchor_rpc_helper.web3_call(
-        tasks=[
-            ('currentEpoch', [Web3.to_checksum_address(settings.data_market)]),
-        ],
-        contract_addr=protocol_state_contract.address,
-        abi=protocol_state_contract.abi,
-    )
-
-    current_epoch = current_epoch_data[2]
+    """
+    Calculates aggregated trade volume for a project over a specified time interval.
+    
+    This function fetches all snapshots within the time interval and sums up
+    the total trade volume across all epochs.
+    
+    Args:
+        redis_conn (aioredis.Redis): Redis connection for data access
+        anchor_rpc_helper (RpcHelper): RPC helper for blockchain interactions
+        ipfs_reader (AsyncIPFSClient): IPFS client for reading snapshot data
+        protocol_state_contract: Smart contract object for protocol state
+        time_interval (int): Time interval in seconds to aggregate over
+        project_id (str): Project identifier for the data
+        
+    Returns:
+        Dict[str, Union[int, float]]: Dictionary containing totalTradeVolume
+                                    and timeInterval values
+    """
+    current_epoch = await get_current_epoch_id(anchor_rpc_helper, protocol_state_contract)
 
     tail_epoch_id, _ = await get_tail_epoch_id(
         redis_conn, protocol_state_contract, anchor_rpc_helper, current_epoch, time_interval, project_id,
@@ -1811,6 +2008,174 @@ async def get_uniswap_trade_volume_agg(
     }
 
 
+async def get_active_pools(
+    redis_conn: aioredis.Redis,
+    anchor_rpc_helper: RpcHelper,
+    ipfs_reader: AsyncIPFSClient,
+    protocol_state_contract,
+    time_interval: int,
+):
+    """
+    Retrieves the most active pools over a specified time interval.
+    
+    This function aggregates pool activity data from snapshots and returns
+    pools sorted by their activity frequency.
+    
+    Args:
+        redis_conn (aioredis.Redis): Redis connection for data access
+        anchor_rpc_helper (RpcHelper): RPC helper for blockchain interactions
+        ipfs_reader (AsyncIPFSClient): IPFS client for reading snapshot data
+        protocol_state_contract: Smart contract object for protocol state
+        time_interval (int): Time interval in seconds to analyze
+        
+    Returns:
+        List[Tuple[str, int]]: List of tuples (pool_address, frequency)
+                              sorted by frequency in descending order
+    """
+    # check if data is already in redis
+    active_pool_data = await redis_conn.get(f"active_pool_data:{settings.namespace}")
+    if active_pool_data:
+        return json.loads(active_pool_data)
+    
+    project_id = f"activePools:{settings.namespace}"
+    current_epoch = await get_current_epoch_id(anchor_rpc_helper, protocol_state_contract)
+
+    tail_epoch_id, _ = await get_tail_epoch_id(
+        redis_conn, protocol_state_contract, anchor_rpc_helper, current_epoch, time_interval, project_id,
+    )
+
+    snapshots = await get_project_epoch_snapshot_bulk(
+        redis_conn, protocol_state_contract, anchor_rpc_helper, ipfs_reader, tail_epoch_id, current_epoch, project_id,
+    )
+    active_pools = {}
+    for snapshot in snapshots:
+        if snapshot:
+            for pool_address, frequency in snapshot['pools'].items():
+                if pool_address not in active_pools:
+                    active_pools[pool_address] = 0
+                active_pools[pool_address] += frequency
+    active_pool_data = [(pool_address, frequency) for pool_address, frequency in active_pools.items()]
+    active_pool_data.sort(key=lambda x: x[1], reverse=True)
+    # set in redis with 1 min expiry
+    await redis_conn.set(f"active_pool_data:{settings.namespace}", json.dumps(active_pool_data), ex=300)
+    return active_pool_data
+
+
+async def get_active_tokens(
+    redis_conn: aioredis.Redis,
+    anchor_rpc_helper: RpcHelper,
+    ipfs_reader: AsyncIPFSClient,
+    protocol_state_contract,
+    time_interval: int,
+):
+    """
+    Retrieves the most active tokens over a specified time interval.
+    
+    This function aggregates token activity data from snapshots and returns
+    tokens sorted by their activity frequency.
+    
+    Args:
+        redis_conn (aioredis.Redis): Redis connection for data access
+        anchor_rpc_helper (RpcHelper): RPC helper for blockchain interactions
+        ipfs_reader (AsyncIPFSClient): IPFS client for reading snapshot data
+        protocol_state_contract: Smart contract object for protocol state
+        time_interval (int): Time interval in seconds to analyze
+        
+    Returns:
+        List[Tuple[str, int]]: List of tuples (token_address, frequency)
+                              sorted by frequency in descending order
+    """
+    # check if data is already in redis
+    active_token_data = await redis_conn.get(f"active_token_data:{settings.namespace}")
+    if active_token_data:
+        return json.loads(active_token_data)
+    
+    project_id = f"activeTokens:{settings.namespace}"
+    current_epoch = await get_current_epoch_id(anchor_rpc_helper, protocol_state_contract)
+
+    tail_epoch_id, _ = await get_tail_epoch_id(
+        redis_conn, protocol_state_contract, anchor_rpc_helper, current_epoch, time_interval, project_id,
+    )
+    
+    snapshots = await get_project_epoch_snapshot_bulk(
+        redis_conn, protocol_state_contract, anchor_rpc_helper, ipfs_reader, tail_epoch_id, current_epoch, project_id,
+    )
+    active_tokens = {}
+    for snapshot in snapshots:
+        if snapshot:
+            for token_address, frequency in snapshot['tokens'].items():
+                if token_address not in active_tokens:
+                    active_tokens[token_address] = 0
+                active_tokens[token_address] += frequency
+    active_token_data = [(token_address, frequency) for token_address, frequency in active_tokens.items()]
+    active_token_data.sort(key=lambda x: x[1], reverse=True)
+    # set in redis with 1 min expiry
+    await redis_conn.set(f"active_token_data:{settings.namespace}", json.dumps(active_token_data), ex=300)
+    return active_token_data
+
+
+async def get_uniswap_trade_volume_agg_all_pools(
+    redis_conn: aioredis.Redis,
+    anchor_rpc_helper: RpcHelper,
+    ipfs_reader: AsyncIPFSClient,
+    protocol_state_contract,
+    time_interval: int,
+    token_address: str,
+):
+    """
+    Calculates aggregated trade volume across all pools containing a specific token.
+    
+    This function first finds all pools that contain the specified token, then
+    aggregates trade volume data from all those pools over the time interval.
+    
+    Args:
+        redis_conn (aioredis.Redis): Redis connection for data access
+        anchor_rpc_helper (RpcHelper): RPC helper for blockchain interactions
+        ipfs_reader (AsyncIPFSClient): IPFS client for reading snapshot data
+        protocol_state_contract: Smart contract object for protocol state
+        time_interval (int): Time interval in seconds to aggregate over
+        token_address (str): Ethereum address of the token to analyze
+        
+    Returns:
+        Optional[Dict[str, Union[int, float]]]: Dictionary containing cumulative
+                                              totalTradeVolume and timeInterval,
+                                              or None if no pools found
+    """
+    token_address = Web3.to_checksum_address(token_address)
+    token_pools = await get_uniswap_v3_token_pools_snapshot(
+        redis_conn=redis_conn,
+        anchor_rpc_helper=anchor_rpc_helper,
+        ipfs_reader=ipfs_reader,
+        protocol_state_contract=protocol_state_contract,
+        token_address=token_address,
+    )
+
+    tasks = []
+    if not token_pools:
+        logger.error(f"No token pools found for token {token_address}")
+        return None
+    
+    for pool in token_pools.pools:
+        tasks.append(get_uniswap_trade_volume_agg(
+            redis_conn=redis_conn,
+            anchor_rpc_helper=anchor_rpc_helper,
+            ipfs_reader=ipfs_reader,
+            protocol_state_contract=protocol_state_contract,
+            time_interval=time_interval,
+            project_id=f"baseSnapshot:{pool}:{settings.namespace}",
+        ))
+    results = await asyncio.gather(*tasks)
+    
+    cumulative_trade = {
+        'totalTradeVolume': 0,
+        'timeInterval': time_interval,
+    }
+    for data in results:
+        cumulative_trade['totalTradeVolume'] += data['totalTradeVolume']
+
+    return cumulative_trade
+
+
 async def get_uniswap_price_series_agg(
     redis_conn: aioredis.Redis,
     rpc_helper: RpcHelper,
@@ -1822,6 +2187,39 @@ async def get_uniswap_price_series_agg(
     token_address: str,
     step_seconds: int,
 ):
+    """
+    Generates a time series of token prices over a specified interval with regular spacing.
+    
+    This complex function retrieves price data for a token from snapshots, handles missing
+    timestamps by fetching from RPC, and creates a time series with evenly spaced intervals.
+    It includes sophisticated logic for handling gaps in data and fallback mechanisms.
+    
+    Args:
+        redis_conn (aioredis.Redis): Redis connection for data access and caching
+        rpc_helper (RpcHelper): RPC helper for fetching block timestamps from blockchain
+        anchor_rpc_helper (RpcHelper): Additional RPC helper for protocol interactions
+        ipfs_reader (AsyncIPFSClient): IPFS client for reading snapshot data
+        protocol_state_contract: Smart contract object for protocol state
+        time_interval (int): Total time interval in seconds to analyze
+        project_id (str): Project identifier for the price data
+        token_address (str): Ethereum address of the token to get prices for
+        step_seconds (int): Time spacing in seconds between price data points
+        
+    Returns:
+        Dict[str, Any]: Dictionary containing:
+                       - priceSeries: List of price entries with blockNumber, price, timestamp
+                       - timeInterval: The time interval used for the analysis
+                       
+    Raises:
+        ValueError: If target token price key cannot be determined or no price data available
+        Exception: If snapshot data cannot be retrieved for required epochs
+        
+    Note:
+        This function implements complex logic for handling missing price data by using
+        the last known price for gaps and includes fallback mechanisms for timestamp
+        resolution when Redis cache misses occur.
+    """
+    # Get current epoch for determining data range
     [current_epoch_data] = await anchor_rpc_helper.web3_call(
         tasks=[
             ('currentEpoch', [Web3.to_checksum_address(settings.data_market)]),
@@ -1832,6 +2230,7 @@ async def get_uniswap_price_series_agg(
 
     current_epoch = current_epoch_data[2]
 
+    # Calculate tail epoch for the time interval
     tail_epoch_id, _ = await get_tail_epoch_id(
         redis_conn, protocol_state_contract, anchor_rpc_helper, current_epoch, time_interval, project_id,
     )
@@ -1882,6 +2281,7 @@ async def get_uniswap_price_series_agg(
         redis_conn, protocol_state_contract, anchor_rpc_helper, ipfs_reader, tail_epoch_id, current_epoch, project_id,
     )
     
+    # Initialize price data processing variables
     price_data = []
     target_token_address = Web3.to_checksum_address(token_address)
     target_token_price_key = None
@@ -1891,6 +2291,7 @@ async def get_uniswap_price_series_agg(
 
     block_to_eth_price_map: Dict[int, float] = {}
 
+    # Determine which price key to use (token0PricesUSD or token1PricesUSD)
     if snapshots:
         for snapshot_data_for_key_check in snapshots:
             if snapshot_data_for_key_check: 
@@ -1903,6 +2304,7 @@ async def get_uniswap_price_series_agg(
                     target_token_price_key = 'token1PricesUSD'
                     break
         
+        # Extract price data from snapshots if price key is determined
         if target_token_price_key:
             for snapshot in snapshots: 
                 if not snapshot:
@@ -1927,6 +2329,7 @@ async def get_uniswap_price_series_agg(
                         f"is not a dictionary: {prices_for_current_snapshot}"
                     )
 
+            # Handle case where tail epoch is not covered by bulk snapshots
             if not tail_epoch_covered_by_bulk:
                 logger.info(
                     f"Tail epoch {tail_epoch_id} not covered by bulk or price key undetermined. "
@@ -2033,12 +2436,14 @@ async def get_uniswap_price_series_agg(
     price_data = []
     all_block_numbers_in_range = list(range(tail_epoch_id, current_epoch + 1))
 
+    # Identify blocks missing timestamp data
     block_timestamps_to_fetch_rpc = []
     if all_block_numbers_in_range:
         for block_num in all_block_numbers_in_range:
             if block_num not in block_to_timestamp_map:
                 block_timestamps_to_fetch_rpc.append(block_num)
 
+    # Fetch missing timestamps via RPC if needed
     if block_timestamps_to_fetch_rpc:
         logger.info(
             f"Timestamps for {len(block_timestamps_to_fetch_rpc)} blocks (e.g., {block_timestamps_to_fetch_rpc[:5]}{'...' if len(block_timestamps_to_fetch_rpc) > 5 else ''}) "
@@ -2054,6 +2459,7 @@ async def get_uniswap_price_series_agg(
         else:
             logger.warning(f"fetch_block_timestamps returned no data for {len(block_timestamps_to_fetch_rpc)} blocks for project {project_id}.")
 
+    # Build price data series for all blocks
     if all_block_numbers_in_range:
         for current_block_num in all_block_numbers_in_range:
             current_timestamp = block_to_timestamp_map.get(current_block_num, None)
@@ -2150,7 +2556,45 @@ async def get_uniswap_v3_pool_trades(
     end_timestamp: int,
     protocol_state_contract,
 ) -> List[Dict]:
+    """
+    Retrieves detailed trade information for a Uniswap V3 pool within a time range.
     
+    This function fetches pool metadata, determines the appropriate block range based
+    on timestamps, retrieves trade snapshots, and processes individual trades with
+    calculated prices and USD values.
+    
+    Args:
+        redis_conn (aioredis.Redis): Redis connection for data access
+        anchor_rpc_helper (RpcHelper): RPC helper for blockchain interactions
+        rpc_helper (RpcHelper): Additional RPC helper for block data fetching
+        ipfs_reader (AsyncIPFSClient): IPFS client for reading snapshot data
+        project_id (str): Project identifier for the trades data
+        pool_address (str): Ethereum address of the pool to analyze
+        start_timestamp (int): Start timestamp for the trade query range
+        end_timestamp (int): End timestamp for the trade query range
+        protocol_state_contract: Smart contract object for protocol state
+        
+    Returns:
+        List[Dict]: List of processed trade dictionaries containing:
+                   - timestamp: Trade timestamp
+                   - tokens: Token amounts for both tokens in the pair
+                   - trade_amount_usd: USD value of the trade
+                   - trade_type: Type of trade (e.g., "Swap")
+                   - trade_price_usd: USD price of the non-base token
+                   - token0_amount: Raw token0 amount
+                   - token1_amount: Raw token1 amount
+                   - transaction_hash: Transaction hash of the trade
+                   
+    Raises:
+        Exception: If pool metadata cannot be found, block timestamp lookup fails,
+                  or trade snapshot fetching encounters errors
+                  
+    Note:
+        The function implements a fallback mechanism for timestamp-to-block conversion
+        when initial Redis cache lookup fails.
+    """
+    
+    # Get pool metadata for token information and decimals
     pool_metadata = await get_uniswap_v3_pool_metadata(
         pool_address=pool_address,
         redis_conn=redis_conn,
@@ -2163,11 +2607,13 @@ async def get_uniswap_v3_pool_trades(
         logger.error(f"No pool metadata found for project {project_id} and pool {pool_address}.")
         raise Exception(f"No pool metadata found for project {project_id} and pool {pool_address}.")
 
+    # Find the closest block to the start timestamp
     closest_start_block = await get_block_number_closest_to_timestamp(
         redis_conn=redis_conn,
         target_timestamp=start_timestamp,
     )
 
+    # Implement fallback mechanism if block lookup fails
     if not closest_start_block:
         logger.warning(f"No closest start block found in Redis for project {project_id}, pool {pool_address}, target timestamp {start_timestamp}. Attempting fallback.")
         try:
@@ -2186,6 +2632,7 @@ async def get_uniswap_v3_pool_trades(
             current_block_number = int(latest_block_data['number'], 16)
             current_block_timestamp = int(latest_block_data['timestamp'], 16)
 
+            # Estimate target block based on time difference
             timestamp_diff = current_block_timestamp - start_timestamp
             block_diff_estimate = int(timestamp_diff / source_chain_block_time)
             estimated_target_block = current_block_number - block_diff_estimate
@@ -2204,6 +2651,7 @@ async def get_uniswap_v3_pool_trades(
             logger.info(f"Fallback: Fetching block timestamps for range [{fetch_start_block}, {fetch_end_block}] around estimated target {estimated_target_block} for start_timestamp {start_timestamp}.")
             await fetch_block_timestamps(redis_conn, rpc_helper, blocks_to_fetch)
 
+            # Retry block lookup after fallback
             closest_start_block = await get_block_number_closest_to_timestamp(
                 redis_conn=redis_conn,
                 target_timestamp=start_timestamp,
@@ -2222,6 +2670,7 @@ async def get_uniswap_v3_pool_trades(
     
     logger.info(f"Closest start block for project {project_id} and pool {pool_address} is {closest_start_block}.")
 
+    # Calculate time interval and tail epoch for data fetching
     time_interval = end_timestamp - start_timestamp
 
     tail_epoch_id, _ = await get_tail_epoch_id(
@@ -2230,6 +2679,7 @@ async def get_uniswap_v3_pool_trades(
 
     logger.info(f"Tail epoch ID for project {project_id} and pool {pool_address} is {tail_epoch_id}.")
 
+    # Fetch trade snapshot data for the determined range
     try:
         trade_snapshots_raw = await get_project_epoch_snapshot_bulk(
             redis_conn, protocol_state_contract, anchor_rpc_helper, ipfs_reader, tail_epoch_id, closest_start_block, project_id,
@@ -2238,6 +2688,7 @@ async def get_uniswap_v3_pool_trades(
         logger.error(f"Error fetching trade snapshots for project {project_id} and pool {pool_address}: {e}")
         raise Exception(f"Error fetching trade snapshots for project {project_id} and pool {pool_address}: {e}")
 
+    # Determine base token (WETH is typically the base)
     if Web3.to_checksum_address(pool_metadata.token0.address) == WETH:
         base_token_num = 0
     else:
@@ -2248,6 +2699,7 @@ async def get_uniswap_v3_pool_trades(
 
     processed_trades = []
 
+    # Process each trade snapshot
     for trade_snapshot_raw in trade_snapshots_raw:
         if not trade_snapshot_raw:
             continue
@@ -2258,20 +2710,25 @@ async def get_uniswap_v3_pool_trades(
             logger.error(f"Error validating trade snapshot for project {project_id} and pool {pool_address}: {e}")
             continue
 
+        # Process individual trades within the snapshot
         for trade in trade_snapshot.trades:
             if trade.tradeType == TradeType.SWAP:
+                # Extract trade data
                 block_timestamp = trade.data['block_timestamp']
                 token0_amount = trade.data['amount0']
                 token1_amount = trade.data['amount1']
                 transaction_hash = trade.log['transactionHash']
+                
+                # Adjust amounts for token decimals
                 token0_amount_adjusted = abs(token0_amount) / 10 ** pool_metadata.token0.decimals
                 token1_amount_adjusted = abs(token1_amount) / 10 ** pool_metadata.token1.decimals
                 trade_amount_usd = trade.data['calculated_trade_amount_usd']
                 trade_type = "Swap"
                   
+                # Calculate price of non-base token in terms of base token
                 price_of_non_base_token_in_weth = 0.0
                 if base_token_num == 0:
-                    if token1_amount_adjusted > 1e-18: # Avoid division by zero or near-zero
+                    if token1_amount_adjusted > 1e-18:  # Avoid division by zero or near-zero
                         price_of_non_base_token_in_weth = token0_amount_adjusted / token1_amount_adjusted
                     else:
                         logger.warning(f"Non-base token (token1: {token1_symbol}) amount is effectively zero for trade. Pool: {pool_address}, ts: {block_timestamp}")
@@ -2281,10 +2738,12 @@ async def get_uniswap_v3_pool_trades(
                     else:
                         logger.warning(f"Non-base token (token0: {token0_symbol}) amount is effectively zero for trade. Pool: {pool_address}, ts: {block_timestamp}")
 
+                # Calculate USD price using ETH price from trade data
                 eth_price_usd = trade.data.get('calculated_eth_price', 0.0)
                 logger.info(f"ETH price for block {trade.log['blockNumber']} is {eth_price_usd}")
                 price_of_non_base_token_usd = price_of_non_base_token_in_weth * eth_price_usd
                 
+                # Create processed trade entry
                 processed_trade_entry = {
                     'timestamp': block_timestamp,
                     'tokens': {
