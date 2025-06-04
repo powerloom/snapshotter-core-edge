@@ -2031,6 +2031,11 @@ async def get_active_pools(
         List[Tuple[str, int]]: List of tuples (pool_address, frequency)
                               sorted by frequency in descending order
     """
+    # check if data is already in redis
+    active_pool_data = await redis_conn.get(f"active_pool_data:{settings.namespace}")
+    if active_pool_data:
+        return json.loads(active_pool_data)
+    
     project_id = f"activePools:{settings.namespace}"
     current_epoch = await get_current_epoch_id(anchor_rpc_helper, protocol_state_contract)
 
@@ -2050,6 +2055,8 @@ async def get_active_pools(
                 active_pools[pool_address] += frequency
     active_pool_data = [(pool_address, frequency) for pool_address, frequency in active_pools.items()]
     active_pool_data.sort(key=lambda x: x[1], reverse=True)
+    # set in redis with 1 min expiry
+    await redis_conn.set(f"active_pool_data:{settings.namespace}", json.dumps(active_pool_data), ex=60)
     return active_pool_data
 
 
@@ -2077,6 +2084,11 @@ async def get_active_tokens(
         List[Tuple[str, int]]: List of tuples (token_address, frequency)
                               sorted by frequency in descending order
     """
+    # check if data is already in redis
+    active_token_data = await redis_conn.get(f"active_token_data:{settings.namespace}")
+    if active_token_data:
+        return json.loads(active_token_data)
+    
     project_id = f"activeTokens:{settings.namespace}"
     current_epoch = await get_current_epoch_id(anchor_rpc_helper, protocol_state_contract)
 
@@ -2096,6 +2108,8 @@ async def get_active_tokens(
                 active_tokens[token_address] += frequency
     active_token_data = [(token_address, frequency) for token_address, frequency in active_tokens.items()]
     active_token_data.sort(key=lambda x: x[1], reverse=True)
+    # set in redis with 1 min expiry
+    await redis_conn.set(f"active_token_data:{settings.namespace}", json.dumps(active_token_data), ex=60)
     return active_token_data
 
 
