@@ -1773,13 +1773,9 @@ async def get_uniswap_v3_token_prices_all_snapshot(
     return results
 
 
-async def get_uniswap_trade_volume_agg(
-    redis_conn: aioredis.Redis,
+async def get_current_epoch_id(
     anchor_rpc_helper: RpcHelper,
-    ipfs_reader: AsyncIPFSClient,
     protocol_state_contract,
-    time_interval: int,
-    project_id: str,
 ):
     [current_epoch_data] = await anchor_rpc_helper.web3_call(
         tasks=[
@@ -1788,8 +1784,18 @@ async def get_uniswap_trade_volume_agg(
         contract_addr=protocol_state_contract.address,
         abi=protocol_state_contract.abi,
     )
+    return current_epoch_data[2]
 
-    current_epoch = current_epoch_data[2]
+
+async def get_uniswap_trade_volume_agg(
+    redis_conn: aioredis.Redis,
+    anchor_rpc_helper: RpcHelper,
+    ipfs_reader: AsyncIPFSClient,
+    protocol_state_contract,
+    time_interval: int,
+    project_id: str,
+):
+    current_epoch = await get_current_epoch_id(anchor_rpc_helper, protocol_state_contract)
 
     tail_epoch_id, _ = await get_tail_epoch_id(
         redis_conn, protocol_state_contract, anchor_rpc_helper, current_epoch, time_interval, project_id,
@@ -1806,6 +1812,35 @@ async def get_uniswap_trade_volume_agg(
         'totalTradeVolume': total_trade_volume,
         'timeInterval': time_interval,
     }
+
+
+async def get_active_pools(
+    redis_conn: aioredis.Redis,
+    anchor_rpc_helper: RpcHelper,
+    ipfs_reader: AsyncIPFSClient,
+    protocol_state_contract,
+    time_interval: int,
+):
+    project_id = f"activePools:{settings.namespace}"
+    current_epoch = await get_current_epoch_id(anchor_rpc_helper, protocol_state_contract)
+
+    tail_epoch_id, _ = await get_tail_epoch_id(
+        redis_conn, protocol_state_contract, anchor_rpc_helper, current_epoch, time_interval, project_id,
+    )
+
+    snapshots = await get_project_epoch_snapshot_bulk(
+        redis_conn, protocol_state_contract, anchor_rpc_helper, ipfs_reader, tail_epoch_id, current_epoch, project_id,
+    )
+    active_pools = {}
+    for snapshot in snapshots:
+        if snapshot:
+            for pool_address, frequency in snapshot['pools'].items():
+                if pool_address not in active_pools:
+                    active_pools[pool_address] = 0
+                active_pools[pool_address] += frequency
+    active_pool_data = [(pool_address, frequency) for pool_address, frequency in active_pools.items()]
+    active_pool_data.sort(key=lambda x: x[1], reverse=True)
+    return active_pool_data
 
 
 async def get_uniswap_trade_volume_agg_all_pools(

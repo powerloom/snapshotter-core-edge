@@ -15,6 +15,7 @@ from rpc_helper.rpc import RpcHelper
 from typing import Optional
 from web3 import Web3
 from fastapi import Query
+import asyncio
 
 from computes.utils.models.message_models import UniswapBaseSnapshot
 from snapshotter.settings.config import settings
@@ -31,7 +32,8 @@ from snapshotter.utils.data_utils import (
     get_uniswap_v3_pool_metadata,
     get_uniswap_v3_pool_trades,
     get_uniswap_v3_base_snapshots_for_token,
-    get_uniswap_trade_volume_agg_all_pools
+    get_uniswap_trade_volume_agg_all_pools,
+    get_active_pools,
 )
 from snapshotter.utils.default_logger import default_logger
 from snapshotter.utils.file_utils import read_json_file
@@ -622,6 +624,11 @@ async def get_daily_active_pools(
         description="Include pool metadata in the response",
         example=False
     ),
+    time_interval: int = Query(
+        default=86400,
+        description="Time interval in seconds",
+        example=86400
+    ),
 ):
     """
     Get a paginated list of active pools for the current day.
@@ -635,47 +642,33 @@ async def get_daily_active_pools(
     - List of active pools with their frequencies and optional metadata
     - Pagination metadata including total count and pages
     """
-    current_day = await app.state.redis_conn.get("current_day")
-    if not current_day:
-        response.status_code = 404
-        return {"error": "Current day not found"}
+    pools = await get_active_pools(
+        redis_conn=app.state.redis_conn,
+        protocol_state_contract=app.state.protocol_state_contract,
+        anchor_rpc_helper=app.state.anchor_rpc_helper,
+        ipfs_reader=app.state.ipfs_reader_client,
+        time_interval=time_interval,
+    )
     
     try:
-        # Decode current_day if it's bytes
-        if isinstance(current_day, bytes):
-            current_day = current_day.decode('utf-8')
-        
-        redis_key = f"active_pools:day_{current_day}"
-        
         # Calculate start and end indices for pagination
         start_idx = (page - 1) * size
         end_idx = start_idx + size - 1
-        
-        # Get total count of pools
-        total_pools = await app.state.redis_conn.zcard(redis_key)
-        
-        # Get paginated pools from the sorted set
-        active_pools = await app.state.redis_conn.zrange(
-            redis_key,
-            start_idx,
-            end_idx,
-            withscores=True,
-            desc=True  # Get highest frequency pools first
-        )
+
+        total_pools = len(pools)
+        active_pools = pools[start_idx:end_idx+1]
         
         # Format the response
         pools_data = []
         for pool, score in active_pools:
-            pool_address = pool.decode('utf-8')
             pool_data = {
-                "pool_address": pool_address,
-                "frequency": int(score)
+                "pool_address": pool,
+                "frequency": score
             }
             pools_data.append(pool_data)
         
         # Add metadata if requested (parallelized in batches)
         if metadata:
-            import asyncio
             
             # Process pools in batches of 50
             batch_size = 50
@@ -715,7 +708,6 @@ async def get_daily_active_pools(
         
         response.status_code = 200
         return {
-            "day": int(current_day),
             "active_pools": pools_data,
             "pagination": {
                 "page": page,
