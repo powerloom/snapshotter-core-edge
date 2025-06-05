@@ -2311,6 +2311,32 @@ async def get_uniswap_price_series_agg(
 
     block_to_eth_price_map: Dict[int, float] = {}
 
+    # Check if we have any meaningful snapshot data in the time interval
+    has_snapshot_data = any(snapshot for snapshot in snapshots if snapshot)
+    
+    # If no snapshots in time interval, fall back to latest available snapshot
+    if not has_snapshot_data:
+        logger.info(
+            f"No snapshots found in time interval for project {project_id}. "
+            f"Attempting to use latest available snapshot as fallback."
+        )
+        
+        # Try to get the latest snapshot (last submitted or last finalized)
+        latest_snapshot = await get_project_latest_snapshot(
+            redis_conn, protocol_state_contract, anchor_rpc_helper, ipfs_reader, project_id
+        )
+        
+        if latest_snapshot:
+            # Use the latest snapshot as our single data point
+            snapshots = [latest_snapshot]
+            logger.info(f"Using latest snapshot as fallback for project {project_id}")
+        else:
+            logger.error(f"No latest snapshot available for project {project_id}")
+            raise ValueError(
+                f"No snapshot data available for project {project_id} and token {token_address} "
+                f"in the specified time interval and no fallback snapshot found."
+            )
+
     # Determine which price key to use (token0PricesUSD or token1PricesUSD)
     if snapshots:
         for snapshot_data_for_key_check in snapshots:
@@ -2378,11 +2404,29 @@ async def get_uniswap_price_series_agg(
                         )
                         logger.info(f"Closest snapshot at tail for project {project_id} at tail_epoch_id {tail_epoch_id} is {previous_epoch.epoch_id}.")
                     else:
-                        logger.error(f"No previous closest epoch found for project {project_id} at tail_epoch_id {tail_epoch_id}.")
-                        raise Exception(f"No previous closest epoch found for project {project_id} at tail_epoch_id {tail_epoch_id}.")
+                        # If no previous closest epoch, try to use latest available snapshot
+                        logger.warning(f"No previous closest epoch found for project {project_id} at tail_epoch_id {tail_epoch_id}. Attempting to use latest snapshot.")
+                        latest_snapshot = await get_project_latest_snapshot(
+                            redis_conn, protocol_state_contract, anchor_rpc_helper, ipfs_reader, project_id
+                        )
+                        if latest_snapshot:
+                            snapshot_at_tail = latest_snapshot
+                            logger.info(f"Using latest snapshot as fallback for tail data for project {project_id}")
+                        else:
+                            logger.error(f"No snapshot data available for project {project_id}")
+                            raise Exception(f"No snapshot data available for project {project_id} at tail_epoch_id {tail_epoch_id}.")
                 else:
-                    logger.error(f"No snapshot data found for project {project_id} at tail_epoch_id {tail_epoch_id}.")
-                    raise Exception(f"No snapshot data found for project {project_id} at tail_epoch_id {tail_epoch_id}.")
+                    # If no snapshot response, try to use latest available snapshot
+                    logger.warning(f"No snapshot data found for project {project_id} at tail_epoch_id {tail_epoch_id}. Attempting to use latest snapshot.")
+                    latest_snapshot = await get_project_latest_snapshot(
+                        redis_conn, protocol_state_contract, anchor_rpc_helper, ipfs_reader, project_id
+                    )
+                    if latest_snapshot:
+                        snapshot_at_tail = latest_snapshot
+                        logger.info(f"Using latest snapshot as fallback for tail data for project {project_id}")
+                    else:
+                        logger.error(f"No snapshot data available for project {project_id}")
+                        raise Exception(f"No snapshot data available for project {project_id} at tail_epoch_id {tail_epoch_id}.")
         else:
             msg = f"Unable to determine target token price key for project {project_id} and token {token_address}."
             logger.error(msg)
