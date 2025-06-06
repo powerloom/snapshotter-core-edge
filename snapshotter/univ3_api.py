@@ -594,6 +594,8 @@ async def get_daily_active_tokens(
                                 f"Exception fetching metadata for token {batch[j]['token_address']}: {metadata_result}"
                             )
                             batch[j]["metadata"] = None
+                        elif not metadata_result:
+                            batch[j]["metadata"] = None
                         else:
                             if metadata_result.pools:
                                 # Get any pool metadata from the pools dict
