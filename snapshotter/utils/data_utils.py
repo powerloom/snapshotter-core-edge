@@ -138,6 +138,8 @@ async def get_project_last_finalized_epoch(redis_conn: aioredis.Redis, state_con
         contract_addr=state_contract_obj.address,
         abi=state_contract_obj.abi,
     )
+    if project_last_finalized_epoch == 0:
+        return 0
     await redis_conn.hset(project_last_finalized_epoch_hmap(), project_id, project_last_finalized_epoch)
     return project_last_finalized_epoch
 
@@ -1451,6 +1453,7 @@ async def get_uniswap_v3_pool_metadata(
     """
     # Check redis cache first for existing metadata
     project_id: str = 'metadata:{poolAddress}:{Namespace}'
+    
     cache_key = f'pool_metadata:{pool_address}'
     cached_data = await redis_conn.get(cache_key)
     

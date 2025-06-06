@@ -227,6 +227,7 @@ services:
       - PROCESSOR_QUEUE_KEY=${PROCESSOR_QUEUE_KEY:-}
       - PROCESSOR_BLOCK_TIMEOUT=${PROCESSOR_BLOCK_TIMEOUT:-}
       - EVENT_FILTER_CONFIG_PATH=${EVENT_FILTER_CONFIG_PATH:-/app/shared_config/event_filters.example.json}
+      - WETH_ADDRESS=${WETH_ADDRESS:-}
     depends_on:
       - redis
     profiles: ["new"]
