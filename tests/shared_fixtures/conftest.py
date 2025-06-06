@@ -4,6 +4,16 @@ import shutil
 import re
 import pytest
 from dotenv import load_dotenv
+import json
+from typing import Dict, AsyncGenerator
+import asyncio
+from web3 import Web3
+from web3.contract.contract import Contract
+from rpc_helper.rpc import RpcHelper
+from ipfs_client.main import AsyncIPFSClient
+from redis import asyncio as aioredis
+import certifi
+from httpx import AsyncHTTPTransport, Limits, Timeout, AsyncClient
 
 # Add project root to sys.path
 PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
@@ -123,121 +133,138 @@ def _populate_config_file(file_path, replacement_rules):
         print(f"    Error writing populated file {file_path}: {e}")
         return False
 
-# --- Pytest Hooks ---
+@pytest.fixture(scope="session")
+def app_config():
+    """
+    Provides the application settings object and monkeypatches the RpcHelper
+    to fix a hardcoded SSL certificate path. This is the earliest point
+    in our test setup that runs before any RpcHelper instances are created.
+    """
+    # --- MONKEYPATCH RpcHelper ---
+    # The RpcHelper library has a hardcoded, Linux-specific SSL certificate path,
+    # causing OSError on other platforms like macOS. We replace the problematic
+    # method with a corrected version that uses the cross-platform `certifi` library.
 
-@pytest.hookimpl(tryfirst=True)
-def pytest_sessionstart(session):
-    print("\n--- Pytest Session Start: Preparing test configurations (snapshotter_autofill style) ---")
+    original_init_http_clients = RpcHelper._init_http_clients
 
-    env_test_path = os.path.join(PROJECT_ROOT, ENV_TEST_FILE_NAME)
-    if not os.path.exists(env_test_path):
-        pytest.exit(
-            f"CRITICAL: Test environment file '{env_test_path}' not found. "
-            f"Please create it (e.g., by copying 'env.test.example') and populate it. Aborting."
+    async def corrected_init_http_clients(self):
+        """A corrected version of _init_http_clients that uses certifi."""
+        if self._client is not None:
+            return
+
+        # This is the corrected part: `verify=certifi.where()`
+        self._async_transport = AsyncHTTPTransport(
+            limits=Limits(
+                max_connections=self._rpc_settings.connection_limits.max_connections,
+                max_keepalive_connections=self._rpc_settings.connection_limits.max_keepalive_connections,
+                keepalive_expiry=self._rpc_settings.connection_limits.keepalive_expiry,
+            ),
+            verify=certifi.where(),
+        )
+        self._client = AsyncClient(
+            timeout=Timeout(timeout=15.0),
+            follow_redirects=False,
+            transport=self._async_transport,
         )
 
-    print(f"Loading environment variables from: {env_test_path}")
-    load_dotenv(dotenv_path=env_test_path, override=True)
-
-    app_config_dir_abs = os.path.join(PROJECT_ROOT, APP_CONFIG_DIR_NAME)
-    backup_dir_abs = os.path.join(PROJECT_ROOT, "tests", BACKUP_DIR_NAME) # Place backup inside tests/
-
-    print(f"Application config directory: {app_config_dir_abs}")
-    print(f"Backup directory for original configs: {backup_dir_abs}")
-
-    if not os.path.isdir(app_config_dir_abs):
-        # If config dir doesn't exist, we can't do much.
-        # Tests might fail later if they expect these files.
-        print(f"Warning: Application config directory '{app_config_dir_abs}' does not exist. "
-              "Cannot backup or place test configs. Test behavior is undefined.")
-        return # Proceed, but population will likely fail or be skipped.
-
-    os.makedirs(backup_dir_abs, exist_ok=True)
-    _backed_up_files.clear()
-
-    for file_base_name in CONFIG_FILES_TO_MANAGE:
-        original_file_path = os.path.join(app_config_dir_abs, file_base_name)
-        example_file_path = os.path.join(app_config_dir_abs, file_base_name.replace(".json", ".example.json"))
-        backup_file_path = os.path.join(backup_dir_abs, file_base_name)
-
-        if os.path.exists(original_file_path):
-            print(f"  Backing up '{original_file_path}' to '{backup_file_path}'")
-            try:
-                shutil.copy2(original_file_path, backup_file_path)
-                _backed_up_files.add(file_base_name)
-            except Exception as e:
-                pytest.exit(f"Failed to backup {original_file_path}: {e}. Aborting.")
-        
-        if os.path.exists(example_file_path):
-            print(f"  Copying '{example_file_path}' to '{original_file_path}'")
-            try:
-                shutil.copy2(example_file_path, original_file_path)
-            except Exception as e:
-                # If original didn't exist but example copy fails, that's also critical
-                pytest.exit(f"Failed to copy {example_file_path} to {original_file_path}: {e}. Aborting.")
-        elif not os.path.exists(original_file_path):
-             print(f"  Warning: Example file '{example_file_path}' not found, and no existing '{original_file_path}' to use as base for test config.")
+    # Apply the patch
+    RpcHelper._init_http_clients = corrected_init_http_clients
+    # --- END MONKEYPATCH ---
 
 
-    # Populate the copied files
-    settings_json_target_path = os.path.join(app_config_dir_abs, "settings.json")
-    if os.path.exists(settings_json_target_path): # Populate only if it was successfully copied from example or existed
-        _populate_config_file(settings_json_target_path, REPLACEMENTS_FOR_SETTINGS_JSON)
-    else:
-        print(f"Warning: Cannot populate '{settings_json_target_path}' as it does not exist (example missing or copy failed).")
-
-    auth_settings_json_target_path = os.path.join(app_config_dir_abs, "auth_settings.json")
-    if os.path.exists(auth_settings_json_target_path):
-         _populate_config_file(auth_settings_json_target_path, REPLACEMENTS_FOR_AUTH_SETTINGS_JSON)
-    else:
-        print(f"Warning: Cannot populate '{auth_settings_json_target_path}' as it does not exist.")
-
-    print("--- Test configurations prepared ---")
-
-@pytest.hookimpl(trylast=True)
-def pytest_sessionfinish(session, exitstatus):
-    print("\n--- Pytest Session Finish: Restoring original configurations ---")
-    app_config_dir_abs = os.path.join(PROJECT_ROOT, APP_CONFIG_DIR_NAME)
-    backup_dir_abs = os.path.join(PROJECT_ROOT, "tests", BACKUP_DIR_NAME)
-
-    if not os.path.isdir(app_config_dir_abs) and not os.path.isdir(backup_dir_abs):
-        print("  No config or backup directories found. Nothing to restore or clean.")
-        return
-
-    for file_base_name in CONFIG_FILES_TO_MANAGE:
-        original_file_path = os.path.join(app_config_dir_abs, file_base_name)
-        backup_file_path = os.path.join(backup_dir_abs, file_base_name)
-
-        if file_base_name in _backed_up_files:
-            if os.path.exists(backup_file_path):
-                print(f"  Restoring '{original_file_path}' from '{backup_file_path}'")
-                try:
-                    shutil.move(backup_file_path, original_file_path)
-                except Exception as e:
-                    print(f"    Error restoring {original_file_path} from {backup_file_path}: {e}")
-            else:
-                print(f"    Warning: Backup for {file_base_name} was expected but not found at {backup_file_path}.")
-        elif os.path.exists(original_file_path):
-            # If not backed up, it means it was created from an example (or was an unexpected file)
-            # We should remove it to clean up test-generated files.
-            print(f"  Removing test-generated '{original_file_path}' (no original backup was made).")
-            try:
-                os.remove(original_file_path)
-            except Exception as e:
-                print(f"    Error removing {original_file_path}: {e}")
+    # This import is deliberately inside the fixture to delay it.
+    from snapshotter.settings.config import settings
     
-    if os.path.exists(backup_dir_abs):
-        print(f"  Cleaning up backup directory: {backup_dir_abs}")
+    yield settings
+    
+    # Restore the original method after the test session
+    RpcHelper._init_http_clients = original_init_http_clients
+
+
+# --- Centralized Test Fixtures ---
+
+@pytest.fixture(scope="module")
+async def rpc_helper(app_config) -> AsyncGenerator[RpcHelper, None]:
+    """Fixture for RPC helper, initialized from test settings."""
+    helper = RpcHelper(rpc_settings=app_config.rpc)
+    await helper.init()
+    yield helper
+    # The RpcHelper class does not have a shutdown method.
+    # The underlying httpx client will be closed when the event loop closes.
+
+@pytest.fixture(scope="module")
+async def anchor_rpc_helper(app_config) -> AsyncGenerator[RpcHelper, None]:
+    """Fixture for anchor chain RPC helper, initialized from test settings."""
+    helper = RpcHelper(rpc_settings=app_config.anchor_chain_rpc)
+    await helper.init()
+    yield helper
+    # The RpcHelper class does not have a shutdown method.
+
+@pytest.fixture(scope="module")
+async def redis_conn(app_config) -> AsyncGenerator[aioredis.Redis, None]:
+    """Fixture for a real Redis connection, configured from test settings."""
+    redis = aioredis.from_url(
+        f"redis://{app_config.redis.host}:{app_config.redis.port}",
+        password=getattr(app_config.redis, 'password', None),
+        db=getattr(app_config.redis, 'db', 0)
+    )
+    yield redis
+    await redis.close()
+
+@pytest.fixture(scope="module")
+async def ipfs_reader(app_config) -> AsyncGenerator[AsyncIPFSClient, None]:
+    """
+    Fixture for IPFS client, initialized from test settings.
+    This is now an async fixture to allow for proper session management.
+    """
+    client = AsyncIPFSClient(
+        addr=app_config.ipfs.url,
+        settings=app_config.ipfs
+    )
+    await client.init_session()
+    yield client
+    # The AsyncIPFSClient holds an httpx.AsyncClient that needs to be closed.
+    if hasattr(client, '_client') and client._client:
+        await client._client.aclose()
+
+@pytest.fixture(scope="module")
+def w3_instance(app_config) -> Web3:
+    """Fixture for Web3 instance, initialized from test settings."""
+    return Web3(Web3.HTTPProvider(app_config.rpc.full_nodes[0].url))
+
+@pytest.fixture(scope="module")
+def protocol_state_contract(w3_instance: Web3, app_config) -> Contract:
+    """Fixture for protocol state contract, initialized from test settings."""
+    # This path is relative to the project root, where pytest is run.
+    abi_path = "snapshotter/static/abis/ProtocolContract.json"
+    
+    project_root = os.getcwd() # Assumes pytest is run from the project root.
+    abs_path = os.path.join(project_root, abi_path)
+
+    try:
+        with open(abs_path) as f:
+            abi = json.load(f)
+    except FileNotFoundError:
+        pytest.fail(f"ProtocolState ABI file not found at: {abs_path}", pytrace=False)
+
+    return w3_instance.eth.contract(
+        address=Web3.to_checksum_address(app_config.protocol_state.address),
+        abi=abi
+    )
+
+@pytest.fixture(scope="module")
+def load_abi_fn():
+    """
+    Returns a function to load an ABI from a path relative to the project root.
+    """
+    project_root = os.getcwd() # Assumes pytest is run from the project root.
+    
+    def _load(abi_path_relative_to_root: str) -> Dict:
+        abi_path = os.path.join(project_root, abi_path_relative_to_root)
         try:
-            # Ensure backup directory is empty before rmdir, or use rmtree if it might contain leftovers
-            if not os.listdir(backup_dir_abs):
-                 os.rmdir(backup_dir_abs)
-                 print(f"    Successfully removed empty backup directory: {backup_dir_abs}")
-            else:
-                 shutil.rmtree(backup_dir_abs) # Use rmtree if not empty (e.g. a restore failed)
-                 print(f"    Successfully removed backup directory (and its contents): {backup_dir_abs}")
-        except Exception as e:
-            print(f"    Error removing backup directory {backup_dir_abs}: {e}. Please check manually.")
-    
-    _backed_up_files.clear()
-    print("--- Original configurations restored ---")
+            with open(abi_path) as f:
+                return json.load(f)
+        except FileNotFoundError:
+            pytest.fail(f"ABI file not found at calculated path: {abi_path}", pytrace=False)
+            
+    return _load
