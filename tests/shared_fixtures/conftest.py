@@ -137,10 +137,11 @@ def _populate_config_file(file_path, replacement_rules):
 def app_config():
     """
     Provides the application settings object and monkeypatches the RpcHelper
-    to fix a hardcoded SSL certificate path. This is the earliest point
-    in our test setup that runs before any RpcHelper instances are created.
+    to fix a hardcoded SSL certificate path and disable rate-limiting checks.
+    This is the earliest point in our test setup that runs before any
+    RpcHelper instances are created.
     """
-    # --- MONKEYPATCH RpcHelper ---
+    # --- MONKEYPATCH RpcHelper for SSL ---
     # The RpcHelper library has a hardcoded, Linux-specific SSL certificate path,
     # causing OSError on other platforms like macOS. We replace the problematic
     # method with a corrected version that uses the cross-platform `certifi` library.
@@ -167,9 +168,21 @@ def app_config():
             transport=self._async_transport,
         )
 
-    # Apply the patch
+    # Apply the SSL patch
     RpcHelper._init_http_clients = corrected_init_http_clients
-    # --- END MONKEYPATCH ---
+
+
+    # --- MONKEYPATCH RpcHelper for Rate Limiter ---
+    # The RpcHelper attempts to contact a 'rate-limiter' service which is not
+    # available in a local test environment. We patch it to prevent errors.
+    original_check_rate_limit = RpcHelper.check_rate_limit
+
+    async def mock_check_rate_limit(self, key):
+        """A mocked version of check_rate_limit that always returns True."""
+        return True
+
+    # Apply the rate limiter patch
+    RpcHelper.check_rate_limit = mock_check_rate_limit
 
 
     # This import is deliberately inside the fixture to delay it.
@@ -177,8 +190,9 @@ def app_config():
     
     yield settings
     
-    # Restore the original method after the test session
+    # Restore the original methods after the test session
     RpcHelper._init_http_clients = original_init_http_clients
+    RpcHelper.check_rate_limit = original_check_rate_limit
 
 
 # --- Centralized Test Fixtures ---
