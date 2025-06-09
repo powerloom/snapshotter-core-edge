@@ -246,7 +246,7 @@ async def get_project_finalized_cids_bulk(
     blank_epochs_bitmap_key = blank_epochs_bitmap(project_id)
     blank_epochs = await redis_bitmap.get_bits_in_range(redis_conn, blank_epochs_bitmap_key, missing_epochs_with_blanks)
     
-    for epoch_id, is_blank in zip(missing_epochs_with_blanks, blank_epochs):
+    for epoch_id, is_blank in blank_epochs:
         if is_blank:
             cid_data_with_epochs.append((f'null_{epoch_id}', epoch_id))
         else:
@@ -444,7 +444,7 @@ async def w3_get_and_cache_finalized_cid_bulk_using_previous_snapshots(
             epoch_ids
         )
 
-        for epoch_id, is_blank in zip(epoch_ids, blank_epochs):
+        for epoch_id, is_blank in blank_epochs:
             if is_blank:
                 cid_data_with_epochs.append((f'null_{epoch_id}', epoch_id))
             else:
@@ -474,11 +474,10 @@ async def w3_get_and_cache_finalized_cid_bulk_using_previous_snapshots(
                     missing_epoch_list
                 )
 
-                for epoch_id, is_blank in zip(missing_epoch_list, blank_epochs):
+                for epoch_id, is_blank in blank_epochs:
                     if is_blank:
                         cid_data_with_epochs.append((f'null_{epoch_id}', epoch_id))
                         missing_epochs.remove(epoch_id)
-
 
                 data = []
                 for data_raw_item in redis_cache_data:
