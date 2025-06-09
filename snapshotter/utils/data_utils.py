@@ -1997,8 +1997,8 @@ async def get_uniswap_trade_volume_agg(
     """
     Calculates aggregated trade volume for a project over a specified time interval.
     
-    This function fetches all snapshots within the time interval and sums up
-    the total trade volume across all epochs.
+    This function uses intelligent caching to minimize data fetching and provides
+    incremental updates when possible for optimal performance.
     
     Args:
         redis_conn (aioredis.Redis): Redis connection for data access
@@ -2011,20 +2011,142 @@ async def get_uniswap_trade_volume_agg(
     Returns:
         Dict[str, Union[int, float]]: Dictionary containing totalTradeVolume
                                     and timeInterval values
+                                    
+    Raises:
+        ValueError: If input parameters are invalid
+        Exception: If critical blockchain or data fetch operations fail
     """
-    current_epoch = await get_current_epoch_id(anchor_rpc_helper, protocol_state_contract)
+    # Input validation
+    if time_interval <= 0:
+        raise ValueError(f"Invalid time_interval: {time_interval}. Must be > 0")
+    if not project_id:
+        raise ValueError("Invalid project_id: cannot be empty")
+    
+    # Check last indexed epoch
+    last_indexed_epoch = await redis_conn.get(
+        f"trade_volume_data:{time_interval}:latest:epoch"
+    )
+    if last_indexed_epoch:
+        last_indexed_epoch = int(last_indexed_epoch)
+    else:
+        last_indexed_epoch = 0
+    
+    try:
+        current_epoch = await get_current_epoch_id(
+            anchor_rpc_helper, protocol_state_contract
+        )
+        tail_epoch_id, _ = await get_tail_epoch_id(
+            redis_conn, protocol_state_contract, anchor_rpc_helper, 
+            current_epoch, time_interval, project_id
+        )
+    except Exception as e:
+        logger.error(f"Failed to get epoch information for project {project_id}: {e}")
+        raise Exception(f"Cannot determine epoch range for project {project_id}: {e}")
 
-    tail_epoch_id, _ = await get_tail_epoch_id(
-        redis_conn, protocol_state_contract, anchor_rpc_helper, current_epoch, time_interval, project_id,
+    logger.info(
+        f"Trade volume aggregation - Project: {project_id}, "
+        f"Last indexed epoch: {last_indexed_epoch}, "
+        f"tail epoch id: {tail_epoch_id}, current epoch: {current_epoch}"
     )
 
-    snapshots = await get_project_epoch_snapshot_bulk(
-        redis_conn, protocol_state_contract, anchor_rpc_helper, ipfs_reader, tail_epoch_id, current_epoch, project_id,
+    total_trade_volume = 0.0
+
+    if last_indexed_epoch > tail_epoch_id:
+        epochs_to_correct = current_epoch - last_indexed_epoch
+        # Fetch cached volume data
+        logger.info(
+            f"Using cached data with correction for project {project_id}, "
+            f"epochs {last_indexed_epoch} to {current_epoch} "
+            f"for time interval {time_interval}"
+        )
+        cached_volume = await redis_conn.get(
+            f"trade_volume_data:{time_interval}:{last_indexed_epoch}:"
+            f"{settings.namespace}"
+        )
+        if cached_volume:
+            total_trade_volume = float(cached_volume)
+            # Apply incremental updates if needed
+            if epochs_to_correct > 0:
+                logger.info(
+                    f"Applying incremental updates for project {project_id}, "
+                    f"fetching {epochs_to_correct} new epochs and removing old ones"
+                )
+                
+                # Fetch new snapshots to add
+                new_snapshots = await get_project_epoch_snapshot_bulk(
+                    redis_conn, protocol_state_contract, anchor_rpc_helper, 
+                    ipfs_reader, last_indexed_epoch + 1, current_epoch, project_id
+                )
+                
+                # Fetch old snapshots to remove
+                old_snapshots = await get_project_epoch_snapshot_bulk(
+                    redis_conn, protocol_state_contract, anchor_rpc_helper, 
+                    ipfs_reader, tail_epoch_id - epochs_to_correct, 
+                    tail_epoch_id - 1, project_id
+                )
+                
+                # Add volume from new snapshots
+                for snapshot in new_snapshots:
+                    if snapshot and 'totalTrade' in snapshot:
+                        volume = snapshot['totalTrade']
+                        if isinstance(volume, (int, float)) and volume > 0:
+                            total_trade_volume += volume
+                
+                # Subtract volume from old snapshots
+                for snapshot in old_snapshots:
+                    if snapshot and 'totalTrade' in snapshot:
+                        volume = snapshot['totalTrade']
+                        if isinstance(volume, (int, float)) and volume > 0:
+                            total_trade_volume -= volume
+                
+                # Ensure volume doesn't go negative due to data inconsistencies
+                total_trade_volume = max(0.0, total_trade_volume)
+        else:
+            # No cached data found, fall back to full calculation
+            logger.info(
+                f"No cached data found for project {project_id}, "
+                f"calculating full volume from {tail_epoch_id} to {current_epoch}"
+            )
+            snapshots = await get_project_epoch_snapshot_bulk(
+                redis_conn, protocol_state_contract, anchor_rpc_helper, 
+                ipfs_reader, tail_epoch_id, current_epoch, project_id
+            )
+            for snapshot in snapshots:
+                if snapshot and 'totalTrade' in snapshot:
+                    volume = snapshot['totalTrade']
+                    if isinstance(volume, (int, float)) and volume > 0:
+                        total_trade_volume += volume
+    else:
+        # Fresh calculation needed
+        logger.info(
+            f"Performing fresh calculation for project {project_id} "
+            f"from {tail_epoch_id} to {current_epoch}"
+        )
+        snapshots = await get_project_epoch_snapshot_bulk(
+            redis_conn, protocol_state_contract, anchor_rpc_helper, 
+            ipfs_reader, tail_epoch_id, current_epoch, project_id
+        )
+        for snapshot in snapshots:
+            if snapshot and 'totalTrade' in snapshot:
+                volume = snapshot['totalTrade']
+                if isinstance(volume, (int, float)) and volume > 0:
+                    total_trade_volume += volume
+
+    # Set data in redis (same pattern as active pools/tokens)
+    await redis_conn.set(
+        f"trade_volume_data:{time_interval}:{current_epoch}:{settings.namespace}", 
+        str(total_trade_volume)
     )
-    total_trade_volume = 0
-    for snapshot in snapshots:
-        if snapshot:
-            total_trade_volume += snapshot['totalTrade']
+    await redis_conn.set(
+        f"trade_volume_data:{time_interval}:latest:epoch", current_epoch
+    )
+    # Remove old data
+    if last_indexed_epoch > 0:
+        await redis_conn.delete(
+            f"trade_volume_data:{time_interval}:{last_indexed_epoch}:"
+            f"{settings.namespace}"
+        )
+    
     return {
         'totalTradeVolume': total_trade_volume,
         'timeInterval': time_interval,
@@ -2053,80 +2175,148 @@ async def get_active_pools(
         ipfs_reader (AsyncIPFSClient): IPFS client for reading snapshot data
         protocol_state_contract: Smart contract object for protocol state
         time_interval (int): Time interval in seconds to analyze
+        page (int): Page number for pagination (1-based)
+        size (int): Number of items per page
+        metadata (bool): Whether to include pool metadata
         
     Returns:
-        List[Tuple[str, int]]: List of tuples (pool_address, frequency)
-                              sorted by frequency in descending order
+        Tuple[List[Dict], int]: List of pool data with pagination info and total count
     """
+    # Input validation
+    if time_interval <= 0:
+        raise ValueError(f"Invalid time_interval: {time_interval}. Must be > 0")
+    if page <= 0:
+        raise ValueError(f"Invalid page: {page}. Must be > 0")
+    if size <= 0:
+        raise ValueError(f"Invalid size: {size}. Must be > 0")
     
-    # check last indexed epoch
-    last_indexed_epoch = await redis_conn.get(f"active_pool_data:{time_interval}:latest:epoch")
+    # Check last indexed epoch
+    last_indexed_epoch = await redis_conn.get(
+        f"active_pool_data:{time_interval}:latest:epoch"
+    )
     if last_indexed_epoch:
         last_indexed_epoch = int(last_indexed_epoch)
     else:
         last_indexed_epoch = 0
     
     project_id = f"activePools:{settings.namespace}"
-    current_epoch = await get_current_epoch_id(anchor_rpc_helper, protocol_state_contract)
+    
+    try:
+        current_epoch = await get_current_epoch_id(
+            anchor_rpc_helper, protocol_state_contract
+        )
+        tail_epoch_id, _ = await get_tail_epoch_id(
+            redis_conn, protocol_state_contract, anchor_rpc_helper, 
+            current_epoch, time_interval, project_id
+        )
+    except Exception as e:
+        logger.error(f"Failed to get epoch information: {e}")
+        raise Exception(f"Cannot determine epoch range: {e}")
 
-    tail_epoch_id, _ = await get_tail_epoch_id(
-        redis_conn, protocol_state_contract, anchor_rpc_helper, current_epoch, time_interval, project_id,
+    logger.info(
+        f"Last indexed epoch: {last_indexed_epoch}, "
+        f"tail epoch id: {tail_epoch_id}, current epoch: {current_epoch}"
     )
-
-    logger.info(f"Last indexed epoch: {last_indexed_epoch}, tail epoch id: {tail_epoch_id}, current epoch: {current_epoch}")
         
     if last_indexed_epoch > tail_epoch_id:
         epochs_to_correct = current_epoch - last_indexed_epoch
-        # fetch indexed data
-        logger.info(f"Correcting indexed data for epochs {last_indexed_epoch} to {current_epoch} for time interval {time_interval}")
-        active_pools = await redis_conn.get(f"active_pool_data:{time_interval}:{last_indexed_epoch}:{settings.namespace}")
-        if active_pools:
-            active_pools = json.loads(active_pools)
-            # fetch snapshots for epochs_to_correct
+        # Fetch indexed data
+        logger.info(
+            f"Correcting indexed data for epochs {last_indexed_epoch} "
+            f"to {current_epoch} for time interval {time_interval}"
+        )
+        active_pools_cached = await redis_conn.get(
+            f"active_pool_data:{time_interval}:{last_indexed_epoch}:"
+            f"{settings.namespace}"
+        )
+        if active_pools_cached:
+            active_pools = json.loads(active_pools_cached)
+            # Fetch snapshots for epochs_to_correct
             if epochs_to_correct > 0:
-                logger.info(f"Fetching new snapshots for epochs {last_indexed_epoch} to {last_indexed_epoch + epochs_to_correct}")
-                new_snapshots = await get_project_epoch_snapshot_bulk(
-                    redis_conn, protocol_state_contract, anchor_rpc_helper, ipfs_reader, last_indexed_epoch + 1, current_epoch, project_id,
+                logger.info(
+                    f"Fetching new snapshots for epochs {last_indexed_epoch} "
+                    f"to {last_indexed_epoch + epochs_to_correct}"
                 )
-                logger.info(f"Fetching old snapshots for epochs {tail_epoch_id - epochs_to_correct} to {tail_epoch_id}")
+                new_snapshots = await get_project_epoch_snapshot_bulk(
+                    redis_conn, protocol_state_contract, anchor_rpc_helper, 
+                    ipfs_reader, last_indexed_epoch + 1, current_epoch, project_id
+                )
+                logger.info(
+                    f"Fetching old snapshots for epochs "
+                    f"{tail_epoch_id - epochs_to_correct} to {tail_epoch_id}"
+                )
                 old_snapshots = await get_project_epoch_snapshot_bulk(
-                    redis_conn, protocol_state_contract, anchor_rpc_helper, ipfs_reader, tail_epoch_id - epochs_to_correct, tail_epoch_id - 1, project_id,
+                    redis_conn, protocol_state_contract, anchor_rpc_helper, 
+                    ipfs_reader, tail_epoch_id - epochs_to_correct, 
+                    tail_epoch_id - 1, project_id
                 )
                 
-                # add new snapshots to indexed data
+                # Add new snapshots to indexed data
                 for snapshot in new_snapshots:
-                    if snapshot:
+                    if snapshot and 'pools' in snapshot:
                         for pool_address, frequency in snapshot['pools'].items():
                             if pool_address not in active_pools:
                                 active_pools[pool_address] = 0
                             active_pools[pool_address] += frequency
 
-                # remove old snapshots from indexed data
+                # Remove old snapshots from indexed data
                 for snapshot in old_snapshots:
-                    if snapshot:
+                    if snapshot and 'pools' in snapshot:
                         for pool_address, frequency in snapshot['pools'].items():
                             if pool_address in active_pools:
                                 active_pools[pool_address] -= frequency
-            
+                                # Remove pools with zero or negative frequency
+                                if active_pools[pool_address] <= 0:
+                                    del active_pools[pool_address]
+        else:
+            # No cached data found, fall back to fetching all snapshots
+            logger.info(
+                f"No cached data found, fetching all snapshots "
+                f"from {tail_epoch_id} to {current_epoch}"
+            )
+            snapshots = await get_project_epoch_snapshot_bulk(
+                redis_conn, protocol_state_contract, anchor_rpc_helper, 
+                ipfs_reader, tail_epoch_id, current_epoch, project_id
+            )
+            active_pools = {}
+            for snapshot in snapshots:
+                if snapshot and 'pools' in snapshot:
+                    for pool_address, frequency in snapshot['pools'].items():
+                        if pool_address not in active_pools:
+                            active_pools[pool_address] = 0
+                        active_pools[pool_address] += frequency
     else:
         snapshots = await get_project_epoch_snapshot_bulk(
-            redis_conn, protocol_state_contract, anchor_rpc_helper, ipfs_reader, tail_epoch_id, current_epoch, project_id,
+            redis_conn, protocol_state_contract, anchor_rpc_helper, 
+            ipfs_reader, tail_epoch_id, current_epoch, project_id
         )
         active_pools = {}
         for snapshot in snapshots:
-            if snapshot:
+            if snapshot and 'pools' in snapshot:
                 for pool_address, frequency in snapshot['pools'].items():
                     if pool_address not in active_pools:
                         active_pools[pool_address] = 0
                     active_pools[pool_address] += frequency
 
-    # set data in redis
-    await redis_conn.set(f"active_pool_data:{time_interval}:{current_epoch}:{settings.namespace}", json.dumps(active_pools))
-    await redis_conn.set(f"active_pool_data:{time_interval}:latest:epoch", current_epoch)
-    # remove old data
-    await redis_conn.delete(f"active_pool_data:{time_interval}:{last_indexed_epoch}:{settings.namespace}")
+    # Set data in redis
+    await redis_conn.set(
+        f"active_pool_data:{time_interval}:{current_epoch}:{settings.namespace}", 
+        json.dumps(active_pools)
+    )
+    await redis_conn.set(
+        f"active_pool_data:{time_interval}:latest:epoch", current_epoch
+    )
+    # Remove old data
+    if last_indexed_epoch > 0:
+        await redis_conn.delete(
+            f"active_pool_data:{time_interval}:{last_indexed_epoch}:"
+            f"{settings.namespace}"
+        )
 
-    active_pool_data = [(pool_address, frequency) for pool_address, frequency in active_pools.items()]
+    active_pool_data = [
+        (pool_address, frequency) 
+        for pool_address, frequency in active_pools.items()
+    ]
     active_pool_data.sort(key=lambda x: x[1], reverse=True)
 
     # Calculate start and end indices for pagination
@@ -2134,11 +2324,11 @@ async def get_active_pools(
     end_idx = start_idx + size - 1
 
     total_pools = len(active_pool_data)
-    active_pools = active_pool_data[start_idx:end_idx+1]
+    active_pools_page = active_pool_data[start_idx:end_idx + 1]
     
     # Format the response
     pools_data = []
-    for pool, score in active_pools:
+    for pool, score in active_pools_page:
         pool_data = {
             "pool_address": pool,
             "frequency": score
@@ -2147,7 +2337,6 @@ async def get_active_pools(
     
     # Add metadata if requested (parallelized in batches)
     if metadata:
-        
         # Process pools in batches of 50
         batch_size = 50
         for i in range(0, len(pools_data), batch_size):
@@ -2167,13 +2356,16 @@ async def get_active_pools(
             
             # Fetch metadata for all pools in this batch in parallel
             try:
-                metadata_results = await asyncio.gather(*metadata_tasks, return_exceptions=True)
+                metadata_results = await asyncio.gather(
+                    *metadata_tasks, return_exceptions=True
+                )
                 
                 # Assign metadata results back to pool data
                 for j, metadata_result in enumerate(metadata_results):
                     if isinstance(metadata_result, Exception):
                         logger.error(
-                            f"Exception fetching metadata for pool {batch[j]['pool_address']}: {metadata_result}"
+                            f"Exception fetching metadata for pool "
+                            f"{batch[j]['pool_address']}: {metadata_result}"
                         )
                         batch[j]["metadata"] = None
                     else:
@@ -2186,6 +2378,7 @@ async def get_active_pools(
 
     return pools_data, total_pools
 
+
 async def get_token_metadata(
     redis_conn: aioredis.Redis,
     protocol_state_contract,
@@ -2196,13 +2389,12 @@ async def get_token_metadata(
     """
     Get token metadata from the IPFS reader.
     """
-    # f'erc20_metadata:{token_address}'
-    # check if data is in redis
+    # Check if data is in redis
     token_metadata = await redis_conn.get(f'erc20_metadata:{token_address}')
     if token_metadata:
         return json.loads(token_metadata)
     else:
-        # fetch from ipfs
+        # Fetch from ipfs
         token_metadata = await get_uniswap_v3_token_pools_snapshot(
             redis_conn=redis_conn,
             protocol_state_contract=protocol_state_contract,
@@ -2221,8 +2413,12 @@ async def get_token_metadata(
             token_metadata = None
 
         if token_metadata:
-            # cache in redis
-            await redis_conn.set(f'erc20_metadata:{token_address}', json.dumps(token_metadata.__dict__), ex=86400)
+            # Cache in redis
+            await redis_conn.set(
+                f'erc20_metadata:{token_address}', 
+                json.dumps(token_metadata.__dict__), 
+                ex=86400
+            )
 
         return token_metadata
     
@@ -2249,78 +2445,148 @@ async def get_active_tokens(
         ipfs_reader (AsyncIPFSClient): IPFS client for reading snapshot data
         protocol_state_contract: Smart contract object for protocol state
         time_interval (int): Time interval in seconds to analyze
+        page (int): Page number for pagination (1-based)
+        size (int): Number of items per page
+        metadata (bool): Whether to include token metadata
         
     Returns:
-        List[Tuple[str, int]]: List of tuples (token_address, frequency)
-                              sorted by frequency in descending order
+        Tuple[List[Dict], int]: List of token data with pagination info and total count
     """
-    # check last indexed epoch
-    last_indexed_epoch = await redis_conn.get(f"active_token_data:{time_interval}:latest:epoch")
+    # Input validation
+    if time_interval <= 0:
+        raise ValueError(f"Invalid time_interval: {time_interval}. Must be > 0")
+    if page <= 0:
+        raise ValueError(f"Invalid page: {page}. Must be > 0")
+    if size <= 0:
+        raise ValueError(f"Invalid size: {size}. Must be > 0")
+    
+    # Check last indexed epoch
+    last_indexed_epoch = await redis_conn.get(
+        f"active_token_data:{time_interval}:latest:epoch"
+    )
     if last_indexed_epoch:
         last_indexed_epoch = int(last_indexed_epoch)
     else:
         last_indexed_epoch = 0
     
     project_id = f"activeTokens:{settings.namespace}"
-    current_epoch = await get_current_epoch_id(anchor_rpc_helper, protocol_state_contract)
+    
+    try:
+        current_epoch = await get_current_epoch_id(
+            anchor_rpc_helper, protocol_state_contract
+        )
+        tail_epoch_id, _ = await get_tail_epoch_id(
+            redis_conn, protocol_state_contract, anchor_rpc_helper, 
+            current_epoch, time_interval, project_id
+        )
+    except Exception as e:
+        logger.error(f"Failed to get epoch information: {e}")
+        raise Exception(f"Cannot determine epoch range: {e}")
 
-    tail_epoch_id, _ = await get_tail_epoch_id(
-        redis_conn, protocol_state_contract, anchor_rpc_helper, current_epoch, time_interval, project_id,
+    logger.info(
+        f"Last indexed epoch: {last_indexed_epoch}, "
+        f"tail epoch id: {tail_epoch_id}, current epoch: {current_epoch}"
     )
-
-    logger.info(f"Last indexed epoch: {last_indexed_epoch}, tail epoch id: {tail_epoch_id}, current epoch: {current_epoch}")
 
     if last_indexed_epoch > tail_epoch_id:
         epochs_to_correct = current_epoch - last_indexed_epoch
-        # fetch indexed data
-        logger.info(f"Correcting indexed data for epochs {last_indexed_epoch} to {current_epoch} for time interval {time_interval}")
-        active_tokens = await redis_conn.get(f"active_token_data:{time_interval}:{last_indexed_epoch}:{settings.namespace}")
-        if active_tokens:
-            active_tokens = json.loads(active_tokens)
+        # Fetch indexed data
+        logger.info(
+            f"Correcting indexed data for epochs {last_indexed_epoch} "
+            f"to {current_epoch} for time interval {time_interval}"
+        )
+        active_tokens_cached = await redis_conn.get(
+            f"active_token_data:{time_interval}:{last_indexed_epoch}:"
+            f"{settings.namespace}"
+        )
+        if active_tokens_cached:
+            active_tokens = json.loads(active_tokens_cached)
             if epochs_to_correct > 0:
-                # fetch snapshots for epochs_to_correct
-                logger.info(f"Fetching new snapshots for epochs {last_indexed_epoch} to {last_indexed_epoch + epochs_to_correct}")
-                new_snapshots = await get_project_epoch_snapshot_bulk(
-                    redis_conn, protocol_state_contract, anchor_rpc_helper, ipfs_reader, last_indexed_epoch + 1, current_epoch, project_id,
+                # Fetch snapshots for epochs_to_correct
+                logger.info(
+                    f"Fetching new snapshots for epochs {last_indexed_epoch} "
+                    f"to {last_indexed_epoch + epochs_to_correct}"
                 )
-                logger.info(f"Fetching old snapshots for epochs {tail_epoch_id - epochs_to_correct} to {tail_epoch_id}")
+                new_snapshots = await get_project_epoch_snapshot_bulk(
+                    redis_conn, protocol_state_contract, anchor_rpc_helper, 
+                    ipfs_reader, last_indexed_epoch + 1, current_epoch, project_id
+                )
+                logger.info(
+                    f"Fetching old snapshots for epochs "
+                    f"{tail_epoch_id - epochs_to_correct} to {tail_epoch_id}"
+                )
                 old_snapshots = await get_project_epoch_snapshot_bulk(
-                    redis_conn, protocol_state_contract, anchor_rpc_helper, ipfs_reader, tail_epoch_id - epochs_to_correct, tail_epoch_id - 1, project_id,
+                    redis_conn, protocol_state_contract, anchor_rpc_helper, 
+                    ipfs_reader, tail_epoch_id - epochs_to_correct, 
+                    tail_epoch_id - 1, project_id
                 )
                 
-                # add new snapshots to indexed data
+                # Add new snapshots to indexed data
                 for snapshot in new_snapshots:
-                    if snapshot:
+                    if snapshot and 'tokens' in snapshot:
                         for token_address, frequency in snapshot['tokens'].items():
                             if token_address not in active_tokens:
                                 active_tokens[token_address] = 0
                             active_tokens[token_address] += frequency
 
-                # remove old snapshots from indexed data
+                # Remove old snapshots from indexed data
                 for snapshot in old_snapshots:
-                    if snapshot:
+                    if snapshot and 'tokens' in snapshot:
                         for token_address, frequency in snapshot['tokens'].items():
                             if token_address in active_tokens:
                                 active_tokens[token_address] -= frequency
+                                # Remove tokens with zero or negative frequency
+                                if active_tokens[token_address] <= 0:
+                                    del active_tokens[token_address]
+        else:
+            # No cached data found, fall back to fetching all snapshots
+            logger.info(
+                f"No cached data found, fetching all snapshots "
+                f"from {tail_epoch_id} to {current_epoch}"
+            )
+            snapshots = await get_project_epoch_snapshot_bulk(
+                redis_conn, protocol_state_contract, anchor_rpc_helper, 
+                ipfs_reader, tail_epoch_id, current_epoch, project_id
+            )
+            active_tokens = {}
+            for snapshot in snapshots:
+                if snapshot and 'tokens' in snapshot:
+                    for token_address, frequency in snapshot['tokens'].items():
+                        if token_address not in active_tokens:
+                            active_tokens[token_address] = 0
+                        active_tokens[token_address] += frequency
     else:    
         snapshots = await get_project_epoch_snapshot_bulk(
-            redis_conn, protocol_state_contract, anchor_rpc_helper, ipfs_reader, tail_epoch_id, current_epoch, project_id,
+            redis_conn, protocol_state_contract, anchor_rpc_helper, 
+            ipfs_reader, tail_epoch_id, current_epoch, project_id
         )
         active_tokens = {}
         for snapshot in snapshots:
-            if snapshot:
+            if snapshot and 'tokens' in snapshot:
                 for token_address, frequency in snapshot['tokens'].items():
                     if token_address not in active_tokens:
                         active_tokens[token_address] = 0
                     active_tokens[token_address] += frequency
 
-    # set data in redis
-    await redis_conn.set(f"active_token_data:{time_interval}:{current_epoch}:{settings.namespace}", json.dumps(active_tokens))
-    await redis_conn.set(f"active_token_data:{time_interval}:latest:epoch", current_epoch)
-    # remove old data
-    await redis_conn.delete(f"active_token_data:{time_interval}:{last_indexed_epoch}:{settings.namespace}")
+    # Set data in redis
+    await redis_conn.set(
+        f"active_token_data:{time_interval}:{current_epoch}:{settings.namespace}", 
+        json.dumps(active_tokens)
+    )
+    await redis_conn.set(
+        f"active_token_data:{time_interval}:latest:epoch", current_epoch
+    )
+    # Remove old data
+    if last_indexed_epoch > 0:
+        await redis_conn.delete(
+            f"active_token_data:{time_interval}:{last_indexed_epoch}:"
+            f"{settings.namespace}"
+        )
 
-    active_token_data = [(token_address, frequency) for token_address, frequency in active_tokens.items()]
+    active_token_data = [
+        (token_address, frequency) 
+        for token_address, frequency in active_tokens.items()
+    ]
     active_token_data.sort(key=lambda x: x[1], reverse=True)
 
     # Calculate start and end indices for pagination
@@ -2331,11 +2597,11 @@ async def get_active_tokens(
     total_tokens = len(active_token_data)
     
     # Get paginated tokens from the sorted set
-    active_tokens = active_token_data[start_idx:end_idx + 1]
+    active_tokens_page = active_token_data[start_idx:end_idx + 1]
     
     # Format the response
     tokens_data = []
-    for token, score in active_tokens:
+    for token, score in active_tokens_page:
         token_data = {
             "token_address": token,
             "frequency": score
@@ -2344,7 +2610,6 @@ async def get_active_tokens(
     
     # Add metadata if requested (parallelized in batches)
     if metadata:
-        
         # Process tokens in batches of 50
         batch_size = 50
         for i in range(0, len(tokens_data), batch_size):
@@ -2358,19 +2623,24 @@ async def get_active_tokens(
                     protocol_state_contract=protocol_state_contract,
                     anchor_rpc_helper=anchor_rpc_helper,
                     ipfs_reader=ipfs_reader,
-                    token_address=Web3.to_checksum_address(token_data["token_address"]),
+                    token_address=Web3.to_checksum_address(
+                        token_data["token_address"]
+                    ),
                 )
                 metadata_tasks.append(task)
             
             # Fetch metadata for all tokens in this batch in parallel
             try:
-                metadata_results = await asyncio.gather(*metadata_tasks, return_exceptions=True)
+                metadata_results = await asyncio.gather(
+                    *metadata_tasks, return_exceptions=True
+                )
                 
                 # Assign metadata results back to token data
                 for j, metadata_result in enumerate(metadata_results):
                     if isinstance(metadata_result, Exception):
                         logger.error(
-                            f"Exception fetching metadata for token {batch[j]['token_address']}: {metadata_result}"
+                            f"Exception fetching metadata for token "
+                            f"{batch[j]['token_address']}: {metadata_result}"
                         )
                         batch[j]["metadata"] = None
                     elif not metadata_result:

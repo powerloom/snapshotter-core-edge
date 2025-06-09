@@ -428,8 +428,8 @@ class Cacher(multiprocessing.Process):
         """
         self._logger.debug(f'ActivePoolsEvent caught with message {msg_obj}')
 
-        # # only do this every 30 epochs
-        if msg_obj.epochId % 30 != 0:
+        # # only do this every 10 epochs
+        if msg_obj.epochId % 10 != 0:
             return
 
         # check last indexed epoch
@@ -491,8 +491,8 @@ class Cacher(multiprocessing.Process):
         """
         self._logger.info(f'ActiveTokensEvent caught with message {msg_obj}')
 
-        # only do this every 30 epochs
-        if msg_obj.epochId % 30 != 0:
+        # only do this every 10 epochs
+        if msg_obj.epochId % 10 != 0:
             return
 
         # check last indexed epoch
