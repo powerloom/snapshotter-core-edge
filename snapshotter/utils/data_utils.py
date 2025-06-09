@@ -17,7 +17,15 @@ from ipfs_client.main import AsyncIPFSClient
 from computes.redis_keys import uniswap_eth_usd_price_zset
 from computes.settings.config import settings as computes_settings
 from computes.utils.models.message_models import UniswapBaseSnapshot, UniswapTradesSnapshot, TradeType
-from snapshotter.utils.models.data_models import UniswapPoolMetadata, UniswapTokenPoolsSnapshot, UniswapEthPriceSnapshot, EpochSnapshotResponse, ExactEpochSnapshot, ClosestEpochs, EpochIdentifier
+from snapshotter.utils.models.data_models import (
+    UniswapPoolMetadata, 
+    UniswapTokenPoolsSnapshot, 
+    UniswapEthPriceSnapshot, 
+    EpochSnapshotResponse, 
+    ExactEpochSnapshot, 
+    ClosestEpochs, 
+    EpochIdentifier
+)
 from snapshotter.settings.config import settings
 from snapshotter.utils.models.data_models import BlockSearchType
 from snapshotter.utils.default_logger import default_logger
@@ -71,7 +79,14 @@ def get_project_config(project_id: str):
     return None
 
 
-async def get_project_finalized_cid(redis_conn: aioredis.Redis, state_contract_obj, rpc_helper, ipfs_reader, epoch_id, project_id):
+async def get_project_finalized_cid(
+    redis_conn: aioredis.Redis, 
+    state_contract_obj, 
+    rpc_helper, 
+    ipfs_reader, 
+    epoch_id, 
+    project_id
+):
     """
     Get the CID of the finalized data for a given project and epoch.
 
@@ -122,7 +137,13 @@ async def get_project_finalized_cid(redis_conn: aioredis.Redis, state_contract_o
     return cid
 
 
-async def get_project_last_finalized_epoch(redis_conn: aioredis.Redis, state_contract_obj, rpc_helper, project_id, force_update=False):
+async def get_project_last_finalized_epoch(
+    redis_conn: aioredis.Redis, 
+    state_contract_obj, 
+    rpc_helper, 
+    project_id, 
+    force_update=False
+):
     """
     Get the last finalized epoch for a given project.
     """
@@ -159,7 +180,7 @@ async def get_project_finalized_cids_bulk(
     epoch_id_min: int,
     epoch_id_max: int,
     project_id: str,
-) -> List[str]:
+) -> Tuple[List[str], int]:
     """
     Retrieves CIDs for multiple epochs in bulk.
 
@@ -171,7 +192,7 @@ async def get_project_finalized_cids_bulk(
         project_id (str): Project ID.
 
     Returns:
-        List[str]: List of CIDs.
+        Tuple[List[str], int]: List of CIDs and the project's first epoch.
     """
     project_config = get_project_config(project_id)
 
@@ -185,9 +206,17 @@ async def get_project_finalized_cids_bulk(
     if epoch_id_min < project_first_epoch:
         logger.warning(
             f'Min. Epoch ID: {epoch_id_min} is less than the project first epoch {project_first_epoch}.',
-            'Cannot fetch CIDs for epochs before project first epoch.',
+            f'Adjusting min epoch to {project_first_epoch}.',
         )
-        return None
+        epoch_id_min = project_first_epoch
+        
+        # If the adjusted min is greater than max, return empty list
+        if epoch_id_min > epoch_id_max:
+            logger.warning(
+                f'Adjusted min epoch {epoch_id_min} is greater than max epoch {epoch_id_max}.',
+                'Returning empty list.',
+            )
+            return [], project_first_epoch
 
     epoch_ids_set = set(range(epoch_id_min, epoch_id_max + 1))
 
@@ -246,7 +275,7 @@ async def get_project_finalized_cids_bulk(
     else:
         all_cids_with_epochs = cid_data_with_epochs
 
-    return [cid for cid, _ in all_cids_with_epochs]
+    return [cid for cid, _ in all_cids_with_epochs], project_first_epoch
 
 
 @retry(
@@ -1107,9 +1136,11 @@ async def get_project_epoch_snapshot_bulk(
     Returns:
         A list of snapshot data for the given project and epoch range.
     """
-    cid_data = await get_project_finalized_cids_bulk(
+    cid_data, project_first_epoch = await get_project_finalized_cids_bulk(
         redis_conn, state_contract_obj, rpc_helper, ipfs_reader, epoch_id_min, epoch_id_max, project_id,
     )
+
+    epoch_id_min = max(epoch_id_min, project_first_epoch)
 
     cid_data_with_epochs = zip(cid_data, range(epoch_id_min, epoch_id_max + 1))
     # Filter out null CIDs
