@@ -238,9 +238,12 @@ async def get_project_finalized_cids_bulk(
     for data, epoch_id in zip(data, epoch_ids_to_fetch):
         if "snapshot_cid" in data:
             cid_data_with_epochs.append((data["snapshot_cid"], epoch_id))
+        
+    logger.info(f'Found {len(cid_data_with_epochs)} CIDs for project {project_id}')
 
     existing_epochs = set([epoch_id for _, epoch_id in cid_data_with_epochs])
     missing_epochs_with_blanks = sorted(list(epoch_ids_set.difference(existing_epochs)))
+    logger.info(f'Found {len(missing_epochs_with_blanks)} missing epochs with blanks for project {project_id}')
     missing_epochs = []
 
     blank_epochs_bitmap_key = blank_epochs_bitmap(project_id)
@@ -251,7 +254,7 @@ async def get_project_finalized_cids_bulk(
             cid_data_with_epochs.append((f'null_{epoch_id}', epoch_id))
         else:
             missing_epochs.append(epoch_id)
-
+    logger.info(f'Found {len(missing_epochs)} missing epochs without blanks for project {project_id}')
     # batch_web3_contract_calls
     if missing_epochs:
         if project_config.keep_previous_snapshot_data:
@@ -325,7 +328,7 @@ async def w3_get_and_cache_finalized_cid(
         contract_addr=state_contract_obj.address,
         abi=state_contract_obj.abi,
     )
-    logger.trace(f'consensus status for project {project_id} and epoch {epoch_id} is {consensus_status}')
+    logger.info(f'consensus status for project {project_id} and epoch {epoch_id} is {consensus_status}')
 
     # Extract status and CID from the ConsensusStatus struct
     status, cid, timestamp = consensus_status
@@ -333,7 +336,7 @@ async def w3_get_and_cache_finalized_cid(
 
     # Only return without caching if the epoch is less than 10 epochs behind the current epoch
     if epoch_id > current_epoch[2] - 10 and timestamp == 0:
-        logger.debug(f'Consensus status not yet available for project {project_id} and epoch {epoch_id}')
+        logger.info(f'Consensus status not yet available for project {project_id} and epoch {epoch_id}')
         return null_cid, epoch_id
 
     # Process and cache the result only if we have a valid timestamp
@@ -433,7 +436,7 @@ async def w3_get_and_cache_finalized_cid_bulk_using_previous_snapshots(
         List[Tuple[str, int]]: List of tuples containing (CID, epoch_id) for each epoch
     """
     try:
-
+        logger.info(f'Fetching CIDs for {len(epoch_ids)} epochs for project {project_id}')
         blank_epochs_bitmap_key = blank_epochs_bitmap(project_id)
         missing_epochs = []
         cid_data_with_epochs = []
@@ -449,11 +452,13 @@ async def w3_get_and_cache_finalized_cid_bulk_using_previous_snapshots(
                 cid_data_with_epochs.append((f'null_{epoch_id}', epoch_id))
             else:
                 missing_epochs.append(epoch_id)
-
+        logger.info(f'Found {len(cid_data_with_epochs)} CIDs for project {project_id}')
+        logger.info(f'Found {len(missing_epochs)} missing epochs without blanks for project {project_id}')
         # Get the project hashmap key
         project_hmap_key = project_data_hmap(project_id=project_id)
 
         while True:
+            logger.info(f'Fetching CIDs for {len(missing_epochs)} epochs for project {project_id}')
             if len(missing_epochs) == 0:
                 break
             sorted_missing_epochs = sorted(list(missing_epochs))
