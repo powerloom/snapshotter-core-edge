@@ -55,6 +55,8 @@ from snapshotter.utils.data_utils import get_submission_data
 from snapshotter.utils.data_utils import get_project_config
 from snapshotter.utils.data_utils import get_source_chain_block_time
 from snapshotter.utils.data_utils import get_source_chain_epoch_size
+from snapshotter.utils.data_utils import get_tail_epoch_id
+from snapshotter.utils.data_utils import get_project_epoch_snapshot_bulk
 
 BLOCK_SHIFT_FOR_BITMAP_INDEX = 22400000
 # Configure Redis broker with no middleware
@@ -417,6 +419,132 @@ class Cacher(multiprocessing.Process):
             self._logger.error(f'Detailed traceback:\n{traceback.format_exc()}')
             self._logger.error(f'Snapshot cid: {snapshot_cid}')
 
+    async def _process_active_pools_message(self, msg_obj: SnapshotSubmittedMessage):
+        """
+        Processes an active pools message and updates Redis with the active pools information.
+        
+        This method updates the Redis database with the active pools information.
+        Only maintaining 24h cache for active pools.
+        """
+        self._logger.debug(f'ActivePoolsEvent caught with message {msg_obj}')
+
+        # # only do this every 30 epochs
+        if msg_obj.epochId % 30 != 0:
+            return
+
+        # check last indexed epoch
+        time_interval = 86400
+        last_indexed_epoch = await self._redis_conn.get(f"active_pool_data:{time_interval}:latest:epoch")
+        if last_indexed_epoch:
+            last_indexed_epoch = int(last_indexed_epoch)
+        else:
+            last_indexed_epoch = 0
+
+        project_id = msg_obj.projectId
+        tail_epoch_id, _ = await get_tail_epoch_id(
+            self._redis_conn, self._protocol_state_contract, self._anchor_rpc_helper, msg_obj.epochId, time_interval, project_id,
+        )
+
+        self._logger.info(f"Last indexed epoch: {last_indexed_epoch}, tail epoch id: {tail_epoch_id}, current epoch: {msg_obj.epochId}")
+
+        if last_indexed_epoch > tail_epoch_id:
+            epochs_to_correct = msg_obj.epochId - last_indexed_epoch
+            # fetch indexed data
+            self._logger.info(f"Correcting indexed data for epochs {last_indexed_epoch} to {msg_obj.epochId} for time interval {time_interval}")
+            active_pools = await self._redis_conn.get(f"active_pool_data:{time_interval}:{last_indexed_epoch}:{settings.namespace}")
+            if active_pools:
+                active_pools = json.loads(active_pools)
+                # fetch snapshots for epochs_to_correct
+                self._logger.info(f"Fetching new snapshots for epochs {last_indexed_epoch} to {last_indexed_epoch + epochs_to_correct}")
+                new_snapshots = await get_project_epoch_snapshot_bulk(
+                    self._redis_conn, self._protocol_state_contract, self._anchor_rpc_helper, self._ipfs_reader_client, last_indexed_epoch + 1, msg_obj.epochId, project_id,
+                )
+                old_snapshots = await get_project_epoch_snapshot_bulk(
+                    self._redis_conn, self._protocol_state_contract, self._anchor_rpc_helper, self._ipfs_reader_client, tail_epoch_id - epochs_to_correct, tail_epoch_id - 1, project_id,
+                )
+                
+                # add new snapshots to indexed data
+                for snapshot in new_snapshots:
+                    if snapshot:
+                        for pool_address, frequency in snapshot['pools'].items():
+                            if pool_address not in active_pools:
+                                active_pools[pool_address] = 0
+                            active_pools[pool_address] += frequency
+                # remove old snapshots from indexed data
+                for snapshot in old_snapshots:
+                    if snapshot:
+                        for pool_address, frequency in snapshot['pools'].items():
+                            if pool_address in active_pools:
+                                active_pools[pool_address] -= frequency
+                # set data in redis
+                await self._redis_conn.set(f"active_pool_data:{time_interval}:{msg_obj.epochId}:{settings.namespace}", json.dumps(active_pools))
+                await self._redis_conn.set(f"active_pool_data:{time_interval}:latest:epoch", msg_obj.epochId)
+                # remove old data
+                await self._redis_conn.delete(f"active_pool_data:{time_interval}:{last_indexed_epoch}:{settings.namespace}")
+
+    async def _process_active_tokens_message(self, msg_obj: SnapshotSubmittedMessage):
+        """
+        Processes an active tokens message and updates Redis with the active tokens information.
+        
+        This method updates the Redis database with the active tokens information.
+        Only maintaining 24h cache for active tokens.
+        """
+        self._logger.info(f'ActiveTokensEvent caught with message {msg_obj}')
+
+        # only do this every 30 epochs
+        if msg_obj.epochId % 30 != 0:
+            return
+
+        # check last indexed epoch
+        time_interval = 86400
+        last_indexed_epoch = await self._redis_conn.get(f"active_token_data:{time_interval}:latest:epoch")
+        if last_indexed_epoch:
+            last_indexed_epoch = int(last_indexed_epoch)
+        else:
+            last_indexed_epoch = 0
+
+        project_id = msg_obj.projectId
+        tail_epoch_id, _ = await get_tail_epoch_id(
+            self._redis_conn, self._protocol_state_contract, self._anchor_rpc_helper, msg_obj.epochId, time_interval, project_id,
+        )
+
+        self._logger.info(f"Last indexed epoch: {last_indexed_epoch}, tail epoch id: {tail_epoch_id}, current epoch: {msg_obj.epochId}")
+
+        if last_indexed_epoch > tail_epoch_id:
+            epochs_to_correct = msg_obj.epochId - last_indexed_epoch
+            # fetch indexed data
+            self._logger.info(f"Correcting indexed data for epochs {last_indexed_epoch} to {msg_obj.epochId} for time interval {time_interval}")
+            active_tokens = await self._redis_conn.get(f"active_token_data:{time_interval}:{last_indexed_epoch}:{settings.namespace}")
+            if active_tokens:
+                active_tokens = json.loads(active_tokens)
+                # fetch snapshots for epochs_to_correct
+                self._logger.info(f"Fetching new snapshots for epochs {last_indexed_epoch} to {last_indexed_epoch + epochs_to_correct}")
+                new_snapshots = await get_project_epoch_snapshot_bulk(
+                    self._redis_conn, self._protocol_state_contract, self._anchor_rpc_helper, self._ipfs_reader_client, last_indexed_epoch + 1, msg_obj.epochId, project_id,
+                )
+                old_snapshots = await get_project_epoch_snapshot_bulk(
+                    self._redis_conn, self._protocol_state_contract, self._anchor_rpc_helper, self._ipfs_reader_client, tail_epoch_id - epochs_to_correct, tail_epoch_id - 1, project_id,
+                )
+                
+                # add new snapshots to indexed data
+                for snapshot in new_snapshots:
+                    if snapshot:
+                        for token_address, frequency in snapshot['tokens'].items():
+                            if token_address not in active_tokens:
+                                active_tokens[token_address] = 0
+                            active_tokens[token_address] += frequency
+                # remove old snapshots from indexed data
+                for snapshot in old_snapshots:
+                    if snapshot:
+                        for token_address, frequency in snapshot['tokens'].items():
+                            if token_address in active_tokens:
+                                active_tokens[token_address] -= frequency
+                # set data in redis
+                await self._redis_conn.set(f"active_token_data:{time_interval}:{msg_obj.epochId}:{settings.namespace}", json.dumps(active_tokens))
+                await self._redis_conn.set(f"active_token_data:{time_interval}:latest:epoch", msg_obj.epochId)
+                # remove old data
+                await self._redis_conn.delete(f"active_token_data:{time_interval}:{last_indexed_epoch}:{settings.namespace}")
+
     async def _process_snapshot_submitted_message(self, event_data):
         """
         Processes a snapshot submission event and updates Redis with the snapshot information.
@@ -484,6 +612,13 @@ class Cacher(multiprocessing.Process):
         
         # Execute all commands in a single network round-trip
         await pipeline.execute()
+
+        if msg_obj.projectId.startswith('activePools:'):
+            self._logger.info(f'ActivePoolsEvent caught with message, sending it to active pools processor {msg_obj}')
+            await self._process_active_pools_message(msg_obj)
+        elif msg_obj.projectId.startswith('activeTokens:'):
+            await self._process_active_tokens_message(msg_obj)
+
 
     async def _process_snapshot_finalized_message(self, event_data):
         """

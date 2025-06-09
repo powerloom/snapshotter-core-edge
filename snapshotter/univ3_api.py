@@ -536,83 +536,16 @@ async def get_daily_active_tokens(
     """
     
     try:
-        active_tokens = await get_active_tokens(
+        tokens_data, total_tokens = await get_active_tokens(
             redis_conn=app.state.redis_conn,
             protocol_state_contract=app.state.protocol_state_contract,
             anchor_rpc_helper=app.state.anchor_rpc_helper,
             ipfs_reader=app.state.ipfs_reader_client,
             time_interval=time_interval,
+            page=page,
+            size=size,
+            metadata=metadata,
         )
-        
-        # Calculate start and end indices for pagination
-        start_idx = (page - 1) * size
-        end_idx = start_idx + size - 1
-        
-        # Get total count of tokens
-        total_tokens = len(active_tokens)
-        
-        # Get paginated tokens from the sorted set
-        active_tokens = active_tokens[start_idx:end_idx+1]
-        
-        # Format the response
-        tokens_data = []
-        for token, score in active_tokens:
-            token_data = {
-                "token_address": token,
-                "frequency": score
-            }
-            tokens_data.append(token_data)
-        
-        # Add metadata if requested (parallelized in batches)
-        if metadata:
-            
-            # Process tokens in batches of 50
-            batch_size = 50
-            for i in range(0, len(tokens_data), batch_size):
-                batch = tokens_data[i:i + batch_size]
-                
-                # Create metadata fetch tasks for this batch
-                metadata_tasks = []
-                for token_data in batch:
-                    task = get_uniswap_v3_token_pools_snapshot(
-                        redis_conn=app.state.redis_conn,
-                        protocol_state_contract=app.state.protocol_state_contract,
-                        anchor_rpc_helper=app.state.anchor_rpc_helper,
-                        ipfs_reader=app.state.ipfs_reader_client,
-                        token_address=Web3.to_checksum_address(token_data["token_address"]),
-                    )
-                    metadata_tasks.append(task)
-                
-                # Fetch metadata for all tokens in this batch in parallel
-                try:
-                    metadata_results = await asyncio.gather(*metadata_tasks, return_exceptions=True)
-                    
-                    # Assign metadata results back to token data
-                    for j, metadata_result in enumerate(metadata_results):
-                        if isinstance(metadata_result, Exception):
-                            rest_logger.error(
-                                f"Exception fetching metadata for token {batch[j]['token_address']}: {metadata_result}"
-                            )
-                            batch[j]["metadata"] = None
-                        elif not metadata_result:
-                            batch[j]["metadata"] = None
-                        else:
-                            if metadata_result.pools:
-                                # Get any pool metadata from the pools dict
-                                token_pool_metadata = next(iter(metadata_result.pools.values()))
-                                if token_pool_metadata.token0.address == batch[j]["token_address"]:
-                                    batch[j]["metadata"] = token_pool_metadata.token0
-                                elif token_pool_metadata.token1.address == batch[j]["token_address"]:
-                                    batch[j]["metadata"] = token_pool_metadata.token1
-                                else:
-                                    batch[j]["metadata"] = None
-                            else:
-                                batch[j]["metadata"] = None
-                except Exception as e:
-                    rest_logger.opt(exception=True).error(f"Error in batch metadata fetch: {e}")
-                    # Set metadata to None for all tokens in this batch
-                    for token_data in batch:
-                        token_data["metadata"] = None
         
         response.status_code = 200
         return {
@@ -625,7 +558,7 @@ async def get_daily_active_tokens(
             }
         }
     except Exception as e:
-        rest_logger.error(f"Error getting daily active tokens: {e}")
+        rest_logger.opt(exception=True).error(f"Error getting daily active tokens: {e}")
         response.status_code = 500
         return {"error": "Failed to retrieve daily active tokens"}
     
@@ -674,70 +607,18 @@ async def get_daily_active_pools(
     - List of active pools with their frequencies and optional metadata
     - Pagination metadata including total count and pages
     """
-    pools = await get_active_pools(
-        redis_conn=app.state.redis_conn,
-        protocol_state_contract=app.state.protocol_state_contract,
-        anchor_rpc_helper=app.state.anchor_rpc_helper,
-        ipfs_reader=app.state.ipfs_reader_client,
-        time_interval=time_interval,
-    )
-    
     try:
-        # Calculate start and end indices for pagination
-        start_idx = (page - 1) * size
-        end_idx = start_idx + size - 1
-
-        total_pools = len(pools)
-        active_pools = pools[start_idx:end_idx+1]
-        
-        # Format the response
-        pools_data = []
-        for pool, score in active_pools:
-            pool_data = {
-                "pool_address": pool,
-                "frequency": score
-            }
-            pools_data.append(pool_data)
-        
-        # Add metadata if requested (parallelized in batches)
-        if metadata:
-            
-            # Process pools in batches of 50
-            batch_size = 50
-            for i in range(0, len(pools_data), batch_size):
-                batch = pools_data[i:i + batch_size]
-                
-                # Create metadata fetch tasks for this batch
-                metadata_tasks = []
-                for pool_data in batch:
-                    task = get_uniswap_v3_pool_metadata(
-                        redis_conn=app.state.redis_conn,
-                        protocol_state_contract=app.state.protocol_state_contract,
-                        anchor_rpc_helper=app.state.anchor_rpc_helper,
-                        ipfs_reader=app.state.ipfs_reader_client,
-                        pool_address=Web3.to_checksum_address(pool_data["pool_address"]),
-                    )
-                    metadata_tasks.append(task)
-                
-                # Fetch metadata for all pools in this batch in parallel
-                try:
-                    metadata_results = await asyncio.gather(*metadata_tasks, return_exceptions=True)
-                    
-                    # Assign metadata results back to pool data
-                    for j, metadata_result in enumerate(metadata_results):
-                        if isinstance(metadata_result, Exception):
-                            rest_logger.error(
-                                f"Exception fetching metadata for pool {batch[j]['pool_address']}: {metadata_result}"
-                            )
-                            batch[j]["metadata"] = None
-                        else:
-                            batch[j]["metadata"] = metadata_result
-                except Exception as e:
-                    rest_logger.error(f"Error in batch metadata fetch: {e}")
-                    # Set metadata to None for all pools in this batch
-                    for pool_data in batch:
-                        pool_data["metadata"] = None
-        
+        pools_data, total_pools = await get_active_pools(
+            redis_conn=app.state.redis_conn,
+            protocol_state_contract=app.state.protocol_state_contract,
+            anchor_rpc_helper=app.state.anchor_rpc_helper,
+            ipfs_reader=app.state.ipfs_reader_client,
+            time_interval=time_interval,
+            page=page,
+            size=size,
+            metadata=metadata,
+        )
+    
         response.status_code = 200
         return {
             "active_pools": pools_data,
