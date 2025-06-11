@@ -2059,7 +2059,7 @@ async def get_uniswap_trade_volume_agg(
     
     # Check last indexed epoch
     last_indexed_epoch = await redis_conn.get(
-        f"trade_volume_data:{time_interval}:latest:epoch"
+        f"trade_volume_data:{project_id}:{time_interval}:latest:epoch"
     )
     if last_indexed_epoch:
         last_indexed_epoch = int(last_indexed_epoch)
@@ -2095,7 +2095,7 @@ async def get_uniswap_trade_volume_agg(
             f"for time interval {time_interval}"
         )
         cached_volume = await redis_conn.get(
-            f"trade_volume_data:{time_interval}:{last_indexed_epoch}:"
+            f"trade_volume_data:{project_id}:{time_interval}:{last_indexed_epoch}:"
             f"{settings.namespace}"
         )
         if cached_volume:
@@ -2169,16 +2169,16 @@ async def get_uniswap_trade_volume_agg(
 
     # Set data in redis (same pattern as active pools/tokens)
     await redis_conn.set(
-        f"trade_volume_data:{time_interval}:{current_epoch}:{settings.namespace}", 
+        f"trade_volume_data:{project_id:}:{time_interval}:{current_epoch}:{settings.namespace}", 
         str(total_trade_volume)
     )
     await redis_conn.set(
-        f"trade_volume_data:{time_interval}:latest:epoch", current_epoch
+        f"trade_volume_data:{project_id}:{time_interval}:latest:epoch", current_epoch
     )
     # Remove old data
     if last_indexed_epoch > 0:
         await redis_conn.delete(
-            f"trade_volume_data:{time_interval}:{last_indexed_epoch}:"
+            f"trade_volume_data:{project_id}:{time_interval}:{last_indexed_epoch}:"
             f"{settings.namespace}"
         )
     
