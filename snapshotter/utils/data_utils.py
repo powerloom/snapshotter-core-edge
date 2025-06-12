@@ -172,7 +172,7 @@ async def get_last_submitted_snapshot_data(redis_conn: aioredis.Redis, project_i
     last_submitted_snapshot_data = await redis_conn.get(last_submitted_snapshot_data_key(project_id))
     if last_submitted_snapshot_data:
         return json.loads(last_submitted_snapshot_data)
-    return 0
+    return None
 
 
 async def get_project_finalized_cids_bulk(
@@ -204,10 +204,18 @@ async def get_project_finalized_cids_bulk(
         redis_conn, state_contract_obj, rpc_helper, project_id,
     )
 
-    last_finalized_epoch = await get_project_last_finalized_epoch(redis_conn, state_contract_obj, rpc_helper, project_id)
-    last_submitted_epoch = await get_last_submitted_snapshot_data(redis_conn, project_id)
+    last_submitted_snapshot_data = await get_last_submitted_snapshot_data(redis_conn, project_id)
+    if last_submitted_snapshot_data:
+        max_epoch_with_data = last_submitted_snapshot_data['epochId']
+    else:
+        max_epoch_with_data = await get_project_last_finalized_epoch(
+            redis_conn=redis_conn,
+            state_contract_obj=state_contract_obj,
+            rpc_helper=rpc_helper, 
+            project_id=project_id,
+        )
+
     empty_epochs_with_cids = []
-    max_epoch_with_data = max(last_finalized_epoch, last_submitted_epoch)
     if max_epoch_with_data < epoch_id_max:
         logger.info(f'Max epoch with data {max_epoch_with_data} is less than epoch_id_max {epoch_id_max}. Adjusting epoch_id_max to {max_epoch_with_data}')
         empty_epochs_with_cids = [(f'null_{epoch_id}', epoch_id) for epoch_id in range(max_epoch_with_data + 1, epoch_id_max + 1)]
