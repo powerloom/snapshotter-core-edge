@@ -219,7 +219,7 @@ async def get_project_finalized_cids_bulk(
     if max_epoch_with_data < epoch_id_max:
         logger.info(f'Max epoch with data {max_epoch_with_data} is less than epoch_id_max {epoch_id_max}. Adjusting epoch_id_max to {max_epoch_with_data}')
         empty_epochs_with_cids = [(f'null_{epoch_id}', epoch_id) for epoch_id in range(max_epoch_with_data + 1, epoch_id_max + 1)]
-        epoch_id_max = max_epoch_with_data
+        epoch_id_max = max(epoch_id_min, max_epoch_with_data)
 
     logger.info(f'Project first epoch: {project_first_epoch}')
 
