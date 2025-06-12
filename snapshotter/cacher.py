@@ -28,7 +28,6 @@ from dramatiq.worker import Worker
 from eth_utils.address import to_checksum_address
 from eth_utils.crypto import keccak
 from redis import asyncio as aioredis
-from web3 import Web3
 
 from snapshotter.settings.config import settings
 from snapshotter.utils.default_logger import default_logger
@@ -48,17 +47,13 @@ from snapshotter.utils.redis.redis_keys import service_health_timestamps_key
 from snapshotter.utils.redis.redis_keys import snapshots_to_unpin_zset_name
 from snapshotter.utils.redis.redis_keys import last_submitted_snapshot_data_key
 from snapshotter.utils.redis.redis_keys import data_expiry_zset
-from snapshotter.utils.redis.redis_keys import cid_cache
-from snapshotter.utils.redis.redis_keys import blank_epochs_bitmap
 from snapshotter.utils.dramatiq_queues import CACHER_QUEUE_NAME
-from snapshotter.utils.data_utils import get_submission_data
-from snapshotter.utils.data_utils import get_project_config
 from snapshotter.utils.data_utils import get_source_chain_block_time
 from snapshotter.utils.data_utils import get_source_chain_epoch_size
 from snapshotter.utils.data_utils import get_tail_epoch_id
 from snapshotter.utils.data_utils import get_project_epoch_snapshot_bulk
+from snapshotter.utils.data_utils import process_snapshot_cid
 
-BLOCK_SHIFT_FOR_BITMAP_INDEX = 22400000
 # Configure Redis broker with no middleware
 redis_broker = RedisBroker(host=settings.redis.host, port=settings.redis.port)
 redis_broker.add_middleware(AsyncIO())
@@ -155,9 +150,6 @@ class Cacher(multiprocessing.Process):
         # TODO: Move to settings later
         self._project_data_entry_expiry = 60 * 60 * 24 * 7  # 7 days in seconds
         self._cleanup_interval = 60 * 60
-        self._max_epochs_to_process = 0
-        self._max_recursion_depth = 150
-        self._redis_bitmap = RedisBitmap(epoch_offset=BLOCK_SHIFT_FOR_BITMAP_INDEX)
 
     def _signal_handler(self, signum, frame):
         """
@@ -289,6 +281,8 @@ class Cacher(multiprocessing.Process):
         
         for project_id, snapshot_cid in submitted_batch_data:
             # update last_finalized_epoch in redis - use max of current and new
+            await process_snapshot_cid(self._redis_conn, self._ipfs_reader_client, project_id, snapshot_cid, msg_obj.epochId, msg_obj.epochId)
+
             last_finalized_hmap = project_last_finalized_epoch_hmap()
             # Get current value first
             current_epoch = await self._redis_conn.hget(last_finalized_hmap, project_id)
@@ -341,83 +335,6 @@ class Cacher(multiprocessing.Process):
         
         # Execute all commands in a single network round-trip
         await pipeline.execute()
-
-    async def process_snapshot_cid(self, redis_conn: aioredis.Redis, project_id: str, snapshot_cid: str, epoch_id: int, original_epoch_id: int, rec_depth: int = 0):
-        try:
-
-            project_config = get_project_config(project_id)
-            if not project_config.keep_previous_snapshot_data:
-                return
-            snapshot_data = await get_submission_data(snapshot_cid, self._ipfs_reader_client, False)
-            pipeline = redis_conn.pipeline()
-            expiry_keys = []
-
-            project_hmap_key = project_data_hmap(project_id=project_id)
-            expiry_time = int(time.time()) + self._project_data_entry_expiry
-
-            if snapshot_data:
-                if "previousSnapshots" in snapshot_data and len(snapshot_data["previousSnapshots"]) > 0:    
-                    data_to_cache = {}
-                    min_previous_snapshot_key = max(
-                        BLOCK_SHIFT_FOR_BITMAP_INDEX + 1, 
-                        snapshot_data["previousSnapshots"][0][0], 
-                        original_epoch_id - self._max_epochs_to_process + 1 )
-                    all_previous_snapshot_keys = set(range(min_previous_snapshot_key, epoch_id))
-                    # Process each previous snapshot
-                    for (epoch_id, snapshot_cid) in snapshot_data["previousSnapshots"][::-1]:
-                        epoch_id = int(epoch_id)
-                        data_to_cache[epoch_id] = json.dumps({
-                            "snapshot_cid": snapshot_cid,
-                            "status": SnapshotStatus.SUBMITTED.value
-                        })
-                        all_previous_snapshot_keys.discard(epoch_id)
-                        expiry_keys.append(f"{project_id}|{epoch_id}")
-
-                    # Add to pipeline if we have data to cache
-                    if data_to_cache:
-                        pipeline.hset(
-                            project_hmap_key,
-                            mapping=data_to_cache,
-                        )
-                    
-                    blank_epochs_bitmap_key = blank_epochs_bitmap(project_id)
-
-                    epochs_to_set = sorted(list(all_previous_snapshot_keys))
-                    await self._redis_bitmap.set_bits_in_range(redis_conn, blank_epochs_bitmap_key, epochs_to_set)
-
-                    if len(snapshot_data["previousSnapshots"]) > 0:
-                        epoch_id = snapshot_data["previousSnapshots"][0][0]
-                        epoch_cid = snapshot_data["previousSnapshots"][0][1]
-                        # recursively process previous snapshots
-                        epoch_not_too_old = epoch_id + self._max_epochs_to_process > original_epoch_id
-                        already_processed = await redis_conn.hexists(project_hmap_key, epoch_id)
-                        within_recursion_depth = rec_depth < self._max_recursion_depth
-                        # check if epoch_id is present in project_hmap_key and blank_epochs_set_key
-                        if epoch_not_too_old and (not already_processed) and within_recursion_depth:
-                            await self.process_snapshot_cid(redis_conn, project_id, epoch_cid, epoch_id, original_epoch_id, rec_depth=rec_depth + 1)
-
-                if project_config.cache_cids:
-                    snapshot_data["previousSnapshots"] = []
-                    # cache lite snapshot in redis
-                    cid_cache_key = cid_cache(snapshot_cid)
-                    pipeline.set(
-                        name=cid_cache_key,
-                        value=json.dumps(snapshot_data),
-                        ex=self._project_data_entry_expiry,
-                    )
-
-            if expiry_keys:
-                expiry_data = {key: expiry_time for key in expiry_keys}
-                pipeline.zadd(
-                    name=data_expiry_zset(),
-                    mapping=expiry_data,
-                )
-
-            await pipeline.execute()
-        except Exception as e:
-            self._logger.error(f'Error processing snapshot cid: {e}')
-            self._logger.error(f'Detailed traceback:\n{traceback.format_exc()}')
-            self._logger.error(f'Snapshot cid: {snapshot_cid}')
 
     async def _process_active_pools_message(self, msg_obj: SnapshotSubmittedMessage):
         """
@@ -579,7 +496,7 @@ class Cacher(multiprocessing.Process):
         else:
             last_snapshot_submitted_epoch = 0
             
-        await self.process_snapshot_cid(self._redis_conn, msg_obj.projectId, msg_obj.snapshotCid, msg_obj.epochId, msg_obj.epochId, last_snapshot_submitted_epoch)
+        await process_snapshot_cid(self._redis_conn, self._ipfs_reader_client, msg_obj.projectId, msg_obj.snapshotCid, msg_obj.epochId, msg_obj.epochId, last_snapshot_submitted_epoch)
         
         # Add to project data hashmap
         project_hmap_key = project_data_hmap(project_id=msg_obj.projectId)

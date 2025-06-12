@@ -44,11 +44,14 @@ from snapshotter.utils.redis.redis_keys import blank_epochs_bitmap
 from snapshotter.utils.redis.redis_bitmap import RedisBitmap
 from snapshotter.utils.redis.redis_keys import timestamp_to_block_number_key
 from snapshotter.settings.config import projects_config
+from snapshotter.utils.models.data_models import SnapshotStatus
+import traceback
 
 logger = default_logger.bind(module='data_helper')
 PROJECT_DATA_ENTRY_EXPIRY = 60 * 60 * 24 * 7  # 7 days in seconds
 WETH = Web3.to_checksum_address(computes_settings.contract_addresses.WETH)
 BLOCK_SHIFT_FOR_BITMAP_INDEX = 22400000
+MAX_RECURSION_DEPTH = 50
 
 redis_bitmap = RedisBitmap(epoch_offset=BLOCK_SHIFT_FOR_BITMAP_INDEX)
 
@@ -387,6 +390,10 @@ async def w3_get_and_cache_finalized_cid(
                     name=data_expiry_zset(),
                     mapping=expiry_data,
                 )
+            
+            # processing snapshot cid
+            logger.info(f"Processing snapshot cid: {cid} for project {project_id} at epoch {epoch_id}")
+            await process_snapshot_cid(redis_conn, ipfs_reader, project_id, cid, epoch_id, epoch_id)
         
         except Exception as e:
             logger.opt(exception=True).error(f'Error while fetching data from IPFS | CID {cid} | Error: {e}')
@@ -3631,3 +3638,87 @@ async def _fallback_fetch_block_at_timestamp(
     return block_number
 
     
+async def process_snapshot_cid(redis_conn: aioredis.Redis, ipfs_reader: AsyncIPFSClient, project_id: str, snapshot_cid: str, epoch_id: int, original_epoch_id: int, rec_depth: int = 0):
+    try:
+        if rec_depth == 0:
+            # mark in redis that this project is being processed
+            # check if project is already being processed
+            if await redis_conn.exists(f"project_processing:{project_id}"):
+                logger.info(f"Project {project_id} is already being processed. Skipping.")
+                return False
+            await redis_conn.set(f"project_processing:{project_id}", "true", ex=300)
+
+        logger.info(f"Processing snapshot cid: {snapshot_cid} for project {project_id} at epoch {epoch_id} (original epoch {original_epoch_id}), rec_depth {rec_depth}")
+
+        project_config = get_project_config(project_id)
+        if not project_config.keep_previous_snapshot_data:
+            return
+        snapshot_data = await get_submission_data(snapshot_cid, ipfs_reader, False)
+        pipeline = redis_conn.pipeline()
+        expiry_keys = []
+
+        project_hmap_key = project_data_hmap(project_id=project_id)
+        expiry_time = int(time.time()) + PROJECT_DATA_ENTRY_EXPIRY
+
+        if snapshot_data:
+            if "previousSnapshots" in snapshot_data and len(snapshot_data["previousSnapshots"]) > 0:    
+                data_to_cache = {}
+                all_previous_snapshot_keys = set(range(snapshot_data["previousSnapshots"][0][0], epoch_id))
+                # Process each previous snapshot
+                for (epoch_id, snapshot_cid) in snapshot_data["previousSnapshots"][::-1]:
+                    epoch_id = int(epoch_id)
+                    data_to_cache[epoch_id] = json.dumps({
+                        "snapshot_cid": snapshot_cid,
+                        "status": SnapshotStatus.SUBMITTED.value
+                    })
+                    all_previous_snapshot_keys.discard(epoch_id)
+                    expiry_keys.append(f"{project_id}|{epoch_id}")
+
+                # Add to pipeline if we have data to cache
+                if data_to_cache:
+                    pipeline.hset(
+                        project_hmap_key,
+                        mapping=data_to_cache,
+                    )
+                
+                blank_epochs_bitmap_key = blank_epochs_bitmap(project_id)
+
+                epochs_to_set = sorted(list(all_previous_snapshot_keys))
+                await redis_bitmap.set_bits_in_range(redis_conn, blank_epochs_bitmap_key, epochs_to_set)
+
+                if len(snapshot_data["previousSnapshots"]) > 0:
+                    epoch_id = snapshot_data["previousSnapshots"][0][0]
+                    epoch_cid = snapshot_data["previousSnapshots"][0][1]
+                    # recursively process previous snapshots
+                    within_recursion_depth = rec_depth < MAX_RECURSION_DEPTH
+                    already_processed = await redis_conn.hexists(project_hmap_key, epoch_id)
+                    # check if epoch_id is present in project_hmap_key and blank_epochs_set_key
+                    if within_recursion_depth and not already_processed:
+                        await process_snapshot_cid(redis_conn, ipfs_reader, project_id, epoch_cid, epoch_id, original_epoch_id, rec_depth=rec_depth + 1)
+
+            if project_config.cache_cids:
+                snapshot_data["previousSnapshots"] = []
+                # cache lite snapshot in redis
+                cid_cache_key = cid_cache(snapshot_cid)
+                pipeline.set(
+                    name=cid_cache_key,
+                    value=json.dumps(snapshot_data),
+                    ex=PROJECT_DATA_ENTRY_EXPIRY,
+                )
+
+        if expiry_keys:
+            expiry_data = {key: expiry_time for key in expiry_keys}
+            pipeline.zadd(
+                name=data_expiry_zset(),
+                mapping=expiry_data,
+            )
+
+        if rec_depth == 0:
+            # remove the mark in redis that this project is being processed
+            await redis_conn.delete(f"project_processing:{project_id}")
+
+        await pipeline.execute()
+    except Exception as e:
+        logger.error(f'Error processing snapshot cid: {e}')
+        logger.error(f'Detailed traceback:\n{traceback.format_exc()}')
+        logger.error(f'Snapshot cid: {snapshot_cid}')
