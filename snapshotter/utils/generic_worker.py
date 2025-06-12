@@ -350,7 +350,7 @@ class GenericAsyncWorker(multiprocessing.Process):
                 if last_snapshot:
                     previous_snapshots = last_snapshot.get('previousSnapshots', [])
                     if previous_snapshots:
-                        if len(previous_snapshots) > 50:
+                        if len(previous_snapshots) > 200:
                             previous_snapshots.pop(0)
                         # convert previous_snapshots to list of tuples
                         previous_snapshots = [(int(epoch_id), snapshot_cid) for epoch_id, snapshot_cid in previous_snapshots]
