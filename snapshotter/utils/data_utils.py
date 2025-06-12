@@ -172,7 +172,7 @@ async def get_last_submitted_snapshot_data(redis_conn: aioredis.Redis, project_i
     last_submitted_snapshot_data = await redis_conn.get(last_submitted_snapshot_data_key(project_id))
     if last_submitted_snapshot_data:
         return json.loads(last_submitted_snapshot_data)
-    return None
+    return 0
 
 
 async def get_project_finalized_cids_bulk(
@@ -204,6 +204,15 @@ async def get_project_finalized_cids_bulk(
         redis_conn, state_contract_obj, rpc_helper, project_id,
     )
 
+    last_finalized_epoch = await get_project_last_finalized_epoch(redis_conn, state_contract_obj, rpc_helper, project_id)
+    last_submitted_epoch = await get_last_submitted_snapshot_data(redis_conn, project_id)
+    empty_epochs_with_cids = []
+    max_epoch_with_data = max(last_finalized_epoch, last_submitted_epoch)
+    if max_epoch_with_data < epoch_id_max:
+        logger.info(f'Max epoch with data {max_epoch_with_data} is less than epoch_id_max {epoch_id_max}. Adjusting epoch_id_max to {max_epoch_with_data}')
+        empty_epochs_with_cids = [(f'null_{epoch_id}', epoch_id) for epoch_id in range(max_epoch_with_data + 1, epoch_id_max + 1)]
+        epoch_id_max = max_epoch_with_data
+
     logger.info(f'Project first epoch: {project_first_epoch}')
 
     if epoch_id_min < project_first_epoch:
@@ -226,6 +235,9 @@ async def get_project_finalized_cids_bulk(
     # Check Redis cache for existing CIDs
     epoch_ids_to_fetch = list(range(epoch_id_min, epoch_id_max + 1))
     logger.info(f'Fetching CIDs for {len(epoch_ids_to_fetch)} epochs for project {project_id}')
+    if not epoch_ids_to_fetch:
+        return [], project_first_epoch
+ 
     data_raw = await redis_conn.hmget(
         project_data_hmap(project_id=project_id),
         epoch_ids_to_fetch
@@ -276,11 +288,11 @@ async def get_project_finalized_cids_bulk(
             )
 
         # Merge existing and missing CIDs
-        all_cids_with_epochs = cid_data_with_epochs + missing_cids_with_epochs
+        all_cids_with_epochs = cid_data_with_epochs + missing_cids_with_epochs + empty_epochs_with_cids
         all_cids_with_epochs.sort(key=lambda x: x[1])
     else:
-        all_cids_with_epochs = cid_data_with_epochs
-
+        all_cids_with_epochs = cid_data_with_epochs + empty_epochs_with_cids
+        all_cids_with_epochs.sort(key=lambda x: x[1])
     return [cid for cid, _ in all_cids_with_epochs], project_first_epoch
 
 
