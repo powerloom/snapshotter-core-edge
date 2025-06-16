@@ -1,5 +1,4 @@
 import asyncio
-import hashlib
 import importlib
 import resource
 import time
@@ -8,7 +7,6 @@ from signal import signal
 from signal import SIGQUIT
 from signal import SIGTERM
 from socket import gethostname
-from typing import Union
 
 import dramatiq
 import uvloop
@@ -20,15 +18,12 @@ from pydantic import ValidationError
 from snapshotter.health_ping import create_health_ping_actor
 from snapshotter.health_ping import run_periodic_broker_health_check
 from snapshotter.settings.config import aggregator_config
-from snapshotter.settings.config import projects_config
 from snapshotter.settings.config import settings
 from snapshotter.utils.default_logger import default_logger
 from snapshotter.utils.generic_worker import GenericAsyncWorker
 from snapshotter.utils.models.data_models import SnapshotterStates
 from snapshotter.utils.models.data_models import SnapshotterStateUpdate
 from snapshotter.utils.models.message_models import CalculateAggregateMessage
-from snapshotter.utils.models.message_models import SnapshotSubmittedMessage
-from snapshotter.utils.models.settings_model import AggregateOn
 from snapshotter.utils.redis.redis_keys import epoch_id_project_to_state_mapping
 from snapshotter.utils.dramatiq_queues import AGGREGATION_QUEUE_NAME, AGGREGATION_HEALTH_QUEUE_NAME
 
@@ -66,21 +61,14 @@ class AggregationAsyncWorker(GenericAsyncWorker):
         """
         super(AggregationAsyncWorker, self).__init__(name=name, **kwargs)
 
-
         self._logger = default_logger.bind(module='AggregationWorker')
 
         self._project_calculation_mapping = None
-        self._single_project_types = set()
-        self._multi_project_types = set()
         self._task_types = set()
 
         # Categorize project types based on aggregation configuration
         for config in aggregator_config:
-            if config.aggregate_on == AggregateOn.single_project:
-                self._single_project_types.add(config.project_type)
-            elif config.aggregate_on == AggregateOn.multi_project:
-                self._multi_project_types.add(config.project_type)
-            self._task_types.add(config.project_type)
+            self._task_types.add(config.project_name)
 
         self._handle_event_actor = dramatiq.actor(
             queue_name=AGGREGATION_QUEUE_NAME,
@@ -96,64 +84,9 @@ class AggregationAsyncWorker(GenericAsyncWorker):
             logger=self._logger # Pass the instance logger
         )
 
-    def _gen_single_type_project_id(self, task_type, epoch):
-        """
-        Generate a project ID for a single task type and epoch.
-
-        Args:
-            task_type (str): The task type.
-            epoch (Epoch): The epoch object.
-
-        Returns:
-            str: The generated project ID.
-        """
-        data_source = epoch.projectId.split(':')[-2]
-        project_id = f'{task_type}:{data_source}:{settings.namespace}'
-        return project_id
-
-    def _gen_multiple_type_project_id(self, task_type, epoch):
-        """
-        Generate a unique project ID based on the task type and epoch messages.
-
-        Args:
-            task_type (str): The type of task.
-            epoch (Epoch): The epoch object containing messages.
-
-        Returns:
-            str: The generated project ID.
-        """
-        underlying_project_ids = [project.projectId for project in epoch.messages]
-        unique_project_id = ''.join(sorted(underlying_project_ids))
-
-        project_hash = hashlib.sha3_256(unique_project_id.encode()).hexdigest()
-
-        project_id = f'{task_type}:{project_hash}:{settings.namespace}'
-        return project_id
-
-    def _gen_project_id(self, task_type, epoch):
-        """
-        Generate a project ID based on the given task type and epoch.
-
-        Args:
-            task_type (str): The type of task.
-            epoch (int): The epoch number.
-
-        Returns:
-            str: The generated project ID.
-
-        Raises:
-            ValueError: If the task type is unknown.
-        """
-        if task_type in self._single_project_types:
-            return self._gen_single_type_project_id(task_type, epoch)
-        elif task_type in self._multi_project_types:
-            return self._gen_multiple_type_project_id(task_type, epoch)
-        else:
-            raise ValueError(f'Unknown project type {task_type}')
-
     async def _process_task(
         self,
-        msg_obj: Union[SnapshotSubmittedMessage, CalculateAggregateMessage],
+        msg_obj: CalculateAggregateMessage,
         task_type: str,
     ):
         """
@@ -183,8 +116,6 @@ class AggregationAsyncWorker(GenericAsyncWorker):
             )
             return
 
-        project_id = self._gen_project_id(task_type, msg_obj)
-
         try:
             self._logger.info(
                 'Got epoch to process for {}: {}',
@@ -194,14 +125,14 @@ class AggregationAsyncWorker(GenericAsyncWorker):
             task_processor = self._project_calculation_mapping[task_type]
 
             # Compute the snapshot
-            snapshot = await task_processor.compute(
+            snapshots = await task_processor.compute(
                 msg_obj=msg_obj,
-                redis=self._redis_conn,
+                redis_conn=self._redis_conn,
                 rpc_helper=self._rpc_helper,
                 anchor_rpc_helper=self._anchor_rpc_helper,
                 ipfs_reader=self._ipfs_reader_client,
                 protocol_state_contract=self._protocol_state_contract,
-                project_id=project_id,
+                task_type=task_type,
             )
 
         except Exception as e:
@@ -217,64 +148,58 @@ class AggregationAsyncWorker(GenericAsyncWorker):
                     epoch_id=msg_obj.epochId, state_id=SnapshotterStates.SNAPSHOT_BUILD.value,
                 ),
                 mapping={
-                    project_id: SnapshotterStateUpdate(
+                    f"{task_type}:{settings.namespace}": SnapshotterStateUpdate(
                         status='failed', error=str(e), timestamp=int(time.time()),
                     ).model_dump_json(),
                 },
             )
         else:
-            if not snapshot:
+            if not snapshots:
                 # Handle empty snapshot case
                 await self._redis_conn.hset(
                     name=epoch_id_project_to_state_mapping(
                         epoch_id=msg_obj.epochId, state_id=SnapshotterStates.SNAPSHOT_BUILD.value,
                     ),
                     mapping={
-                        project_id: SnapshotterStateUpdate(
+                        f"{task_type}:{settings.namespace}": SnapshotterStateUpdate(
                             status='failed', timestamp=int(time.time()), error='Empty snapshot',
                         ).model_dump_json(),
                     },
                 )
             else:
-                # Handle successful snapshot case
-                await self._redis_conn.hset(
-                    name=epoch_id_project_to_state_mapping(
-                        epoch_id=msg_obj.epochId, state_id=SnapshotterStates.SNAPSHOT_BUILD.value,
-                    ),
-                    mapping={
-                        project_id: SnapshotterStateUpdate(
-                            status='success', timestamp=int(time.time()),
-                        ).model_dump_json(),
-                    },
-                )
-                await self._commit_payload(
-                    task_type=task_type,
-                    project_id=project_id,
-                    epoch=msg_obj,
-                    snapshot=snapshot,
-                    _ipfs_writer_client=self._ipfs_writer_client,
-                )
-            self._logger.debug(
-                'Updated epoch processing status in aggregation worker for project {} for transition {}',
-                project_id, SnapshotterStates.SNAPSHOT_BUILD.value,
-            )
-        await self._redis_conn.close()
+                for project_id, snapshot in snapshots:
+                    p = self._redis_conn.pipeline()
+                    p.hset(
+                        name=epoch_id_project_to_state_mapping(
+                            epoch_id=msg_obj.epochId, state_id=SnapshotterStates.SNAPSHOT_BUILD.value,
+                        ),
+                        mapping={
+                            project_id: SnapshotterStateUpdate(
+                                status='success', timestamp=int(time.time()),
+                            ).model_dump_json(),
+                        },
+                    )
+                    await p.execute()
+                    await self._commit_payload(
+                        task_type=task_type,
+                        project_id=project_id,
+                        epoch=msg_obj,
+                        snapshot=snapshot,
+                        _ipfs_writer_client=self._ipfs_writer_client,
+                    )
 
     def handle_event(self, *args):
         """
         Handle an event.
         """
         self._logger.debug('Handling event: {}', args)
-        event_type = args[0]
-        event_data = args[1]
         try:
-            if event_type in self._single_project_types:
-                msg_obj: SnapshotSubmittedMessage = SnapshotSubmittedMessage.model_validate_json(event_data)
-            elif event_type in self._multi_project_types:
-                msg_obj: CalculateAggregateMessage = CalculateAggregateMessage.model_validate_json(event_data)
-            else:
-                self._logger.error('Unknown event type: {}', event_type)
-                return
+            event_type = args[0]
+            event_data = args[1]
+
+            msg_obj: CalculateAggregateMessage = (
+                CalculateAggregateMessage.model_validate_json(event_data)
+            )
         except ValidationError as e:
             self._logger.opt(exception=settings.logs.debug_mode).error(
                 (
@@ -315,13 +240,6 @@ class AggregationAsyncWorker(GenericAsyncWorker):
 
         self._project_calculation_mapping = dict()
         for project_config in aggregator_config:
-            key = project_config.project_type
-            if key in self._project_calculation_mapping:
-                raise Exception('Duplicate project type found')
-            module = importlib.import_module(project_config.processor.module)
-            class_ = getattr(module, project_config.processor.class_name)
-            self._project_calculation_mapping[key] = class_()
-        for project_config in projects_config:
             key = project_config.project_name
             if key in self._project_calculation_mapping:
                 raise Exception('Duplicate project type found')
@@ -376,7 +294,7 @@ class AggregationAsyncWorker(GenericAsyncWorker):
 
         # Start the centralized health reporter task
         health_reporter_task = self._event_loop.create_task(
-             run_periodic_broker_health_check(
+            run_periodic_broker_health_check(
                 logger=self._logger,
                 redis_conn=self._redis_conn,
                 hostname=self._hostname,

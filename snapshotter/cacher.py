@@ -39,7 +39,6 @@ from snapshotter.utils.models.message_models import SnapshotBatchSubmittedMessag
 from snapshotter.utils.models.message_models import SnapshotFinalizedMessage
 from snapshotter.utils.models.message_models import SnapshotSubmittedMessage
 from snapshotter.utils.redis.redis_conn import RedisPoolCache
-from snapshotter.utils.redis.redis_bitmap import RedisBitmap
 from snapshotter.utils.redis.redis_keys import epoch_id_project_to_state_mapping
 from snapshotter.utils.redis.redis_keys import project_data_hmap
 from snapshotter.utils.redis.redis_keys import project_last_finalized_epoch_hmap
@@ -133,7 +132,7 @@ class Cacher(multiprocessing.Process):
         self._preloader_compute_mapping = dict()
         self._snapshot_build_awaited_project_ids = dict()
         # Task tracking
-        self._active_tasks = set()
+        self._active_tasks: Set[asyncio.Task] = set()
         self._task_timeout = settings.async_task_config.task_timeout
         self._task_cleanup_interval = settings.async_task_config.task_cleanup_interval
 
@@ -248,6 +247,34 @@ class Cacher(multiprocessing.Process):
 
         self._initialized = True
 
+    async def _create_tracked_task(self, task):
+        """
+        Creates and tracks an asynchronous task.
+
+        This method creates a new task from the given coroutine, adds it to the set of active tasks,
+        and sets up a callback to remove the task from the set when it's completed.
+
+        Args:
+            task (Coroutine): The coroutine to be executed as a task.
+
+        Returns:
+            None
+
+        Note:
+            This method is used to keep track of all running tasks for potential cleanup or monitoring.
+        """
+        # Get the current timestamp
+        current_time = time.time()
+
+        # Create a new task from the given coroutine
+        new_task = asyncio.create_task(task)
+
+        # Add the task to the set of active tasks, along with its creation time
+        self._active_tasks.add((current_time, new_task))
+
+        # Set up a callback to remove the task from the set when it's done
+        new_task.add_done_callback(lambda _: self._active_tasks.discard((current_time, new_task)))
+
     async def _process_snapshot_batch_submitted_message(self, event_data):
         """
         Processes a batch of submitted snapshots and updates their status in Redis.
@@ -281,7 +308,10 @@ class Cacher(multiprocessing.Process):
         
         for project_id, snapshot_cid in submitted_batch_data:
             # update last_finalized_epoch in redis - use max of current and new
-            await process_snapshot_cid(self._redis_conn, self._ipfs_reader_client, project_id, snapshot_cid, msg_obj.epochId, msg_obj.epochId)
+            await self._create_tracked_task(process_snapshot_cid(
+                self._redis_conn, self._ipfs_reader_client, project_id, 
+                snapshot_cid, msg_obj.epochId, msg_obj.epochId
+            ))
 
             last_finalized_hmap = project_last_finalized_epoch_hmap()
             # Get current value first
@@ -604,71 +634,83 @@ class Cacher(multiprocessing.Process):
         Args:
             event_data (str): JSON string containing the snapshot submission data.
         """
-        self._logger.info(f'SnapshotSubmittedEvent caught with message {event_data}')
-        msg_obj: SnapshotSubmittedMessage = (
-            SnapshotSubmittedMessage.model_validate_json(event_data)
-        )
-
-        # Create a pipeline for batch processing
-        pipeline = self._redis_conn.pipeline()
-        
-        # Add snapshot cid to unpin zset if enabled
-        if settings.ipfs_unpinning.enabled:
-            self._logger.info("Adding snapshot cid to unpin zset")
-            pipeline.zadd(
-                name=snapshots_to_unpin_zset_name(),
-                mapping={msg_obj.snapshotCid: int(time.time()) + settings.ipfs_unpinning.unpin_after},
+        try:
+            self._logger.info(f'SnapshotSubmittedEvent caught with message {event_data}')
+            msg_obj: SnapshotSubmittedMessage = (
+                SnapshotSubmittedMessage.model_validate_json(event_data)
             )
-        
-        last_snapshot_submitted_data = await self._redis_conn.get(last_submitted_snapshot_data_key(msg_obj.projectId))
-        if last_snapshot_submitted_data:
-            last_snapshot_submitted_data = json.loads(last_snapshot_submitted_data)
-            last_snapshot_submitted_epoch = last_snapshot_submitted_data['epochId']
-        else:
-            last_snapshot_submitted_epoch = 0
-            
-        await process_snapshot_cid(self._redis_conn, self._ipfs_reader_client, msg_obj.projectId, msg_obj.snapshotCid, msg_obj.epochId, msg_obj.epochId, last_snapshot_submitted_epoch)
-        
-        # Add to project data hashmap
-        project_hmap_key = project_data_hmap(project_id=msg_obj.projectId)
-        pipeline.hset(
-            name=project_hmap_key,
-            mapping={
-                msg_obj.epochId: json.dumps({
-                    'snapshot_cid': msg_obj.snapshotCid,
-                    'status': SnapshotStatus.SUBMITTED.value,
-                }),
-            },
-        )
-        
-        # Add to expiry tracking sorted set with TTL
-        expiry_time = int(time.time()) + self._project_data_entry_expiry
-        expiry_key = f"{msg_obj.projectId}|{msg_obj.epochId}"
-        pipeline.zadd(
-            name=data_expiry_zset(),
-            mapping={expiry_key: expiry_time}
-        )
-        
-        # Set last submitted snapshot data
-        pipeline.set(
-            name=last_submitted_snapshot_data_key(msg_obj.projectId),
-            value=json.dumps({
-                'snapshotCid': msg_obj.snapshotCid,
-                'epochId': msg_obj.epochId,
-            }),
-        )
-        
-        # Execute all commands in a single network round-trip
-        await pipeline.execute()
 
-        if msg_obj.projectId.startswith('activePools:'):
-            self._logger.info(f'ActivePoolsEvent caught with message, sending it to active pools processor {msg_obj}')
-            await self._process_active_pools_message(msg_obj)
-        elif msg_obj.projectId.startswith('activeTokens:'):
-            await self._process_active_tokens_message(msg_obj)
-        elif msg_obj.projectId.startswith('baseSnapshot:'):
-            await self._process_trade_volume_from_base_snapshot_message(msg_obj, 86400)
-            await self._process_trade_volume_from_trade_volume_message(msg_obj, 604800)
+            # Create a pipeline for batch processing
+            pipeline = self._redis_conn.pipeline()
+            
+            # Add snapshot cid to unpin zset if enabled
+            if settings.ipfs_unpinning.enabled:
+                self._logger.info("Adding snapshot cid to unpin zset")
+                pipeline.zadd(
+                    name=snapshots_to_unpin_zset_name(),
+                    mapping={msg_obj.snapshotCid: int(time.time()) + settings.ipfs_unpinning.unpin_after},
+                )
+            
+            last_snapshot_submitted_data = await self._redis_conn.get(last_submitted_snapshot_data_key(msg_obj.projectId))
+            if last_snapshot_submitted_data:
+                last_snapshot_submitted_data = json.loads(last_snapshot_submitted_data)
+                last_snapshot_submitted_epoch = last_snapshot_submitted_data['epochId']
+            else:
+                last_snapshot_submitted_epoch = 0
+
+            await self._create_tracked_task(process_snapshot_cid(
+                self._redis_conn, self._ipfs_reader_client, msg_obj.projectId, 
+                msg_obj.snapshotCid, msg_obj.epochId, msg_obj.epochId
+            ))
+            
+            # Add to project data hashmap
+            project_hmap_key = project_data_hmap(project_id=msg_obj.projectId)
+            pipeline.hset(
+                name=project_hmap_key,
+                mapping={
+                    msg_obj.epochId: json.dumps({
+                        'snapshot_cid': msg_obj.snapshotCid,
+                        'status': SnapshotStatus.SUBMITTED.value,
+                    }),
+                },
+            )
+            
+            # Add to expiry tracking sorted set with TTL
+            expiry_time = int(time.time()) + self._project_data_entry_expiry
+            expiry_key = f"{msg_obj.projectId}|{msg_obj.epochId}"
+            pipeline.zadd(
+                name=data_expiry_zset(),
+                mapping={expiry_key: expiry_time}
+            )
+            
+            # Set last submitted snapshot data
+            pipeline.set(
+                name=last_submitted_snapshot_data_key(msg_obj.projectId),
+                value=json.dumps({
+                    'snapshotCid': msg_obj.snapshotCid,
+                    'epochId': msg_obj.epochId,
+                }),
+            )
+            
+            # Execute all commands in a single network round-trip
+            await pipeline.execute()
+
+            if msg_obj.projectId.startswith('activePools:'):
+                self._logger.info(f'ActivePoolsEvent caught with message, sending it to active pools processor {msg_obj}')
+                await self._create_tracked_task(self._process_active_pools_message(msg_obj))
+            elif msg_obj.projectId.startswith('activeTokens:'):
+                await self._create_tracked_task(self._process_active_tokens_message(msg_obj))
+            elif msg_obj.projectId.startswith('baseSnapshot:'):
+                await self._create_tracked_task(
+                    self._process_trade_volume_from_base_snapshot_message(msg_obj, 86400)
+                )
+                await self._create_tracked_task(
+                    self._process_trade_volume_from_base_snapshot_message(msg_obj, 604800)
+                )
+        except Exception as e:
+            self._logger.error(f"Error processing snapshot submitted message: {e}")
+            self._logger.error(traceback.format_exc())
+            raise
 
     async def _process_snapshot_finalized_message(self, event_data):
         """
@@ -761,20 +803,13 @@ class Cacher(multiprocessing.Process):
 
         if event_type == 'SnapshotSubmitted':
             self._logger.info(f'SnapshotSubmittedEvent caught with message {event_data}')
-            await self._process_snapshot_submitted_message(
-                event_data,
-            )
+            await self._create_tracked_task(self._process_snapshot_submitted_message(event_data))
         elif event_type == 'SnapshotFinalized':
             self._logger.info(f'SnapshotFinalizedEvent caught with message {event_data}')
-            await self._process_snapshot_finalized_message(
-                event_data,
-            )
-
+            await self._create_tracked_task(self._process_snapshot_finalized_message(event_data))
         elif event_type == 'SnapshotBatchSubmitted':
             self._logger.info(f'SnapshotBatchSubmittedEvent caught with message {event_data}')
-            await self._process_snapshot_batch_submitted_message(
-                event_data,
-            )
+            await self._create_tracked_task(self._process_snapshot_batch_submitted_message(event_data))
 
         else:
             self._logger.error(
@@ -811,8 +846,8 @@ class Cacher(multiprocessing.Process):
                 self.process_event(event_type, event_data),
                 self._event_loop,
             )
-            # Wait for the result
-            future.result()  # 60 second timeout
+            # Wait for the result with timeout
+            future.result(timeout=60)
 
             self._logger.debug(f'Event has been handled: {args}')
 
@@ -835,20 +870,35 @@ class Cacher(multiprocessing.Process):
         tasks that have exceeded the timeout period.
         """
         while True:
-            await asyncio.sleep(self._task_cleanup_interval)
-            for task_start_time, task in list(self._active_tasks):
+            try:
+                await asyncio.sleep(self._task_cleanup_interval)
                 current_time = time.time()
-                if task.done():
-                    self._active_tasks.discard((task_start_time, task))
-
-                elif current_time - task_start_time > self._task_timeout:
-                    self._logger.warning(
-                        f'Task {task} timed out. Cancelling..., '
-                        f'current_time: {current_time}, '
-                        f'start_time: {task_start_time}',
-                    )
-                    task.cancel()
-                    self._active_tasks.discard((task_start_time, task))
+                
+                # Create a copy of tasks to avoid modification during iteration
+                tasks_to_check = list(self._active_tasks)
+                
+                for task_start_time, task in tasks_to_check:
+                    try:
+                        if task.done():
+                            self._active_tasks.discard((task_start_time, task))
+                        elif current_time - task_start_time > self._task_timeout:
+                            self._logger.warning(
+                                f'Task {task} timed out. Cancelling..., '
+                                f'current_time: {current_time}, '
+                                f'start_time: {task_start_time}',
+                            )
+                            task.cancel()
+                            self._active_tasks.discard((task_start_time, task))
+                    except Exception as e:
+                        self._logger.error(f"Error cleaning up task {task}: {e}")
+                        # Remove the task from active tasks even if there's an error
+                        self._active_tasks.discard((task_start_time, task))
+            except asyncio.CancelledError:
+                self._logger.info("Task cleanup loop cancelled")
+                break
+            except Exception as e:
+                self._logger.error(f"Error in task cleanup loop: {e}")
+                await asyncio.sleep(self._task_cleanup_interval)
 
     async def report_health_status(self):
         """
@@ -964,49 +1014,58 @@ class Cacher(multiprocessing.Process):
         and runs the event loop. It also handles cleanup when the process is
         shutting down.
         """
-        # Set resource limits for file descriptors
-        soft, hard = resource.getrlimit(resource.RLIMIT_NOFILE)
-        resource.setrlimit(
-            resource.RLIMIT_NOFILE,
-            (settings.rlimit.file_descriptors, hard),
-        )
-        
-        # Register signal handlers for graceful shutdown
-        for signame in [SIGINT, SIGTERM, SIGQUIT]:
-            signal(signame, self._signal_handler)
-            
-        # Use uvloop for better performance
-        asyncio.set_event_loop_policy(uvloop.EventLoopPolicy())
-
-        ev_loop = asyncio.get_event_loop()
-        Cacher._event_loop = ev_loop  # Store the event loop
-        # Update the middleware to use this event loop
-        for middleware in redis_broker.middleware:
-            if isinstance(middleware, dramatiq.middleware.AsyncIO):
-                middleware.event_loop = ev_loop
-
-        # Initialize the worker
-        ev_loop.run_until_complete(self.init_worker())
-
-        # Start a Dramatiq worker in a separate thread
-        worker = Worker(redis_broker, queues=[CACHER_QUEUE_NAME])
-        worker_thread = threading.Thread(target=worker.start, daemon=True)
-        self._worker_thread = worker_thread  # Store the thread object
-        worker_thread.start()
-
-        # Start the health reporter task
-        health_reporter_task = ev_loop.create_task(self._periodic_health_reporter())
-
         try:
-            # Run the event loop until shutdown is requested
-            ev_loop.run_forever()
-        finally:
-            # Clean up tasks and close the event loop
-            if health_reporter_task and not health_reporter_task.done():
-                health_reporter_task.cancel()
-                ev_loop.run_until_complete(asyncio.sleep(2))
+            # Set resource limits for file descriptors
+            soft, hard = resource.getrlimit(resource.RLIMIT_NOFILE)
+            resource.setrlimit(
+                resource.RLIMIT_NOFILE,
+                (settings.rlimit.file_descriptors, hard),
+            )
             
-            ev_loop.close()
+            # Register signal handlers for graceful shutdown
+            for signame in [SIGINT, SIGTERM, SIGQUIT]:
+                signal(signame, self._signal_handler)
+                
+            # Use uvloop for better performance
+            asyncio.set_event_loop_policy(uvloop.EventLoopPolicy())
+
+            ev_loop = asyncio.get_event_loop()
+            Cacher._event_loop = ev_loop  # Store the event loop
+            # Update the middleware to use this event loop
+            for middleware in redis_broker.middleware:
+                if isinstance(middleware, dramatiq.middleware.AsyncIO):
+                    middleware.event_loop = ev_loop
+
+            # Initialize the worker
+            ev_loop.run_until_complete(self.init_worker())
+
+            # Start a Dramatiq worker in a separate thread
+            worker = Worker(redis_broker, queues=[CACHER_QUEUE_NAME])
+            worker_thread = threading.Thread(target=worker.start, daemon=True)
+            self._worker_thread = worker_thread  # Store the thread object
+            worker_thread.start()
+
+            # Start the health reporter task
+            health_reporter_task = ev_loop.create_task(self._periodic_health_reporter())
+
+            try:
+                # Run the event loop until shutdown is requested
+                ev_loop.run_forever()
+            finally:
+                # Clean up tasks and close the event loop
+                if health_reporter_task and not health_reporter_task.done():
+                    health_reporter_task.cancel()
+                    ev_loop.run_until_complete(asyncio.sleep(2))
+                
+                # Close Redis connection
+                if hasattr(self, '_redis_conn') and self._redis_conn:
+                    ev_loop.run_until_complete(self._redis_conn.close())
+                
+                ev_loop.close()
+        except Exception as e:
+            self._logger.error(f"Fatal error in Cacher process: {e}")
+            self._logger.error(traceback.format_exc())
+            raise
 
 
 if __name__ == '__main__':

@@ -4,9 +4,8 @@ from typing import Dict
 from typing import List
 from typing import Optional
 from typing import Tuple
-from typing import Union
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 
 
 class SnapshotStatus(Enum):
@@ -254,4 +253,3 @@ class BlockSearchType(Enum):
     """
     BEFORE_OR_AT = 1
     AFTER_OR_AT = 2
-

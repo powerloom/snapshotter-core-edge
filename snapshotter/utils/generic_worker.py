@@ -60,6 +60,7 @@ from snapshotter.utils.data_utils import get_project_last_finalized_epoch
 from snapshotter.utils.data_utils import get_project_finalized_cid
 from snapshotter.utils.data_utils import get_submission_data
 from snapshotter.settings.config import projects_config
+from snapshotter.settings.config import aggregator_config
 logger = default_logger.bind(module='GenericWorker')
 
 # Configure Redis broker with no middleware
@@ -209,6 +210,11 @@ class GenericAsyncWorker(multiprocessing.Process):
         for project_config in projects_config:
             key = project_config.project_name
             self._project_config_mapping[key] = project_config
+        self._aggregator_config_mapping = dict()
+        for config in aggregator_config:
+            key = config.project_name
+            self._aggregator_config_mapping[key] = config
+
     def _signal_handler(self, signum, frame):
         """
         Signal handler function that handles shutdown when a SIGINT, SIGTERM or SIGQUIT signal is received.
@@ -299,6 +305,17 @@ class GenericAsyncWorker(multiprocessing.Process):
         request_ = request_message.model_dump()
 
         return request_, final_sig_bytes.hex(), current_block_hash
+    
+    def _enqueue_to_event_detector(self, event_type: str, payload: dict):
+        dramatiq.broker.get_broker().enqueue(
+            dramatiq.Message(
+                queue_name=EVENT_DETECTOR_QUEUE_NAME,
+                actor_name='handleEvent',  # Match actor name with event_receiver.py
+                args=(event_type, payload),
+                kwargs={},
+                options={},
+            ),
+        )
 
     async def _commit_payload(
             self,
@@ -327,9 +344,11 @@ class GenericAsyncWorker(multiprocessing.Process):
             None
         """
         # Payload commit sequence begins
-        project_config = self._project_config_mapping[task_type]
+        project_config = self._project_config_mapping.get(task_type)
+        if not project_config:
+            project_config = self._aggregator_config_mapping.get(task_type)
         last_snapshot = None
-        if project_config.keep_previous_snapshot_data:
+        if project_config and project_config.keep_previous_snapshot_data:
             # check if snapshot has previousSnapshots field it's a pydantic model
             if hasattr(snapshot, 'previousSnapshots'):
                 # try to fetch last submitted data from redis
@@ -377,17 +396,7 @@ class GenericAsyncWorker(multiprocessing.Process):
                 projectId=project_id,
                 timestamp=int(time.time()),
             )
-            # Send message to event detector queue
-
-            dramatiq.broker.get_broker().enqueue(
-                dramatiq.Message(
-                    queue_name=EVENT_DETECTOR_QUEUE_NAME,
-                    actor_name='handleEvent',  # Match actor name with event_receiver.py
-                    args=('SnapshotSubmitted', snapshot_submitted_message.model_dump_json()),
-                    kwargs={},
-                    options={},
-                ),
-            )
+            self._enqueue_to_event_detector('SnapshotSubmitted', snapshot_submitted_message.model_dump_json())
 
             try:
                 await self._send_submission_to_collector(snapshot_cid, epoch.epochId, project_id)
@@ -418,6 +427,7 @@ class GenericAsyncWorker(multiprocessing.Process):
                         ).model_dump_json(),
                     },
                 )
+                return snapshot_cid
 
     async def _init_redis_pool(self):
         """

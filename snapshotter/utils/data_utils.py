@@ -16,7 +16,7 @@ from ipfs_client.main import AsyncIPFSClient
 
 from computes.redis_keys import uniswap_eth_usd_price_zset
 from computes.settings.config import settings as computes_settings
-from computes.utils.models.message_models import UniswapBaseSnapshot, UniswapTradesSnapshot, TradeType
+from computes.utils.models.message_models import UniswapBaseSnapshot, UniswapTradesSnapshot, TradeType, AllUniswapTradesSnapshot
 from snapshotter.utils.models.data_models import (
     UniswapPoolMetadata, 
     UniswapTokenPoolsSnapshot, 
@@ -24,7 +24,7 @@ from snapshotter.utils.models.data_models import (
     EpochSnapshotResponse, 
     ExactEpochSnapshot, 
     ClosestEpochs, 
-    EpochIdentifier
+    EpochIdentifier,
 )
 from snapshotter.settings.config import settings
 from snapshotter.utils.models.data_models import BlockSearchType
@@ -44,6 +44,7 @@ from snapshotter.utils.redis.redis_keys import blank_epochs_bitmap
 from snapshotter.utils.redis.redis_bitmap import RedisBitmap
 from snapshotter.utils.redis.redis_keys import timestamp_to_block_number_key
 from snapshotter.settings.config import projects_config
+from snapshotter.settings.config import aggregator_config
 from snapshotter.utils.models.data_models import SnapshotStatus
 import traceback
 
@@ -75,8 +76,13 @@ def get_project_config(project_id: str):
     """
     Get the project config for a given project ID.
     """
+    if not project_id:
+        return None
     primary_identifier = project_id.split(':')[0]
     for config in projects_config:
+        if config.project_name.startswith(primary_identifier):
+            return config
+    for config in aggregator_config:
         if config.project_name.startswith(primary_identifier):
             return config
     return None
@@ -811,7 +817,7 @@ async def get_submission_data_bulk(
         for cid, data in zip(batch_cids, batch_snapshot_data):
 
             all_snapshot_data[cid] = data
-            if project_config.cache_cids:
+            if project_config and project_config.cache_cids:
                 pipeline.set(
                     name=cid_cache(cid),
                     value=json.dumps(data),
@@ -1835,6 +1841,48 @@ async def get_uniswap_v3_trades_snapshot(
     snapshot_epoch, snapshot_data = result
     return snapshot_data
 
+
+async def get_uniswap_v3_all_trades_snapshot(
+    redis_conn: aioredis.Redis,
+    anchor_rpc_helper: RpcHelper,
+    ipfs_reader: AsyncIPFSClient,
+    protocol_state_contract,
+    block_number: Optional[int] = None,
+):
+    """
+    Retrieves the trades snapshot for all Uniswap V3 pools.
+    
+    Trade snapshots contain information about individual trades/swaps
+    that occurred in the pool during the snapshot period.
+    
+    Args:
+        redis_conn (aioredis.Redis): Redis connection for data access
+        anchor_rpc_helper (RpcHelper): RPC helper for blockchain interactions
+        ipfs_reader (AsyncIPFSClient): IPFS client for reading snapshot data
+        protocol_state_contract: Smart contract object for protocol state
+        pool_address (str): Ethereum address of the pool
+        block_number (Optional[int]): Specific block to target, uses latest if None
+        
+    Returns:
+        Optional[UniswapTradesSnapshot]: Trades snapshot data for the pool,
+                                       or None if not found
+    """
+    project_id = f"allTradesSnapshot:{settings.namespace}"
+    result = await get_uniswapv3_snapshot(
+        redis_conn=redis_conn,
+        anchor_rpc_helper=anchor_rpc_helper,
+        ipfs_reader=ipfs_reader,
+        protocol_state_contract=protocol_state_contract,
+        project_id=project_id,
+        message_model=AllUniswapTradesSnapshot,
+        block_number=block_number,
+    )
+    if not result:
+        logger.error(f"No snapshot data found for project {project_id}")
+        return None
+        
+    snapshot_epoch, snapshot_data = result
+    return snapshot_data
 
 
 async def get_uniswap_v3_eth_price_snapshot(

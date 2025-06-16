@@ -35,6 +35,7 @@ from snapshotter.utils.data_utils import (
     get_uniswap_trade_volume_agg_all_pools,
     get_active_pools,
     get_active_tokens,
+    get_uniswap_v3_all_trades_snapshot,
 )
 from snapshotter.utils.default_logger import default_logger
 from snapshotter.utils.file_utils import read_json_file
@@ -321,7 +322,33 @@ async def get_trades_snapshot(
         rest_logger.error(f"Error getting trades snapshot for {pool_address} at block {block_number}: {e}")
         response.status_code = 500
         return {"error": "Trades snapshot not found"}
-    
+
+@app.get('/snapshot/allTrades')
+@app.get('/snapshot/allTrades/{block_number}')
+async def get_all_trades_snapshot(
+    request: Request,
+    response: Response,
+    block_number: Optional[int] = None,
+):
+    try:
+        trades_snapshot = await get_uniswap_v3_all_trades_snapshot(
+            redis_conn=app.state.redis_conn,
+            protocol_state_contract=app.state.protocol_state_contract,
+            anchor_rpc_helper=app.state.anchor_rpc_helper,
+            ipfs_reader=app.state.ipfs_reader_client,
+            block_number=block_number,
+        )
+        if not trades_snapshot:
+            response.status_code = 404
+            return {"error": "Trades snapshot not found"}
+        else:
+            response.status_code = 200
+            return trades_snapshot
+    except Exception as e:
+        rest_logger.error(f"Error getting trades snapshot for all pools at block {block_number}: {e}")
+        response.status_code = 500
+        return {"error": "Trades snapshot not found"}
+
 
 @app.get('/tokenPrices/all/{token_address}')
 @app.get('/tokenPrices/all/{token_address}/{block_number}')
