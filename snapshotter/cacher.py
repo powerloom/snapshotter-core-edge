@@ -462,6 +462,137 @@ class Cacher(multiprocessing.Process):
                 # remove old data
                 await self._redis_conn.delete(f"active_token_data:{time_interval}:{last_indexed_epoch}:{settings.namespace}")
 
+    async def _process_trade_volume_from_base_snapshot_message(self, msg_obj: SnapshotSubmittedMessage, time_interval: int):
+        """
+        Processes a base snapshot message and updates Redis with the base snapshot information.
+        
+        This method updates the Redis database with the active tokens information.
+        Only maintaining 24h cache for active tokens.
+        """
+        self._logger.info(f'TradeVolumeFromBaseSnapshotEvent caught with message {msg_obj}')
+
+        # only do this every 10 epochs
+        if msg_obj.epochId % 10 != 0:
+            return
+
+        # Check last indexed epoch
+        last_indexed_epoch = await self._redis_conn.get(
+            f"trade_volume_data:{msg_obj.projectId}:{time_interval}:latest:epoch"
+        )
+        if last_indexed_epoch:
+            last_indexed_epoch = int(last_indexed_epoch)
+        else:
+            last_indexed_epoch = 0
+        
+        tail_epoch_id, _ = await get_tail_epoch_id(
+            self._redis_conn, self._protocol_state_contract, self._anchor_rpc_helper,
+            msg_obj.epochId, time_interval, msg_obj.projectId
+        )
+
+        self._logger.info(
+            f"Trade volume aggregation - Project: {msg_obj.projectId}, "
+            f"Last indexed epoch: {last_indexed_epoch}, "
+            f"tail epoch id: {tail_epoch_id}, current epoch: {msg_obj.epochId}"
+        )
+
+        total_trade_volume = 0.0
+
+        if last_indexed_epoch > tail_epoch_id:
+            epochs_to_correct = msg_obj.epochId - last_indexed_epoch
+            # Fetch cached volume data
+            self._logger.info(
+                f"Using cached data with correction for project {msg_obj.projectId}, "
+                f"epochs {last_indexed_epoch} to {msg_obj.epochId} "
+                f"for time interval {time_interval}"
+            )
+            cached_volume = await self._redis_conn.get(
+                f"trade_volume_data:{msg_obj.projectId}:{time_interval}:{last_indexed_epoch}:"
+                f"{settings.namespace}"
+            )
+            if cached_volume:
+                total_trade_volume = float(cached_volume)
+                # Apply incremental updates if needed
+                if epochs_to_correct > 0:
+                    self._logger.info(
+                        f"Applying incremental updates for project {msg_obj.projectId}, "
+                        f"fetching {epochs_to_correct} new epochs and removing old ones"
+                    )
+                    
+                    # Fetch new snapshots to add
+                    new_snapshots = await get_project_epoch_snapshot_bulk(
+                        self._redis_conn, self._protocol_state_contract, self._anchor_rpc_helper, 
+                        self._ipfs_reader_client, last_indexed_epoch + 1, msg_obj.epochId, msg_obj.projectId
+                    )
+                    
+                    # Fetch old snapshots to remove
+                    old_snapshots = await get_project_epoch_snapshot_bulk(
+                        self._redis_conn, self._protocol_state_contract, self._anchor_rpc_helper, 
+                        self._ipfs_reader_client, tail_epoch_id - epochs_to_correct, 
+                        tail_epoch_id - 1, msg_obj.projectId
+                    )
+                    
+                    # Add volume from new snapshots
+                    for snapshot in new_snapshots:
+                        if snapshot and 'totalTrade' in snapshot:
+                            volume = snapshot['totalTrade']
+                            if isinstance(volume, (int, float)) and volume > 0:
+                                total_trade_volume += volume
+                    
+                    # Subtract volume from old snapshots
+                    for snapshot in old_snapshots:
+                        if snapshot and 'totalTrade' in snapshot:
+                            volume = snapshot['totalTrade']
+                            if isinstance(volume, (int, float)) and volume > 0:
+                                total_trade_volume -= volume
+                    
+                    # Ensure volume doesn't go negative due to data inconsistencies
+                    total_trade_volume = max(0.0, total_trade_volume)
+            else:
+                # No cached data found, fall back to full calculation
+                self._logger.info(
+                    f"No cached data found for project {msg_obj.projectId}, "
+                    f"calculating full volume from {tail_epoch_id} to {msg_obj.epochId}"
+                )
+                snapshots = await get_project_epoch_snapshot_bulk(
+                    self._redis_conn, self._protocol_state_contract, self._anchor_rpc_helper, 
+                    self._ipfs_reader_client, tail_epoch_id, msg_obj.epochId, msg_obj.projectId
+                )
+                for snapshot in snapshots:
+                    if snapshot and 'totalTrade' in snapshot:
+                        volume = snapshot['totalTrade']
+                        if isinstance(volume, (int, float)) and volume > 0:
+                            total_trade_volume += volume
+        else:
+            # Fresh calculation needed
+            self._logger.info(
+                f"Performing fresh calculation for project {msg_obj.projectId} "
+                f"from {tail_epoch_id} to {msg_obj.epochId}"
+            )
+            snapshots = await get_project_epoch_snapshot_bulk(
+                self._redis_conn, self._protocol_state_contract, self._anchor_rpc_helper, 
+                self._ipfs_reader_client, tail_epoch_id, msg_obj.epochId, msg_obj.projectId
+            )
+            for snapshot in snapshots:
+                if snapshot and 'totalTrade' in snapshot:
+                    volume = snapshot['totalTrade']
+                    if isinstance(volume, (int, float)) and volume > 0:
+                        total_trade_volume += volume
+
+        # Set data in redis (same pattern as active pools/tokens)
+        await self._redis_conn.set(
+            f"trade_volume_data:{msg_obj.projectId}:{time_interval}:{msg_obj.epochId}:{settings.namespace}", 
+            str(total_trade_volume)
+        )
+        await self._redis_conn.set(
+            f"trade_volume_data:{msg_obj.projectId}:{time_interval}:latest:epoch", msg_obj.epochId
+        )
+        # Remove old data
+        if last_indexed_epoch > 0:
+            await self._redis_conn.delete(
+                f"trade_volume_data:{msg_obj.projectId}:{time_interval}:{last_indexed_epoch}:"
+                f"{settings.namespace}"
+            )
+
     async def _process_snapshot_submitted_message(self, event_data):
         """
         Processes a snapshot submission event and updates Redis with the snapshot information.
@@ -535,7 +666,9 @@ class Cacher(multiprocessing.Process):
             await self._process_active_pools_message(msg_obj)
         elif msg_obj.projectId.startswith('activeTokens:'):
             await self._process_active_tokens_message(msg_obj)
-
+        elif msg_obj.projectId.startswith('baseSnapshot:'):
+            await self._process_trade_volume_from_base_snapshot_message(msg_obj, 86400)
+            await self._process_trade_volume_from_trade_volume_message(msg_obj, 604800)
 
     async def _process_snapshot_finalized_message(self, event_data):
         """
