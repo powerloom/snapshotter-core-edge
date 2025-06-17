@@ -64,7 +64,7 @@ from snapshotter.settings.config import aggregator_config
 logger = default_logger.bind(module='GenericWorker')
 
 # Configure Redis broker with no middleware
-redis_broker = RedisBroker(host=settings.redis.host, port=settings.redis.port)
+redis_broker = RedisBroker(host=settings.redis.host, port=settings.redis.port, db=settings.redis.db)
 redis_broker.add_middleware(AsyncIO())
 
 # Remove Prometheus middleware to avoid errors

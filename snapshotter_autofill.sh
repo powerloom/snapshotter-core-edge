@@ -146,8 +146,10 @@ sed -i'.backup' "s#local-collector-port#$local_collector_port#" config/settings.
 sed -i'.backup' "s#https://telegram-reporting-url#$telegram_reporting_url#" config/settings.json
 sed -i'.backup' "s#telegram-chat-id#$telegram_chat_id#" config/settings.json
 
+sed -i'.backup' "s#core-api-port#$CORE_API_PORT#" config/settings.json
 sed -i'.backup' "s#redis-host#$REDIS_HOST#" config/settings.json
 sed -i'.backup' "s#\"redis-port\"#$REDIS_PORT#" config/settings.json
+sed -i'.backup' "s#\"redis-db\"#$REDIS_DB#" config/settings.json
 if [ "$REDIS_PASSWORD" ]; then
     sed -i'.backup' "s#\"redis-password\"#\"$REDIS_PASSWORD\"#" config/settings.json
 else

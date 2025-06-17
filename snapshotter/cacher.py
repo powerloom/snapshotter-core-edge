@@ -54,7 +54,7 @@ from snapshotter.utils.data_utils import get_project_epoch_snapshot_bulk
 from snapshotter.utils.data_utils import process_snapshot_cid
 
 # Configure Redis broker with no middleware
-redis_broker = RedisBroker(host=settings.redis.host, port=settings.redis.port)
+redis_broker = RedisBroker(host=settings.redis.host, port=settings.redis.port, db=settings.redis.db)
 redis_broker.add_middleware(AsyncIO())
 
 # Remove Prometheus middleware to avoid errors

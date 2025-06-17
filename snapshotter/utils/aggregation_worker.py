@@ -29,7 +29,7 @@ from snapshotter.utils.dramatiq_queues import AGGREGATION_QUEUE_NAME, AGGREGATIO
 
 
 # Configure Redis broker with no middleware
-redis_broker = RedisBroker(host=settings.redis.host, port=settings.redis.port)
+redis_broker = RedisBroker(host=settings.redis.host, port=settings.redis.port, db=settings.redis.db)
 redis_broker.add_middleware(AsyncIO())
 
 # Remove Prometheus middleware to avoid errors
