@@ -46,6 +46,7 @@ x-snapshotter-base: &snapshotter-base
     - IPFS_UNPINNING_ENABLED=${IPFS_UNPINNING_ENABLED:-false}
     - IPFS_UNPINNING_AFTER=${IPFS_UNPINNING_AFTER:-86400}
     - GUNICORN_WORKERS=${GUNICORN_WORKERS:-5}
+    - BLOCK_SHIFT_FOR_BITMAP_INDEX=${BLOCK_SHIFT_FOR_BITMAP_INDEX:-22400000}
   extra_hosts:
     - "host.docker.internal:host-gateway"
   healthcheck:

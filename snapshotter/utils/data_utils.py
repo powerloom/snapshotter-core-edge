@@ -43,7 +43,8 @@ import traceback
 
 logger = default_logger.bind(module='data_helper')
 PROJECT_DATA_ENTRY_EXPIRY = 60 * 60 * 24 * 7  # 7 days in seconds
-BLOCK_SHIFT_FOR_BITMAP_INDEX = 22400000
+BLOCK_SHIFT_FOR_BITMAP_INDEX = int(settings.block_shift_for_bitmap_index)
+
 MAX_RECURSION_DEPTH = 50
 
 redis_bitmap = RedisBitmap(epoch_offset=BLOCK_SHIFT_FOR_BITMAP_INDEX)

@@ -166,6 +166,7 @@ class Settings(BaseModel):
     ipfs_unpinning: IPFSUnpinningConfig
     node_version: str
     anchor_chain_rpc: RPCConfigBase
+    block_shift_for_bitmap_index: int
 
 # Projects related models
 

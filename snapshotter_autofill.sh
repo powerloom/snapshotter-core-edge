@@ -150,6 +150,7 @@ sed -i'.backup' "s#core-api-port#$CORE_API_PORT#" config/settings.json
 sed -i'.backup' "s#redis-host#$REDIS_HOST#" config/settings.json
 sed -i'.backup' "s#\"redis-port\"#$REDIS_PORT#" config/settings.json
 sed -i'.backup' "s#\"redis-db\"#$REDIS_DB#" config/settings.json
+sed -i'.backup' "s#\"block-shift-for-bitmap-index\"#$BLOCK_SHIFT_FOR_BITMAP_INDEX#" config/settings.json
 if [ "$REDIS_PASSWORD" ]; then
     sed -i'.backup' "s#\"redis-password\"#\"$REDIS_PASSWORD\"#" config/settings.json
 else
