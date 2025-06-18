@@ -109,8 +109,14 @@ services:
     # Increase file descriptors limit for better performance
     ulimits:
       nofile:
-        soft: 65536
-        hard: 65536
+        soft: 1000000
+        hard: 1000000
+      memlock:
+        soft: -1
+        hard: -1
+      nproc:
+        soft: 32768
+        hard: 32768
   # Worker services using the base configuration
   system-event-detector:
     <<: *snapshotter-base
@@ -138,7 +144,6 @@ services:
     command: bash -c "bash init_processes.sh utils.ipfs_unpinning_worker"
     depends_on:
       - processor-distributor
-      - ipfs
   # Core API Service
   core-api:
     <<: *snapshotter-base
