@@ -956,7 +956,9 @@ async def get_source_chain_id(redis_conn: aioredis.Redis, state_contract_obj, rp
             contract_addr=state_contract_obj.address,
             abi=state_contract_obj.abi,
         )
-
+        if isinstance(source_chain_id, BaseException):
+            logger.error(f'Error fetching source chain id from blockchain: {source_chain_id}')
+            raise Exception(f'Error fetching source chain id from blockchain: {source_chain_id}') from source_chain_id
         # Cache the result in Redis
         await redis_conn.set(
             source_chain_id_key(),
@@ -993,7 +995,9 @@ async def get_source_chain_epoch_size(redis_conn: aioredis.Redis, state_contract
             contract_addr=state_contract_obj.address,
             abi=state_contract_obj.abi,
         )
-
+        if isinstance(source_chain_epoch_size, BaseException):
+            logger.error(f'Error fetching epoch size from blockchain: {source_chain_epoch_size}')
+            raise Exception(f'Error fetching epoch size from blockchain: {source_chain_epoch_size}') from source_chain_epoch_size
         # Cache the result in Redis
         await redis_conn.set(
             source_chain_epoch_size_key(),

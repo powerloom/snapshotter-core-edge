@@ -272,16 +272,25 @@ class ProcessorDistributor(multiprocessing.Process):
             self._logger.debug('Set epoch size to {}', self._epoch_size)
         self._epochs_in_a_day = 86400 // (self._epoch_size * self._source_chain_block_time)
         self._logger.debug('Set epochs in a day to {}', self._epochs_in_a_day)
-        self._source_chain_epoch_size = await get_source_chain_epoch_size(
+        try:
+            self._source_chain_epoch_size = await get_source_chain_epoch_size(
             redis_conn=self._redis_conn,
-            state_contract_obj=self._protocol_state_contract,
-            rpc_helper=self._anchor_rpc_helper,
-        )
-        self._source_chain_id = await get_source_chain_id(
-            redis_conn=self._redis_conn,
-            rpc_helper=self._anchor_rpc_helper,
-            state_contract_obj=self._protocol_state_contract,
-        )
+                state_contract_obj=self._protocol_state_contract,
+                rpc_helper=self._anchor_rpc_helper,
+            )
+        except Exception as e:
+            self._logger.error(f'Error fetching source chain epoch size in processor distributor _init_protocol_meta: {e}')
+            sys.exit(1)
+
+        try:
+            self._source_chain_id = await get_source_chain_id(
+                redis_conn=self._redis_conn,
+                rpc_helper=self._anchor_rpc_helper,
+                state_contract_obj=self._protocol_state_contract,
+            )
+        except Exception as e:
+            self._logger.error(f'Error fetching source chain id in processor distributor _init_protocol_meta: {e}')
+            sys.exit(1)
 
     async def init_worker(self):
         """
