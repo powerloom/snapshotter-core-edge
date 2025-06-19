@@ -419,15 +419,14 @@ async def w3_get_and_cache_finalized_cid(
             pipeline.set(cid_not_found_key(cid), 'true', ex=86400)
             await pipeline.execute()
             return null_cid, epoch_id
-
-        # Execute all redis operations in the pipeline
-        await pipeline.execute()
-        return cid, epoch_id
+        else:
+            # Execute all redis operations in the pipeline
+            await pipeline.execute()
+            return cid, epoch_id
     else:
+        logger.info(f'Setting blank epoch {epoch_id} in bitmap for project {project_id}')
         await redis_bitmap.set_bit(redis_conn, blank_epochs_bitmap_key, epoch_id)
-
         await pipeline.execute()
-
         return null_cid, epoch_id
 
 
