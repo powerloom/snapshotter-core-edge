@@ -1,0 +1,151 @@
+@startuml Cacher Event Processing Flow
+
+skinparam backgroundColor #FFFFEF
+skinparam participant {
+    BackgroundColor #E5F3FF
+    BorderColor #333333
+}
+skinparam note {
+    BackgroundColor #FFFACD
+    BorderColor #DDD
+}
+
+participant "Blockchain" as BC
+participant "System Event\nDetector" as SED
+participant "Dramatiq\nQueue" as DQ
+participant "Cacher\nProcess" as C
+participant "Redis\nCache" as R
+participant "IPFS\nNetwork" as IPFS
+participant "Redis\nPipeline" as Pipeline
+
+note over BC, IPFS : Event Processing Flow in Cacher
+
+== Event Detection ==
+BC -> SED : Emit SnapshotSubmitted Event
+SED -> DQ : Queue event message
+DQ -> C : Deliver message to actor
+
+== Event Processing Start ==
+C -> C : handle_event(event_type, event_data)
+
+alt SnapshotSubmitted Event
+    C -> C : _process_snapshot_submitted_message()
+    
+    note over C : Create Redis Pipeline
+    C -> Pipeline : Create Redis pipeline for batch operations
+    
+    note over C : Basic snapshot processing
+    C -> Pipeline : Add snapshot CID to project hashmap
+    C -> Pipeline : Add to expiry tracking zset
+    C -> Pipeline : Update last submitted snapshot data
+    
+    note over C : IPFS Processing
+    C -> C : _create_tracked_task(process_snapshot_cid)
+    C -> IPFS : Fetch snapshot data from CID
+    IPFS --> C : Return snapshot JSON data
+    
+    note over C : Check for special project types
+    alt activePools project
+        C -> C : _process_active_pools_message()
+        C -> C : Get tail_epoch_id for time window
+        C -> R : Check last indexed epoch
+        
+        alt Use cached data with corrections
+            C -> R : Get cached active pools data
+            C -> IPFS : Fetch new snapshots for epochs_to_correct
+            C -> IPFS : Fetch old snapshots to remove
+            C -> C : Update pool frequencies (+new, -old)
+        else Fresh calculation
+            C -> IPFS : Fetch all snapshots in time window
+            C -> C : Calculate pool frequencies from scratch
+        end
+        
+        C -> R : Store updated active pools data
+        C -> R : Update latest epoch marker
+        C -> R : Delete old cached data
+        
+    else activeTokens project
+        C -> C : _process_active_tokens_message()
+        note over C : Similar logic to active pools but for tokens
+        
+    else baseSnapshot project
+        C -> C : _process_trade_volume_from_base_snapshot_message()
+        C -> C : Calculate trade volume for 24h window
+        C -> C : Calculate trade volume for 7d window
+        C -> R : Store aggregated trade volume data
+    end
+    
+    note over C : Execute pipeline
+    C -> Pipeline : Execute all Redis operations atomically
+    Pipeline -> R : Batch write all data
+    
+else SnapshotFinalized Event
+    C -> C : _process_snapshot_finalized_message()
+    C -> Pipeline : Create Redis pipeline
+    C -> Pipeline : Update last finalized epoch (max of current and new)
+    C -> Pipeline : Update project data with FINALIZED status
+    C -> Pipeline : Add to expiry tracking
+    C -> Pipeline : Update snapshot state mapping
+    C -> Pipeline : Execute pipeline
+    Pipeline -> R : Write finalized data
+    
+else SnapshotBatchSubmitted Event
+    C -> C : _process_snapshot_batch_submitted_message()
+    C -> BC : Get transaction details from hash
+    C -> C : Decode transaction input to extract projectIds and CIDs
+    
+    C -> Pipeline : Create Redis pipeline
+    loop For each project-CID pair
+        C -> C : _create_tracked_task(process_snapshot_cid)
+        C -> Pipeline : Update last finalized epoch (max logic)
+        C -> Pipeline : Add to project data hashmap
+        C -> Pipeline : Add to expiry tracking
+        C -> Pipeline : Update state mapping
+    end
+    C -> Pipeline : Execute pipeline
+    Pipeline -> R : Batch write all projects
+end
+
+== Background Tasks ==
+note over C, R : Background Task Management
+C -> C : _cleanup_tasks() - periodic task cleanup
+C -> C : _periodic_health_reporter() - health status reporting
+C -> C : _cleanup_expired_project_data() - data expiry management
+
+== Detailed CID Processing ==
+note over C, IPFS : Detailed CID Processing (process_snapshot_cid)
+C -> R : Check if project already being processed
+C -> R : Set processing lock with TTL
+C -> IPFS : Fetch snapshot data from CID
+IPFS --> C : Return snapshot with previousSnapshots
+
+alt Has previous snapshots
+    C -> C : Extract previousSnapshots array
+    loop For each previous snapshot
+        C -> Pipeline : Cache previous snapshot data
+        C -> Pipeline : Add to expiry tracking
+    end
+    C -> R : Set blank epochs bitmap for missing epochs
+    
+    alt Within recursion depth limit
+        C -> C : Recursively process oldest previous snapshot
+    end
+end
+
+alt Project has CID caching enabled
+    C -> Pipeline : Cache lite snapshot content
+end
+
+C -> Pipeline : Execute pipeline
+C -> R : Remove processing lock
+Pipeline -> R : Write all processed data
+
+== Error Handling ==
+note over C, R : Error Handling
+alt Error occurs
+    C -> C : Log detailed error with traceback
+    C -> R : Mark CID as not found (with TTL)
+    C -> C : Continue processing (graceful degradation)
+end
+
+@enduml 

@@ -1,0 +1,237 @@
+@startuml Snapshotter System Architecture
+
+!define RECTANGLE class
+
+skinparam backgroundColor #FFFFEF
+skinparam component {
+    BackgroundColor<<External>> #FFE5CC
+    BackgroundColor<<Cache>> #CCE5FF
+    BackgroundColor<<API>> #E5FFCC
+    BackgroundColor<<Processing>> #FFCCDD
+    BackgroundColor<<Storage>> #E5E5FF
+}
+
+' External Systems
+package "External Systems" <<External>> {
+    [Blockchain/Smart Contracts] as BC
+    [IPFS Network] as IPFS_Net
+    [External API Clients] as Clients
+}
+
+' Event Detection
+package "Event Detection" {
+    [System Event Detector] as SED
+    [Dramatiq Message Queue] as DMQ
+}
+
+' Caching Layer
+package "Caching Layer" <<Processing>> {
+    [Cacher Process] as CP
+    
+    package "Event Handlers" {
+        [SnapshotSubmitted Handler] as ESH
+        [SnapshotFinalized Handler] as EFH
+        [SnapshotBatchSubmitted Handler] as EBH
+    }
+    
+    package "Special Processors" {
+        [Active Pools Aggregator] as APA
+        [Active Tokens Aggregator] as ATA
+        [Trade Volume Calculator] as TVC
+        [Snapshot CID Processor] as SCP
+    }
+    
+    package "Background Tasks" {
+        [Task Cleanup Manager] as TCM
+        [Health Reporter] as HR
+        [Data Expiry Cleaner] as DEC
+    }
+}
+
+' Storage Layer
+package "Storage Layer" <<Storage>> {
+    package "Redis Cache" <<Cache>> {
+        database "Project Data" as PD {
+            [project_data hashmaps]
+            [last_finalized_epoch]
+            [project_first_epoch]
+        }
+        
+        database "Aggregated Data" as AD {
+            [active_pool_data]
+            [active_token_data]  
+            [trade_volume_data]
+        }
+        
+        database "Time & Block Data" as TBD {
+            [block_timestamp_mappings]
+            [eth_price_data]
+        }
+        
+        database "System Data" as SD {
+            [health_timestamps]
+            [expiry_tracking]
+            [blank_epochs_bitmap]
+        }
+        
+        database "IPFS Cache" as IC {
+            [cid_cache]
+            [metadata_cache]
+            [cid_not_found]
+        }
+    }
+    
+    package "IPFS Storage" {
+        [Snapshot Content] as SC
+        [Previous Snapshots] as PS
+        [Pool/Token Metadata] as PTM
+    }
+}
+
+' API Layer
+package "API Layer" <<API>> {
+    package "FastAPI Router" {
+        [Pool Endpoints] as PE
+        [Token Endpoints] as TE
+        [Price Endpoints] as PrE
+        [Active Data Endpoints] as ADE
+        [Time Series Endpoints] as TSE
+        [Trade Endpoints] as TrE
+    }
+    
+    package "API Data Utils" {
+        [Pool Metadata Fetcher] as PMF
+        [Token Price Calculator] as TPC
+        [Active Data Aggregator] as ADA_API
+        [Time Series Generator] as TSG
+        [Trade Data Processor] as TDP
+    }
+    
+    package "Core Data Utils" {
+        [Snapshot Fetcher] as SF
+        [CID Resolver] as CR
+        [IPFS Data Fetcher] as IDF
+        [Cache Manager] as CM
+        [Blockchain Interactor] as BI
+    }
+}
+
+' Data Flow Connections - Event Processing
+BC --> SED : "Blockchain Events"
+SED --> DMQ : "Queue Messages" 
+DMQ --> CP : "Process Events"
+
+CP --> ESH
+CP --> EFH  
+CP --> EBH
+
+ESH --> APA : "activePools projects"
+ESH --> ATA : "activeTokens projects"
+ESH --> TVC : "baseSnapshot projects"
+ESH --> SCP : "All projects"
+
+' Background task connections
+CP --> TCM
+CP --> HR
+CP --> DEC
+
+' Storage connections from processors
+APA --> AD : "Store pool frequencies"
+ATA --> AD : "Store token frequencies"
+TVC --> AD : "Store trade volumes"
+SCP --> PD : "Store snapshot data"
+SCP --> IPFS_Net : "Fetch content"
+
+ESH --> PD : "Update project data"
+EFH --> PD : "Update finalization"
+EBH --> PD : "Batch updates"
+
+DEC --> SD : "Manage expiry"
+HR --> SD : "Health status"
+
+' IPFS connections
+IPFS_Net --> SC
+IPFS_Net --> PS
+IPFS_Net --> PTM
+SCP --> IC : "Cache IPFS content"
+
+' API connections
+Clients --> PE : "HTTP Requests"
+Clients --> TE
+Clients --> PrE
+Clients --> ADE
+Clients --> TSE
+Clients --> TrE
+
+PE --> PMF
+TE --> PMF
+PrE --> TPC
+ADE --> ADA_API
+TSE --> TSG
+TrE --> TDP
+
+PMF --> SF
+TPC --> SF
+ADA_API --> SF
+TSG --> SF
+TDP --> SF
+
+SF --> CR
+SF --> IDF
+SF --> CM
+SF --> BI
+
+CR --> PD : "Resolve CIDs"
+IDF --> SC : "Fetch snapshots"
+CM --> PD : "Cache operations"
+CM --> AD
+CM --> TBD
+CM --> IC
+BI --> BC : "Blockchain calls"
+
+' Response flow
+PMF --> PE : "Formatted data"
+TPC --> PrE
+ADA_API --> ADE
+TSG --> TSE
+TDP --> TrE
+
+PE --> Clients : "JSON Response"
+TE --> Clients
+PrE --> Clients
+ADE --> Clients
+TSE --> Clients
+TrE --> Clients
+
+' Notes
+note right of CP
+  Multiprocessing worker that:
+  - Handles async event processing
+  - Manages task lifecycle
+  - Reports health status
+  - Cleans up expired data
+end note
+
+note right of APA
+  Intelligent aggregation:
+  - Uses cached data when possible
+  - Incremental updates for efficiency
+  - Handles missing epochs gracefully
+end note
+
+note right of PD
+  Cache-first architecture:
+  - Redis hashmaps for fast lookup
+  - Automatic expiry management
+  - Consistent data structure
+end note
+
+note right of SF
+  Smart fetching strategy:
+  - Check Redis cache first
+  - Seek nearby epochs if exact not found
+  - Batch operations for efficiency
+  - Graceful error handling
+end note
+
+@enduml 
