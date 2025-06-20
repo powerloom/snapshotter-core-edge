@@ -74,20 +74,6 @@ All diagrams have been converted to PlantUML format for superior rendering quali
 - Learn about performance optimizations
 - Understand error handling in API layer
 
-### 5. Component Architecture (`05_component_architecture.puml`)
-**Purpose**: PlantUML component diagram showing architectural relationships
-
-**Key Features**:
-- Clear separation of layers and responsibilities
-- Data flow connections between components
-- Color-coded component types
-- Detailed notes explaining key concepts
-
-**Use This Diagram To**:
-- Get a component-level architectural view
-- Understand dependencies between modules
-- See the clean separation of concerns
-- Learn about design patterns used
 
 ### 6. Data Lifecycle Flow (`06_data_lifecycle_flow.puml`) ⭐ **COMPREHENSIVE**
 **Purpose**: Complete implementation-level component diagram with extensive technical details
