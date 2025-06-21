@@ -58,6 +58,16 @@ x-snapshotter-base: &snapshotter-base
     retries: 3
     start_period: 60s # Give container time to start and report first health status
   restart: unless-stopped
+  ulimits:
+      nofile:
+        soft: 1000000
+        hard: 1000000
+      memlock:
+        soft: -1
+        hard: -1
+      nproc:
+        soft: 32768
+        hard: 32768
 
 services:
 
@@ -158,7 +168,17 @@ services:
       test: ["CMD", "curl", "-f", "http://localhost:${CORE_API_PORT:-9003}/health"]
       interval: 30s
       timeout: 10s
-      retries: 3    
+      retries: 3
+    ulimits:
+      nofile:
+        soft: 1000000
+        hard: 1000000
+      memlock:
+        soft: -1
+        hard: -1
+      nproc:
+        soft: 32768
+        hard: 32768 
   block_fetcher:
     # Build context pointing to the parent directory and then BlockFetcher
     build:
@@ -235,6 +255,16 @@ services:
       - ./computes:/app/computes:ro
       - ./logs/snapshotter-periphery-txprocessor:/app/logs
     restart: unless-stopped
+    ulimits:
+      nofile:
+        soft: 1000000
+        hard: 1000000
+      memlock:
+        soft: -1
+        hard: -1
+      nproc:
+        soft: 32768
+        hard: 32768
   epoch_syncer:
     build:
       context: snapshotter-periphery-epochsyncer
@@ -303,8 +333,14 @@ services:
     restart: unless-stopped
     ulimits:
       nofile:
-        soft: 65536
-        hard: 65536
+        soft: 1000000
+        hard: 1000000
+      memlock:
+        soft: -1
+        hard: -1
+      nproc:
+        soft: 32768
+        hard: 32768
 
   # Redis Service
   redis:
