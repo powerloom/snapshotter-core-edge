@@ -14,7 +14,7 @@ from signal import signal
 from signal import SIGQUIT
 from signal import SIGTERM
 from socket import gethostname
-from typing import Awaitable
+from typing import Awaitable, Tuple
 from typing import Dict
 from typing import List
 from typing import Set
@@ -159,7 +159,7 @@ class ProcessorDistributor(multiprocessing.Process):
         self._preloader_compute_mapping = dict()
         self._snapshot_build_awaited_project_ids = dict()
         # Task tracking
-        self._active_tasks: Set[asyncio.Task] = set()
+        self._active_tasks: Set[Tuple[float, asyncio.Task]] = set()
         self._task_timeout = settings.async_task_config.task_timeout
         self._task_cleanup_interval = settings.async_task_config.task_cleanup_interval
 
