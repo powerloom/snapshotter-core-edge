@@ -4,8 +4,6 @@ version: '3.9'
 x-snapshotter-base: &snapshotter-base
   image: ${SNAPSHOTTER_IMAGE:-ghcr.io/powerloom/snapshotter-core:dockerify}
   depends_on:
-    redis:
-      condition: service_healthy
     snapshotter-local-collector:
       condition: service_started
   volumes:
@@ -213,8 +211,6 @@ services:
       - REPORTING_TELEGRAM_URL=${REPORTING_TELEGRAM_URL:-}
       - REPORTING_TELEGRAM_CHAT_ID=${REPORTING_TELEGRAM_CHAT_ID:-}
       - REPORTING_MIN_INTERVAL=${REPORTING_MIN_INTERVAL:-10}
-    depends_on:
-      - redis
     volumes:
       # Volume path relative to the docker-compose file location
       - ./logs/snapshotter-periphery-blockfetcher:/app/logs
@@ -245,8 +241,6 @@ services:
       - PROCESSOR_BLOCK_TIMEOUT=${PROCESSOR_BLOCK_TIMEOUT:-}
       - EVENT_FILTER_CONFIG_PATH=${EVENT_FILTER_CONFIG_PATH:-/app/shared_config/event_filters.example.json}
       - WETH_ADDRESS=${WETH_ADDRESS:-}
-    depends_on:
-      - redis
     profiles: ["new"]
     deploy:
       replicas: ${TRANSACTION_PROCESSOR_REPLICAS:-3}
@@ -297,7 +291,6 @@ services:
       - RATE_LIMITER_HOST=${RATE_LIMITER_HOST:-rate-limiter}
       - RATE_LIMITER_PORT=${RATE_LIMITER_PORT:-8000}
     depends_on:
-      - redis
       - rate-limiter
     profiles: ["new"]
     volumes:
@@ -345,6 +338,7 @@ services:
   # Redis Service
   redis:
     image: "redis:alpine"
+    profiles: ["redis"]
     command: redis-server --appendonly yes --maxmemory ${REDIS_MAX_MEMORY:-512mb} --maxmemory-policy ${REDIS_MAXMEMORY_POLICY:-allkeys-lru}
     expose:
       - 6379
