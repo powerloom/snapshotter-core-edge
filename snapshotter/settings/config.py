@@ -36,7 +36,7 @@ aggregator_config = AggregatorConfig(**aggregator_config_dict).config
 # Sanity check: Ensure all aggregator types are unique
 aggregator_types = set()
 for aggregator in aggregator_config:
-    aggregator_types.add(aggregator.project_type)
+    aggregator_types.add(aggregator.project_name)
 assert len(aggregator_types) == len(aggregator_config), 'Duplicate aggregator types found'
 
 # Ensure no overlap between project names and aggregator types

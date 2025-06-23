@@ -1,0 +1,216 @@
+@startuml Overall System Architecture
+
+!define RECTANGLE class
+
+skinparam backgroundColor #FFFFEF
+skinparam component {
+    BackgroundColor<<External>> #FFE5CC
+    BackgroundColor<<Cache>> #CCE5FF
+    BackgroundColor<<API>> #E5FFCC
+    BackgroundColor<<Processing>> #FFCCDD
+    BackgroundColor<<Storage>> #E5E5FF
+    BackgroundColor<<EventDetection>> #F0E5FF
+}
+
+package "External Layer" <<External>> {
+    [Blockchain/Smart Contracts] as BC
+    [External API Clients] as Client
+    [IPFS Network] as IPFS_Net
+}
+
+package "Event Detection & Queuing" <<EventDetection>> {
+    [System Event Detector] as SED
+    note right of SED : Monitors blockchain events
+    [Dramatiq Message Queue] as DQ
+    note right of DQ : Redis-backed async queue
+}
+
+package "Caching Layer - Cacher Process" <<Processing>> {
+    [Cacher Process] as CP
+    note right of CP : Multiprocessing worker
+    
+    package "Event Handlers" {
+        [SnapshotSubmitted Handler] as EH1
+        [SnapshotFinalized Handler] as EH2
+        [SnapshotBatchSubmitted Handler] as EH3
+    }
+    
+    package "Special Processing" {
+        [Active Pools Aggregator] as SP1
+        [Active Tokens Aggregator] as SP2
+        [Trade Volume Calculator] as SP3
+        [Snapshot CID Processor] as SP4
+    }
+    
+    package "Task Management" {
+        [Task Cleanup Manager] as TM1
+        [Health Reporter] as TM2
+        [Expiry Data Cleaner] as TM3
+    }
+}
+
+package "Storage Layer" <<Storage>> {
+    package "Redis Cache" <<Cache>> {
+        database "Project Data" as RC1 {
+            [project_data hashmaps]
+            [last_finalized_epoch]
+            [project_first_epoch]
+        }
+        
+        database "Aggregated Data" as RC2 {
+            [active_pool_data]
+            [active_token_data]
+            [trade_volume_data]
+        }
+        
+        database "Block & Time Data" as RC4 {
+            [block_timestamp_mappings]
+            [eth_price_data]
+        }
+        
+        database "System Data" as RC6 {
+            [health_timestamps]
+            [expiry_tracking]
+            [blank_epochs_bitmap]
+        }
+        
+        database "IPFS Cache" as RC7 {
+            [cid_cache]
+            [metadata_cache]
+            [cid_not_found]
+        }
+    }
+    
+    package "IPFS Storage" {
+        [Snapshot Content] as IPFS1
+        note right of IPFS1 : JSON data with trading info
+        [Previous Snapshots] as IPFS2
+        note right of IPFS2 : Historical data chains
+        [Metadata] as IPFS3
+        note right of IPFS3 : Pool and token information
+    }
+}
+
+package "API Query Layer" <<API>> {
+    package "FastAPI Router" {
+        [Pool Endpoints] as FR1
+        [Token Endpoints] as FR2
+        [Price Endpoints] as FR3
+        [Active Data Endpoints] as FR4
+        [Time Series Endpoints] as FR5
+        [Trade Endpoints] as FR6
+    }
+    
+    package "API Data Utils" {
+        [Pool Metadata Fetcher] as ADU1
+        [Token Price Calculator] as ADU2
+        [Active Data Aggregator] as ADU3
+        [Time Series Generator] as ADU4
+        [Trade Data Processor] as ADU5
+    }
+    
+    package "Core Data Utils" {
+        [Snapshot Fetcher] as CDU1
+        [CID Resolver] as CDU2
+        [IPFS Data Fetcher] as CDU3
+        [Cache Manager] as CDU4
+        [Blockchain Interactor] as CDU5
+    }
+}
+
+package "Response Processing" {
+    [Data Validation & Formatting] as RP1
+    [Pagination Logic] as RP2
+    [Error Handling] as RP3
+    [JSON Response Generation] as RP4
+}
+
+' Event Flow
+BC --> SED : "Events"
+SED --> DQ : "Queue Messages"
+DQ --> CP : "Process Events"
+
+CP --> EH1
+CP --> EH2
+CP --> EH3
+
+' Event Processing
+EH1 --> SP1
+EH1 --> SP2
+EH1 --> SP3
+EH1 --> SP4
+EH1 --> RC1
+EH2 --> RC1
+EH3 --> RC1
+
+' Special Processing Storage
+SP1 --> RC2
+SP2 --> RC2
+SP3 --> RC2
+SP4 --> IPFS1
+
+' Task Management
+CP --> TM1
+CP --> TM2
+CP --> TM3
+TM3 --> RC6
+TM2 --> RC6
+
+' IPFS Interactions
+SP4 --> IPFS_Net
+IPFS_Net --> IPFS1
+IPFS_Net --> IPFS2
+IPFS_Net --> IPFS3
+
+' API Request Flow
+Client --> FR1 : "HTTP Requests"
+Client --> FR2
+Client --> FR3
+Client --> FR4
+Client --> FR5
+Client --> FR6
+
+' Router to API Utils
+FR1 --> ADU1
+FR2 --> ADU1
+FR3 --> ADU2
+FR4 --> ADU3
+FR5 --> ADU4
+FR6 --> ADU5
+
+' API Utils to Core Utils
+ADU1 --> CDU1
+ADU2 --> CDU1
+ADU3 --> CDU1
+ADU4 --> CDU1
+ADU5 --> CDU1
+
+ADU1 --> CDU2
+ADU2 --> CDU2
+ADU3 --> CDU2
+ADU4 --> CDU2
+ADU5 --> CDU2
+
+' Core Utils Operations
+CDU1 --> RC1
+CDU2 --> RC1
+CDU3 --> IPFS1
+CDU4 --> RC1
+CDU4 --> RC2
+CDU4 --> RC4
+CDU4 --> RC7
+CDU5 --> BC
+
+' Response Processing
+ADU1 --> RP1
+ADU2 --> RP1
+ADU3 --> RP1
+ADU4 --> RP1
+ADU5 --> RP1
+
+RP1 --> RP2
+RP2 --> RP3
+RP3 --> RP4
+RP4 --> Client : "JSON Response"
+
+@enduml 

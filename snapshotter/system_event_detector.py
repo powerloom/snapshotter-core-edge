@@ -42,7 +42,7 @@ from snapshotter.utils.redis.redis_keys import service_health_timestamps_key
 
 
 # Setup Dramatiq with Redis broker for sending only
-redis_broker = RedisBroker(host=settings.redis.host, port=settings.redis.port)
+redis_broker = RedisBroker(host=settings.redis.host, port=settings.redis.port, db=settings.redis.db)
 dramatiq.set_broker(redis_broker)
 
 

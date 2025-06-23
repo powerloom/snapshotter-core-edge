@@ -24,14 +24,16 @@ from snapshotter.utils.generic_worker import GenericAsyncWorker
 from snapshotter.utils.models.data_models import SnapshotterStates
 from snapshotter.utils.models.data_models import SnapshotterStateUpdate
 from snapshotter.utils.models.message_models import SnapshotProcessMessage
+from snapshotter.utils.models.message_models import ProcessingCompleteMessage
 from snapshotter.utils.redis.redis_keys import epoch_id_project_to_state_mapping
 from snapshotter.utils.redis.redis_keys import last_snapshot_processing_complete_timestamp_key
+
 from snapshotter.utils.dramatiq_queues import SNAPSHOT_QUEUE_NAME, SNAPSHOT_HEALTH_QUEUE_NAME
 
 logger = default_logger.bind(module='SnapshotWorker')
 
 # Configure Redis broker with no middleware
-redis_broker = RedisBroker(host=settings.redis.host, port=settings.redis.port)
+redis_broker = RedisBroker(host=settings.redis.host, port=settings.redis.port, db=settings.redis.db)
 redis_broker.add_middleware(AsyncIO())
 
 # Remove Prometheus middleware to avoid errors
@@ -99,6 +101,14 @@ class SnapshotAsyncWorker(GenericAsyncWorker):
         try:
             # Get the task processor for the given task type
             task_processor = self._project_calculation_mapping[task_type]
+
+            processing_complete_message = ProcessingCompleteMessage(
+                epochId=msg_obj.epochId,
+                begin=msg_obj.begin,
+                end=msg_obj.end,
+                task_type=task_type,
+                payload=[]
+            )
             
             # Compute snapshots in bulk
             snapshots = await task_processor.compute(
@@ -147,10 +157,7 @@ class SnapshotAsyncWorker(GenericAsyncWorker):
                     'No snapshot data for: {}, skipping...', msg_obj,
                 )
                 return
-
-            if "tokenPools" not in task_type:
-                self._logger.info('Sending snapshots to commit service: {}', snapshots)
-
+            
             # Process each snapshot in the bulk result
             for project_id, snapshot in snapshots:
 
@@ -168,13 +175,18 @@ class SnapshotAsyncWorker(GenericAsyncWorker):
                 )
                 await p.execute()
 
-                await self._commit_payload(
+                snapshot_cid = await self._commit_payload(
                     task_type=task_type,
                     project_id=project_id,
                     epoch=msg_obj,
                     snapshot=snapshot,
                     _ipfs_writer_client=self._ipfs_writer_client,
                 )
+                if snapshot_cid:
+                    processing_complete_message.payload.append((project_id, snapshot_cid))
+            
+            if processing_complete_message.payload:
+                self._enqueue_to_event_detector('ProcessingComplete', processing_complete_message.model_dump_json())
 
     async def _process_task(self, msg_obj: SnapshotProcessMessage, task_type: str):
         """

@@ -4,8 +4,6 @@ version: '3.9'
 x-snapshotter-base: &snapshotter-base
   image: ${SNAPSHOTTER_IMAGE:-ghcr.io/powerloom/snapshotter-core:dockerify}
   depends_on:
-    redis:
-      condition: service_healthy
     snapshotter-local-collector:
       condition: service_started
   volumes:
@@ -35,6 +33,7 @@ x-snapshotter-base: &snapshotter-base
     # Redis configuration with optional password
     - REDIS_HOST=${REDIS_HOST:-redis}
     - REDIS_PORT=${REDIS_PORT:-6379}
+    - REDIS_DB=${REDIS_DB:-0}
     - REDIS_PASSWORD
     # Optional S3 configuration for IPFS
     - IPFS_S3_CONFIG_ENABLED=${IPFS_S3_CONFIG_ENABLED:-false}
@@ -45,6 +44,7 @@ x-snapshotter-base: &snapshotter-base
     - IPFS_UNPINNING_ENABLED=${IPFS_UNPINNING_ENABLED:-false}
     - IPFS_UNPINNING_AFTER=${IPFS_UNPINNING_AFTER:-86400}
     - GUNICORN_WORKERS=${GUNICORN_WORKERS:-5}
+    - BLOCK_SHIFT_FOR_BITMAP_INDEX=${BLOCK_SHIFT_FOR_BITMAP_INDEX:-22400000}
   extra_hosts:
     - "host.docker.internal:host-gateway"
   healthcheck:
@@ -56,6 +56,16 @@ x-snapshotter-base: &snapshotter-base
     retries: 3
     start_period: 60s # Give container time to start and report first health status
   restart: unless-stopped
+  ulimits:
+      nofile:
+        soft: 1000000
+        hard: 1000000
+      memlock:
+        soft: -1
+        hard: -1
+      nproc:
+        soft: 32768
+        hard: 32768
 
 services:
 
@@ -107,8 +117,14 @@ services:
     # Increase file descriptors limit for better performance
     ulimits:
       nofile:
-        soft: 65536
-        hard: 65536
+        soft: 1000000
+        hard: 1000000
+      memlock:
+        soft: -1
+        hard: -1
+      nproc:
+        soft: 32768
+        hard: 32768
   # Worker services using the base configuration
   system-event-detector:
     <<: *snapshotter-base
@@ -136,32 +152,31 @@ services:
     command: bash -c "bash init_processes.sh utils.ipfs_unpinning_worker"
     depends_on:
       - processor-distributor
-      - ipfs
   # Core API Service
   core-api:
     <<: *snapshotter-base
     expose:
-      - ${CORE_API_PORT:-8002}
+      - ${CORE_API_PORT:-9003}
     ports:
-      - ${CORE_API_PORT:-8002}:${CORE_API_PORT:-8002}
+      - ${CORE_API_PORT:-9003}:${CORE_API_PORT:-9003}
     command: bash -c "bash init_processes.sh gunicorn_core_launcher"
     depends_on:
       - processor-distributor
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:${CORE_API_PORT:-8002}/health"]
+      test: ["CMD", "curl", "-f", "http://localhost:${CORE_API_PORT:-9003}/health"]
       interval: 30s
       timeout: 10s
       retries: 3
-  univ3_api:
-    <<: *snapshotter-base
-    command: bash -c "bash init_processes.sh gunicorn_univ3_api_launcher"
-    depends_on:
-      - processor-distributor
-    expose:
-      - ${UNIV3_API_PORT:-9003}
-    ports:
-      - ${UNIV3_API_PORT:-9003}:${UNIV3_API_PORT:-9003}
-    
+    ulimits:
+      nofile:
+        soft: 1000000
+        hard: 1000000
+      memlock:
+        soft: -1
+        hard: -1
+      nproc:
+        soft: 32768
+        hard: 32768 
   block_fetcher:
     # Build context pointing to the parent directory and then BlockFetcher
     build:
@@ -196,8 +211,6 @@ services:
       - REPORTING_TELEGRAM_URL=${REPORTING_TELEGRAM_URL:-}
       - REPORTING_TELEGRAM_CHAT_ID=${REPORTING_TELEGRAM_CHAT_ID:-}
       - REPORTING_MIN_INTERVAL=${REPORTING_MIN_INTERVAL:-10}
-    depends_on:
-      - redis
     volumes:
       # Volume path relative to the docker-compose file location
       - ./logs/snapshotter-periphery-blockfetcher:/app/logs
@@ -228,8 +241,6 @@ services:
       - PROCESSOR_BLOCK_TIMEOUT=${PROCESSOR_BLOCK_TIMEOUT:-}
       - EVENT_FILTER_CONFIG_PATH=${EVENT_FILTER_CONFIG_PATH:-/app/shared_config/event_filters.example.json}
       - WETH_ADDRESS=${WETH_ADDRESS:-}
-    depends_on:
-      - redis
     profiles: ["new"]
     deploy:
       replicas: ${TRANSACTION_PROCESSOR_REPLICAS:-3}
@@ -238,6 +249,16 @@ services:
       - ./computes:/app/computes:ro
       - ./logs/snapshotter-periphery-txprocessor:/app/logs
     restart: unless-stopped
+    ulimits:
+      nofile:
+        soft: 1000000
+        hard: 1000000
+      memlock:
+        soft: -1
+        hard: -1
+      nproc:
+        soft: 32768
+        hard: 32768
   epoch_syncer:
     build:
       context: snapshotter-periphery-epochsyncer
@@ -270,7 +291,6 @@ services:
       - RATE_LIMITER_HOST=${RATE_LIMITER_HOST:-rate-limiter}
       - RATE_LIMITER_PORT=${RATE_LIMITER_PORT:-8000}
     depends_on:
-      - redis
       - rate-limiter
     profiles: ["new"]
     volumes:
@@ -306,12 +326,19 @@ services:
     restart: unless-stopped
     ulimits:
       nofile:
-        soft: 65536
-        hard: 65536
+        soft: 1000000
+        hard: 1000000
+      memlock:
+        soft: -1
+        hard: -1
+      nproc:
+        soft: 32768
+        hard: 32768
 
   # Redis Service
   redis:
     image: "redis:alpine"
+    profiles: ["redis"]
     command: redis-server --appendonly yes --maxmemory ${REDIS_MAX_MEMORY:-512mb} --maxmemory-policy ${REDIS_MAXMEMORY_POLICY:-allkeys-lru}
     expose:
       - 6379

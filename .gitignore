@@ -28,3 +28,5 @@ snapshotter-periphery-txprocessor
 snapshotter-periphery-epochsyncer
 rate-limiter
 docker-compose.yaml
+.cursorrules
+.venv/
