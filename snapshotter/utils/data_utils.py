@@ -203,6 +203,7 @@ async def get_project_finalized_cids_bulk(
     project_first_epoch = await get_project_first_epoch(
         redis_conn, state_contract_obj, rpc_helper, project_id,
     )
+    logger.info(f'Project first epoch: {project_first_epoch}')
 
     last_submitted_snapshot_data = await get_last_submitted_snapshot_data(redis_conn, project_id)
     if last_submitted_snapshot_data:
@@ -215,13 +216,11 @@ async def get_project_finalized_cids_bulk(
             project_id=project_id,
         )
 
-    empty_epochs_with_cids = []
+    cid_data_with_epochs = []
+
     if max_epoch_with_data < epoch_id_max:
         logger.info(f'Max epoch with data {max_epoch_with_data} is less than epoch_id_max {epoch_id_max}. Adjusting epoch_id_max to {max_epoch_with_data}')
-        empty_epochs_with_cids = [(f'null_{epoch_id}', epoch_id) for epoch_id in range(max_epoch_with_data + 1, epoch_id_max + 1)]
-        epoch_id_max = max(epoch_id_min, max_epoch_with_data)
-
-    logger.info(f'Project first epoch: {project_first_epoch}')
+        cid_data_with_epochs.extend([(f'null_{epoch_id}', epoch_id) for epoch_id in range(max_epoch_with_data + 1, epoch_id_max + 1)])
 
     if epoch_id_min < project_first_epoch:
         logger.warning(
@@ -230,19 +229,20 @@ async def get_project_finalized_cids_bulk(
         )
         epoch_id_min = project_first_epoch
         
-        # If the adjusted min is greater than max, return empty list
-        if epoch_id_min > epoch_id_max:
-            logger.warning(
-                f'Adjusted min epoch {epoch_id_min} is greater than max epoch {epoch_id_max}.',
-                'Returning empty list.',
-            )
-            return [], project_first_epoch
+    # If the adjusted min is greater than max, return empty list
+    if epoch_id_min > max_epoch_with_data:
+        logger.warning(
+            f'Adjusted min epoch {epoch_id_min} is greater than max epoch {max_epoch_with_data}.',
+            'Returning empty list.',
+        )
+        return [], project_first_epoch
 
-    epoch_ids_set = set(range(epoch_id_min, epoch_id_max + 1))
+    epoch_ids_set = set(range(epoch_id_min, max_epoch_with_data + 1))
 
     # Check Redis cache for existing CIDs
-    epoch_ids_to_fetch = list(range(epoch_id_min, epoch_id_max + 1))
+    epoch_ids_to_fetch = list(epoch_ids_set)
     logger.info(f'Fetching CIDs for {len(epoch_ids_to_fetch)} epochs for project {project_id}')
+
     if not epoch_ids_to_fetch:
         return [], project_first_epoch
  
@@ -257,7 +257,6 @@ async def get_project_finalized_cids_bulk(
         else:
             data.append(dict())
 
-    cid_data_with_epochs = []
     for data, epoch_id in zip(data, epoch_ids_to_fetch):
         if "snapshot_cid" in data:
             cid_data_with_epochs.append((data["snapshot_cid"], epoch_id))
@@ -296,10 +295,10 @@ async def get_project_finalized_cids_bulk(
             )
 
         # Merge existing and missing CIDs
-        all_cids_with_epochs = cid_data_with_epochs + missing_cids_with_epochs + empty_epochs_with_cids
+        all_cids_with_epochs = cid_data_with_epochs + missing_cids_with_epochs
         all_cids_with_epochs.sort(key=lambda x: x[1])
     else:
-        all_cids_with_epochs = cid_data_with_epochs + empty_epochs_with_cids
+        all_cids_with_epochs = cid_data_with_epochs
         all_cids_with_epochs.sort(key=lambda x: x[1])
     return [cid for cid, _ in all_cids_with_epochs], project_first_epoch
 
