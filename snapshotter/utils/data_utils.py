@@ -1507,44 +1507,49 @@ async def process_snapshot_cid(redis_conn: aioredis.Redis, ipfs_reader: AsyncIPF
         expiry_time = int(time.time()) + PROJECT_DATA_ENTRY_EXPIRY
 
         if snapshot_data:
-            if "previousSnapshots" in snapshot_data and len(snapshot_data["previousSnapshots"]) > 0:    
-                data_to_cache = {}
-                all_previous_snapshot_keys = set(range(snapshot_data["previousSnapshots"][0][0], epoch_id))
-                all_previous_snapshot_cids = set()
-                # Process each previous snapshot
-                for (epoch_id, snapshot_cid) in snapshot_data["previousSnapshots"][::-1]:
-                    epoch_id = int(epoch_id)
-                    data_to_cache[epoch_id] = json.dumps({
-                        "snapshot_cid": snapshot_cid,
-                        "status": SnapshotStatus.SUBMITTED.value
-                    })
-                    all_previous_snapshot_cids.add(snapshot_cid)
-                    all_previous_snapshot_keys.discard(epoch_id)
-                    expiry_keys.append(f"{project_id}|{epoch_id}")
+            if "previousSnapshots" in snapshot_data and len(snapshot_data["previousSnapshots"]) > 0:
+                # last snapshot
+                last_snapshot_epoch_id = snapshot_data["previousSnapshots"][-1][0]
+                # check if last snapshot exists
+                last_snapshot_exists = await redis_conn.hexists(project_hmap_key, last_snapshot_epoch_id)
+                if not last_snapshot_exists:
+                    data_to_cache = {}
+                    all_previous_snapshot_keys = set(range(snapshot_data["previousSnapshots"][0][0], epoch_id))
+                    all_previous_snapshot_cids = set()
+                    # Process each previous snapshot
+                    for (epoch_id, snapshot_cid) in snapshot_data["previousSnapshots"][::-1]:
+                        epoch_id = int(epoch_id)
+                        data_to_cache[epoch_id] = json.dumps({
+                            "snapshot_cid": snapshot_cid,
+                            "status": SnapshotStatus.SUBMITTED.value
+                        })
+                        all_previous_snapshot_cids.add(snapshot_cid)
+                        all_previous_snapshot_keys.discard(epoch_id)
+                        expiry_keys.append(f"{project_id}|{epoch_id}")
 
-                # Add to pipeline if we have data to cache
-                if data_to_cache:
-                    pipeline.hset(
-                        project_hmap_key,
-                        mapping=data_to_cache,
-                    )
-                if all_previous_snapshot_cids and project_config.cache_cids:
-                    pipeline.sadd(cids_to_cache_set(), *all_previous_snapshot_cids)
-                
-                blank_epochs_bitmap_key = blank_epochs_bitmap(project_id)
+                    # Add to pipeline if we have data to cache
+                    if data_to_cache:
+                        pipeline.hset(
+                            project_hmap_key,
+                            mapping=data_to_cache,
+                        )
+                    if all_previous_snapshot_cids and project_config.cache_cids:
+                        pipeline.sadd(cids_to_cache_set(), *all_previous_snapshot_cids)
+                    
+                    blank_epochs_bitmap_key = blank_epochs_bitmap(project_id)
 
-                epochs_to_set = sorted(list(all_previous_snapshot_keys))
-                await redis_bitmap.set_bits_in_range(redis_conn, blank_epochs_bitmap_key, epochs_to_set)
+                    epochs_to_set = sorted(list(all_previous_snapshot_keys))
+                    await redis_bitmap.set_bits_in_range(redis_conn, blank_epochs_bitmap_key, epochs_to_set)
 
-                if len(snapshot_data["previousSnapshots"]) > 0:
-                    epoch_id = snapshot_data["previousSnapshots"][0][0]
-                    epoch_cid = snapshot_data["previousSnapshots"][0][1]
-                    # recursively process previous snapshots
-                    within_recursion_depth = rec_depth < MAX_RECURSION_DEPTH
-                    already_processed = await redis_conn.hexists(project_hmap_key, epoch_id)
-                    # check if epoch_id is present in project_hmap_key and blank_epochs_set_key
-                    if within_recursion_depth and not already_processed:
-                        await process_snapshot_cid(redis_conn, ipfs_reader, project_id, epoch_cid, epoch_id, original_epoch_id, rec_depth=rec_depth + 1)
+                    if len(snapshot_data["previousSnapshots"]) > 0:
+                        epoch_id = snapshot_data["previousSnapshots"][0][0]
+                        epoch_cid = snapshot_data["previousSnapshots"][0][1]
+                        # recursively process previous snapshots
+                        within_recursion_depth = rec_depth < MAX_RECURSION_DEPTH
+                        already_processed = await redis_conn.hexists(project_hmap_key, epoch_id)
+                        # check if epoch_id is present in project_hmap_key and blank_epochs_set_key
+                        if within_recursion_depth and not already_processed:
+                            await process_snapshot_cid(redis_conn, ipfs_reader, project_id, epoch_cid, epoch_id, original_epoch_id, rec_depth=rec_depth + 1)
 
             if project_config.cache_cids:
                 snapshot_data["previousSnapshots"] = []
