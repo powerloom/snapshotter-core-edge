@@ -151,7 +151,6 @@ class CidCacher(multiprocessing.Process):
                 await self._init_ipfs_client()
                 self._logger.debug('Initialized IPFS client in CidCacher init_worker')
                 
-                
                 self._initialized = True
                 self._logger.info('CidCacher worker initialized successfully')
             except Exception as e:
@@ -169,46 +168,51 @@ class CidCacher(multiprocessing.Process):
             return
 
         try:
-            total_cached_count = 0
-            batch_size = 50
 
-            for i in range(0, len(cids), batch_size):
-                batch_cids = cids[i:i + batch_size]
+            # fetch existing cids cached from redis
+            cid_data = await self._redis_conn.mget(
+                [cid_cache(cid) for cid in cids]
+            )
+            existing_cids = [cid for cid, data in zip(cids, cid_data) if data is not None]
+            cids = [cid for cid in cids if cid not in existing_cids]
+            self._logger.info(f'Skipping {len(existing_cids)} CIDs that are already cached')
 
-                tasks = [
-                    get_submission_data(cid, self._ipfs_reader_client, True)
-                    for cid in batch_cids
-                ]
+            tasks = [
+                get_submission_data(cid, self._ipfs_reader_client, True)
+                for cid in cids
+            ]
 
-                results = await asyncio.gather(*tasks, return_exceptions=True)
+            results = await asyncio.gather(
+                *(asyncio.wait_for(task, timeout=10) for task in tasks),
+                return_exceptions=True,
+            )
 
-                pipeline = self._redis_conn.pipeline()
-                batch_cached_count = 0
+            pipeline = self._redis_conn.pipeline()
+            batch_cached_count = 0
 
-                for cid, result in zip(batch_cids, results):
-                    if isinstance(result, Exception):
-                        self._logger.error(f'Error processing CID {cid}: {result}')
-                        continue
+            for cid, result in zip(cids, results):
+                if isinstance(result, Exception):
+                    self._logger.error(f'Error processing CID {cid}: {result}')
+                    continue
 
-                    snapshot_data = result
-                    if snapshot_data:
-                        # cache lite snapshot in redis
-                        cid_cache_key = cid_cache(cid)
-                        pipeline.set(
-                            name=cid_cache_key,
-                            value=json.dumps(snapshot_data),
-                            ex=self._cid_cache_expiry,
-                        )
-                        batch_cached_count += 1
-                    else:
-                        self._logger.warning(f'No snapshot data found for CID: {cid}')
+                snapshot_data = result
+                if snapshot_data:
+                    # cache lite snapshot in redis
+                    cid_cache_key = cid_cache(cid)
+                    pipeline.set(
+                        name=cid_cache_key,
+                        value=json.dumps(snapshot_data),
+                        ex=self._cid_cache_expiry,
+                    )
+                    batch_cached_count += 1
+                else:
+                    self._logger.warning(f'No snapshot data found for CID: {cid}')
 
-                if batch_cached_count > 0:
-                    await pipeline.execute()
-                    total_cached_count += batch_cached_count
+            if batch_cached_count > 0:
+                await pipeline.execute()
 
-            if total_cached_count > 0:
-                self._logger.info(f'Successfully cached {total_cached_count} out of {len(cids)} CIDs')
+            if batch_cached_count > 0:
+                self._logger.info(f'Successfully cached {batch_cached_count} out of {len(cids)} CIDs')
             elif len(cids) > 0:
                 self._logger.warning(f'No CIDs were cached from {len(cids)} provided')
 
@@ -224,7 +228,7 @@ class CidCacher(multiprocessing.Process):
         
         while not self._shutdown_initiated:
             try:
-                cids_to_cache = await self._redis_conn.spop(cids_to_cache_set(), count=100)
+                cids_to_cache = await self._redis_conn.spop(cids_to_cache_set(), count=200)
                 self._logger.info(f'Popped {len(cids_to_cache)} CIDs from Redis set')
                 # convert bytes to strings if necessary
                 cids_to_cache = [cid.decode('utf-8') if isinstance(cid, bytes) else cid for cid in cids_to_cache]
