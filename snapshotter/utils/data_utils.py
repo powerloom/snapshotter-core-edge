@@ -40,6 +40,7 @@ from snapshotter.settings.config import projects_config
 from snapshotter.settings.config import aggregator_config
 from snapshotter.utils.models.data_models import SnapshotStatus
 import traceback
+from snapshotter.utils.redis.redis_keys import cids_to_cache_set
 
 logger = default_logger.bind(module='data_helper')
 PROJECT_DATA_ENTRY_EXPIRY = 60 * 60 * 24 * 7  # 7 days in seconds
@@ -1483,7 +1484,6 @@ async def get_block_number_closest_to_timestamp(
         return None
 
 
-    
 async def process_snapshot_cid(redis_conn: aioredis.Redis, ipfs_reader: AsyncIPFSClient, project_id: str, snapshot_cid: str, epoch_id: int, original_epoch_id: int, rec_depth: int = 0):
     try:
         if rec_depth == 0:
@@ -1510,6 +1510,7 @@ async def process_snapshot_cid(redis_conn: aioredis.Redis, ipfs_reader: AsyncIPF
             if "previousSnapshots" in snapshot_data and len(snapshot_data["previousSnapshots"]) > 0:    
                 data_to_cache = {}
                 all_previous_snapshot_keys = set(range(snapshot_data["previousSnapshots"][0][0], epoch_id))
+                all_previous_snapshot_cids = set()
                 # Process each previous snapshot
                 for (epoch_id, snapshot_cid) in snapshot_data["previousSnapshots"][::-1]:
                     epoch_id = int(epoch_id)
@@ -1517,6 +1518,7 @@ async def process_snapshot_cid(redis_conn: aioredis.Redis, ipfs_reader: AsyncIPF
                         "snapshot_cid": snapshot_cid,
                         "status": SnapshotStatus.SUBMITTED.value
                     })
+                    all_previous_snapshot_cids.add(snapshot_cid)
                     all_previous_snapshot_keys.discard(epoch_id)
                     expiry_keys.append(f"{project_id}|{epoch_id}")
 
@@ -1526,6 +1528,8 @@ async def process_snapshot_cid(redis_conn: aioredis.Redis, ipfs_reader: AsyncIPF
                         project_hmap_key,
                         mapping=data_to_cache,
                     )
+                if all_previous_snapshot_cids and project_config.cache_cids:
+                    pipeline.sadd(cids_to_cache_set(), *all_previous_snapshot_cids)
                 
                 blank_epochs_bitmap_key = blank_epochs_bitmap(project_id)
 
