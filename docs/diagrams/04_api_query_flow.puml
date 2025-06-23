@@ -1,0 +1,163 @@
+@startuml API_Query_Flow
+
+skinparam backgroundColor #FFFFEF
+skinparam participant {
+    BackgroundColor #E5F3FF
+    BorderColor #333333
+}
+skinparam note {
+    BackgroundColor #FFFACD
+    BorderColor #DDD
+}
+
+title API Query Flow: Get Active Pools Example
+
+participant "Client" as C
+participant "FastAPI Router" as FR
+participant "API Data Utils" as ADU
+participant "Core Data Utils" as CDU
+participant "Redis Cache" as RC
+participant "IPFS Network" as IPFS
+participant "Blockchain" as BC
+
+note over C, BC : API Query Flow Example: Get Active Pools
+
+== Request Initiation ==
+C -> FR : GET /dailyActivePools?page=1&size=50&metadata=true
+FR -> FR : Validate query parameters
+FR -> ADU : get_active_pools(page=1, size=50, metadata=true, time_interval=86400)
+
+== Check for cached aggregated data ==
+ADU -> RC : GET active_pool_data:86400:latest:epoch
+RC --> ADU : Return latest_epoch (e.g., 12350) or None
+
+alt Cached data exists and is recent
+    ADU -> CDU : get_current_epoch_id() and get_tail_epoch_id()
+    CDU -> BC : Call currentEpoch() on protocol contract
+    BC --> CDU : Return current epoch (e.g., 12355)
+    CDU -> CDU : Calculate tail_epoch_id for 86400s window
+    CDU --> ADU : Return current_epoch=12355, tail_epoch_id=12250
+    
+    ADU -> RC : GET active_pool_data:86400:12350:namespace
+    RC --> ADU : Return cached pool frequency data JSON
+    
+    alt Need incremental update (current > latest)
+        note over ADU : epochs_to_correct = 12355 - 12350 = 5
+        ADU -> CDU : get_project_epoch_snapshot_bulk(12351, 12355, "activePools:namespace")
+        CDU -> RC : Check project_data:activePools:namespace for epochs 12351-12355
+        
+        loop For each missing epoch
+            CDU -> BC : Call snapshotStatus() for missing epochs
+            BC --> CDU : Return consensus status and CID
+            CDU -> IPFS : Fetch snapshot data from CID
+            IPFS --> CDU : Return snapshot JSON with pools data
+            CDU -> RC : Cache snapshot data in project hashmap
+        end
+        CDU --> ADU : Return new snapshots list
+        
+        ADU -> CDU : get_project_epoch_snapshot_bulk(12245, 12249, "activePools:namespace") 
+        note over ADU : Fetch old snapshots to subtract from totals
+        CDU --> ADU : Return old snapshots list
+        
+        ADU -> ADU : Update pool frequencies (+new snapshots, -old snapshots)
+    end
+    
+else No cached data - fresh calculation
+    ADU -> CDU : get_current_epoch_id() and get_tail_epoch_id()
+    CDU -> BC : Get current epoch and calculate tail
+    CDU --> ADU : Return epoch range
+    
+    ADU -> CDU : get_project_epoch_snapshot_bulk(tail_epoch, current_epoch, "activePools:namespace")
+    CDU -> RC : Check for cached snapshot data
+    
+    loop For each epoch in range
+        alt Snapshot cached in Redis
+            CDU -> RC : GET project_data:activePools:namespace field epoch_id
+            RC --> CDU : Return {snapshot_cid, status}
+        else Snapshot not cached
+            CDU -> BC : Call snapshotStatus() for epoch
+            BC --> CDU : Return consensus status and CID
+            CDU -> IPFS : Fetch snapshot from CID
+            IPFS --> CDU : Return snapshot JSON
+            CDU -> RC : Cache snapshot in project hashmap
+        end
+    end
+    CDU --> ADU : Return all snapshots for time window
+    
+    ADU -> ADU : Aggregate pool frequencies from all snapshots
+end
+
+== Update cache with new data ==
+ADU -> RC : SET active_pool_data:86400:12355:namespace = JSON.dumps(active_pools)
+ADU -> RC : SET active_pool_data:86400:latest:epoch = 12355
+ADU -> RC : DELETE active_pool_data:86400:12350:namespace (old data)
+
+== Sort and paginate results ==
+ADU -> ADU : Sort pools by frequency (descending)
+ADU -> ADU : Apply pagination (page=1, size=50)
+ADU -> ADU : Extract paginated subset of pools
+
+== Fetch metadata if requested ==
+alt metadata=true
+    note over ADU : Process pools in batches of 50 for parallel metadata fetching
+    
+    loop For each batch of pools
+        group Parallel Metadata Fetching
+            ADU -> CDU : get_uniswap_v3_pool_metadata(pool_1)
+            CDU -> RC : Check pool_metadata:pool_1 cache
+            alt Cache hit
+                RC --> CDU : Return cached metadata
+            else Cache miss
+                CDU -> CDU : get_project_latest_snapshot("metadata:pool_1:namespace")
+                CDU -> RC : Check project data
+                CDU -> IPFS : Fetch metadata from snapshot
+                IPFS --> CDU : Return pool metadata
+                CDU -> RC : Cache metadata with TTL
+            end
+            CDU --> ADU : Return metadata for pool_1
+        end
+        
+        ADU -> ADU : Attach metadata to pool data
+    end
+end
+
+== Format response ==
+ADU -> ADU : Format response with pagination info
+ADU --> FR : Return formatted pools data and total count
+
+FR -> FR : Create final JSON response
+FR -> FR : Set HTTP status code (200 for success)
+FR --> C : Return JSON response
+
+note over C, BC : Example Response Structure
+note over C : JSON with active_pools array and pagination object
+
+== Error Handling Examples ==
+note over C, BC : Error Handling Examples
+
+alt Error in blockchain call
+    CDU -> BC : Contract call fails
+    BC --> CDU : Network error
+    CDU -> CDU : Log error and retry with exponential backoff
+    
+    alt Retry succeeds
+        CDU -> BC : Retry contract call
+        BC --> CDU : Success response
+    else Retry fails
+        CDU --> ADU : Raise exception
+        ADU --> FR : Propagate error
+        FR -> FR : Set status_code = 500
+        FR --> C : {"error": "Failed to retrieve data"}
+    end
+end
+
+alt Error in IPFS fetch
+    CDU -> IPFS : Fetch CID data
+    IPFS --> CDU : IPFS timeout/error
+    CDU -> RC : Mark CID as not found with TTL
+    CDU -> CDU : Log error and continue with available data
+    CDU --> ADU : Return partial results
+    note over ADU : Graceful degradation - return what we have
+end
+
+@enduml 

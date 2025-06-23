@@ -1,0 +1,285 @@
+@startuml
+
+package "Blockchain Event Source" {
+  [Smart Contract] as Contract
+  [System Event Detector] as Detector
+  [RPC Helper] as RPC
+  
+  note right of Detector
+  Monitors blockchain events:
+  - SnapshotSubmitted
+  - SnapshotFinalized  
+  - SnapshotBatchSubmitted
+  
+  Uses RPC polling every block
+  Extracts event logs and data
+  end note
+}
+
+package "Message Queue System" {
+  [Dramatiq Broker] as Queue
+  [Redis Backend] as RedisQueue
+  [Cacher Process] as Cacher
+  [Worker Thread] as Worker
+  
+  note right of Queue
+  Queue: CACHER_QUEUE_NAME
+  Actor: handleEvent
+  Middleware: AsyncIO only
+  Timeout: 60 seconds per message
+  end note
+}
+
+package "Event Handler Routing" {
+  [SnapshotSubmitted Handler] as SubmittedHandler
+  [SnapshotFinalized Handler] as FinalizedHandler  
+  [SnapshotBatchSubmitted Handler] as BatchHandler
+  [Event Router] as Router
+  
+  note right of Router
+  Routes by event_type string:
+  - Extracts args[0] and args[1]
+  - Runs in asyncio event loop
+  - 60s timeout with future.result()
+  - Full exception traceback logging
+  end note
+}
+
+package "Special Project Processors" {
+  [ActivePools Processor] as PoolsProcessor
+  [ActiveTokens Processor] as TokensProcessor
+  [TradeVolume Processor] as VolumeProcessor
+  [Bulk Snapshot Fetcher] as BulkFetcher
+  
+  note right of PoolsProcessor
+  Trigger: epochId % 10 == 0
+  Window: 86400s (24h)
+  Key: active_pool_data:{interval}:{epoch}:{namespace}
+  Data: pool_address -> frequency mapping
+  Strategy: Incremental vs fresh calculation
+  Cleanup: Delete old cache entries
+  end note
+  
+  note right of VolumeProcessor
+  Intervals: 86400s (24h) + 604800s (7d)
+  Key: trade_volume_data:{projectId}:{interval}:{epoch}:{namespace}
+  Field: totalTrade from snapshot
+  Logic: Sum volumes, ensure >= 0
+  Incremental: Add new - subtract old
+  end note
+}
+
+package "Data Processing Utilities" {
+  [IPFS Reader Client] as IPFSReader
+  [Snapshot CID Processor] as SnapshotProcessor
+  [Tail Epoch Calculator] as TailCalculator
+  [Protocol Contract] as ProtocolContract
+  [Anchor RPC Helper] as AnchorRPC
+  
+  note right of SnapshotProcessor
+  Method: process_snapshot_cid()
+  Parameters: redis_conn, ipfs_client, 
+             project_id, snapshot_cid, 
+             epoch_id, finalized_epoch
+  Async task with _create_tracked_task
+  end note
+  
+  note right of TailCalculator
+  Method: get_tail_epoch_id()
+  Parameters: redis_conn, protocol_contract,
+             rpc_helper, current_epoch,
+             time_interval, project_id
+  Returns: (tail_epoch_id, timestamp)
+  end note
+}
+
+package "Redis Storage Layer" {
+  database "Core Project Data" {
+    [project_data:{projectId}] as ProjectData
+    [project_last_finalized_epoch] as FinalizedEpochs
+    [last_submitted_snapshot_data:{projectId}] as LastSubmitted
+    
+    note right of ProjectData
+    HashMap Structure:
+    Key: epochId (string)
+    Value: JSON string
+    {
+      "snapshot_cid": "Qm...",
+      "status": "SUBMITTED|FINALIZED|SEQUENCER_FINALIZED"
+    }
+    Operations: hset, hget, hdel
+    end note
+  }
+  
+  database "Expiry Management" {
+    [data_expiry_zset] as ExpiryTracking
+    [snapshots_to_unpin_zset] as UnpinTracking
+    
+    note right of ExpiryTracking
+    Sorted Set Structure:
+    Member: "{projectId}|{epochId}"
+    Score: expiry_timestamp (unix)
+    TTL: 7 days (604800s)
+    Operations: zadd, zrangebyscore, zrem
+    Cleanup: Every 3600s (1h)
+    end note
+  }
+  
+  database "State Tracking" {
+    [epoch_id_project_to_state_mapping:{epochId}:{stateId}] as StateMapping
+    [service_health_timestamps] as HealthTracking
+    
+    note right of StateMapping
+    HashMap per epoch/state:
+    Key: projectId
+    Value: SnapshotterStateUpdate JSON
+    {
+      "status": "success",
+      "timestamp": unix_timestamp,
+      "extra": {"snapshot_cid": "Qm..."}
+    }
+    end note
+  }
+  
+  database "Aggregated Cache Store" {
+    [active_pool_data:{interval}:{epoch}:{namespace}] as PoolCache
+    [active_token_data:{interval}:{epoch}:{namespace}] as TokenCache
+    [trade_volume_data:{projectId}:{interval}:{epoch}:{namespace}] as VolumeCache
+    
+    note right of PoolCache
+    String Storage (JSON):
+    Structure: {pool_address: frequency_count}
+    Latest marker: active_pool_data:{interval}:latest:epoch
+    Namespace: settings.namespace isolation
+    Window: 24h sliding with incremental updates
+    end note
+  }
+}
+
+package "Background Task Management" {
+  [Task Cleanup Manager] as TaskCleanup
+  [Health Status Reporter] as HealthReporter
+  [Data Expiry Cleanup] as DataExpiry
+  [Active Task Tracker] as TaskTracker
+  
+  note right of TaskCleanup
+  Interval: 30s (task_cleanup_interval)
+  Timeout: configurable (task_timeout)
+  Monitors: _active_tasks Set[(timestamp, task)]
+  Actions: Cancel timed out, remove completed
+  Logs: Warning with start_time details
+  end note
+  
+  note right of HealthReporter
+  Interval: 60s (health_report_interval)
+  Key: service_health_timestamps
+  Field: hostname -> current_timestamp
+  Checks: _worker_thread.is_alive()
+  Stops: If worker thread dies
+  end note
+  
+  note right of DataExpiry
+  Interval: 3600s (cleanup_interval)
+  Scan: zrangebyscore(data_expiry_zset, 0, now)
+  Groups: entries_by_hmap[project_id] = [keys]
+  Batch: hdel(project_data_hmap, *keys)
+  Remove: zrem(data_expiry_zset, *expired_entries)
+  end note
+}
+
+' Event Flow Connections
+Contract --> Detector : blockchain events
+Detector --> RPC : fetch via RPC
+RPC --> Queue : send to Dramatiq
+Queue --> RedisQueue : store in Redis
+RedisQueue --> Cacher : worker processes
+Cacher --> Worker : dedicated thread
+Worker --> Router : handleEvent actor
+
+' Handler Routing
+Router --> SubmittedHandler : SnapshotSubmitted
+Router --> FinalizedHandler : SnapshotFinalized
+Router --> BatchHandler : SnapshotBatchSubmitted
+
+' Special Project Processing
+SubmittedHandler --> PoolsProcessor : projectId.startswith('activePools:')
+SubmittedHandler --> TokensProcessor : projectId.startswith('activeTokens:')
+BatchHandler --> VolumeProcessor : projectId.startswith('baseSnapshot:')
+
+' Data Processing Flow
+SubmittedHandler --> SnapshotProcessor : _create_tracked_task
+PoolsProcessor --> BulkFetcher : get_project_epoch_snapshot_bulk
+TokensProcessor --> BulkFetcher : get_project_epoch_snapshot_bulk
+VolumeProcessor --> BulkFetcher : get_project_epoch_snapshot_bulk
+BulkFetcher --> TailCalculator : time window calculation
+SnapshotProcessor --> IPFSReader : read snapshot content
+
+' Blockchain Data Fetching
+BatchHandler --> AnchorRPC : get_transaction_from_hash
+BatchHandler --> ProtocolContract : decode_function_input
+ProtocolContract --> AnchorRPC : contract ABI decoding
+
+' Storage Operations
+SubmittedHandler --> ProjectData : hset epochId mapping
+SubmittedHandler --> ExpiryTracking : zadd expiry schedule
+SubmittedHandler --> LastSubmitted : set latest snapshot
+SubmittedHandler --> UnpinTracking : zadd unpin schedule
+FinalizedHandler --> FinalizedEpochs : hset max(epochId)
+FinalizedHandler --> StateMapping : hset success state
+BatchHandler --> ProjectData : batch hset multiple projects
+BatchHandler --> FinalizedEpochs : hset batch finalization
+
+' Cache Operations
+PoolsProcessor --> PoolCache : store aggregated pools
+TokensProcessor --> TokenCache : store aggregated tokens
+VolumeProcessor --> VolumeCache : store volume calculations
+
+' Background Task Management
+Cacher --> TaskTracker : track all async tasks
+TaskTracker --> TaskCleanup : monitor task lifecycle
+Cacher --> HealthReporter : report process health
+ExpiryTracking --> DataExpiry : scheduled cleanup
+
+' Cross-connections
+TaskCleanup --> TaskTracker : cleanup completed
+HealthReporter --> HealthTracking : update timestamps
+DataExpiry --> ProjectData : remove expired
+DataExpiry --> ExpiryTracking : clean markers
+
+' Detailed Handler Notes
+note right of SubmittedHandler
+**Implementation Details:**
+1. model_validate_json(event_data)
+2. Redis pipeline initialization
+3. IPFS unpin scheduling (if enabled)
+4. get(last_submitted_snapshot_data_key)
+5. JSON loads/dumps operations
+6. Pipeline.execute() atomic commit
+7. Special project routing by prefix
+8. Task tracking with timestamps
+end note
+
+note right of BatchHandler
+**Batch Processing Flow:**
+1. Parse SnapshotBatchSubmittedMessage
+2. anchor_rpc_helper.get_transaction_from_hash()
+3. protocol_state_contract.decode_function_input()
+4. Extract projectIds[] and snapshotCids[]
+5. zip(projectIds, snapshotCids) iteration
+6. Pipeline batch for all projects
+7. SEQUENCER_FINALIZED status setting
+8. Atomic pipeline.execute()
+end note
+
+note right of BulkFetcher
+**Bulk Fetching Logic:**
+Method: get_project_epoch_snapshot_bulk()
+Parameters: redis_conn, protocol_contract,
+           rpc_helper, ipfs_client,
+           start_epoch, end_epoch, project_id
+Returns: List[snapshot_data]
+Used by: All special processors
+Caching: Results used for aggregation
+end note
+
+@enduml 
