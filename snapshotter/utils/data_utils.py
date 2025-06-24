@@ -132,7 +132,9 @@ async def get_project_finalized_cid(
             cid = f'null_{epoch_id}'
         else:
             # If not in cache, fetch from blockchain and cache it
-            cid, _ = await w3_get_and_cache_finalized_cid(redis_conn, state_contract_obj, rpc_helper, ipfs_reader, epoch_id, project_id)
+            cid, _ = await w3_get_and_cache_finalized_cid(
+                redis_conn, state_contract_obj, rpc_helper, ipfs_reader, epoch_id, project_id
+            )
 
     # Return None if CID is None (consensus not yet available) or contains 'null'
     if cid is None or 'null' in cid:
@@ -219,8 +221,14 @@ async def get_project_finalized_cids_bulk(
     cid_data_with_epochs = []
 
     if max_epoch_with_data < epoch_id_max:
-        logger.info(f'Max epoch with data {max_epoch_with_data} is less than epoch_id_max {epoch_id_max}. Adjusting epoch_id_max to {max_epoch_with_data}')
-        cid_data_with_epochs.extend([(f'null_{epoch_id}', epoch_id) for epoch_id in range(max_epoch_with_data + 1, epoch_id_max + 1)])
+        logger.info(
+            f'Max epoch with data {max_epoch_with_data} is less than epoch_id_max {epoch_id_max}. '
+            f'Adjusting epoch_id_max to {max_epoch_with_data}'
+        )
+        cid_data_with_epochs.extend([
+            (f'null_{epoch_id}', epoch_id) 
+            for epoch_id in range(max_epoch_with_data + 1, epoch_id_max + 1)
+        ])
 
     if epoch_id_min < project_first_epoch:
         logger.warning(
@@ -237,7 +245,7 @@ async def get_project_finalized_cids_bulk(
         )
         return [], project_first_epoch
 
-    epoch_ids_set = set(range(epoch_id_min, max_epoch_with_data + 1))
+    epoch_ids_set = set(range(epoch_id_min, min(epoch_id_max, max_epoch_with_data) + 1))
 
     # Check Redis cache for existing CIDs
     epoch_ids_to_fetch = list(epoch_ids_set)
@@ -489,7 +497,9 @@ async def w3_get_and_cache_finalized_cid_bulk_using_previous_snapshots(
             sorted_missing_epochs = sorted(list(missing_epochs))
             epoch_to_fetch = sorted_missing_epochs[-1]
             
-            cid, epoch_id = await w3_get_and_cache_finalized_cid(redis_conn, state_contract_obj, rpc_helper, ipfs_reader, epoch_to_fetch, project_id)
+            cid, epoch_id = await w3_get_and_cache_finalized_cid(
+                redis_conn, state_contract_obj, rpc_helper, ipfs_reader, epoch_to_fetch, project_id
+            )
             cid_data_with_epochs.append((cid, epoch_id))
             missing_epochs.remove(epoch_to_fetch)
             if cid and "null" not in cid:
