@@ -1501,7 +1501,7 @@ async def process_snapshot_cid(redis_conn: aioredis.Redis, ipfs_reader: AsyncIPF
             if await redis_conn.exists(f"project_processing:{project_id}"):
                 logger.info(f"Project {project_id} is already being processed. Skipping.")
                 return False
-            await redis_conn.set(f"project_processing:{project_id}", "true", ex=300)
+            await redis_conn.set(f"project_processing:{project_id}", "true", ex=600)
 
         logger.info(f"Processing snapshot cid: {snapshot_cid} for project {project_id} at epoch {epoch_id} (original epoch {original_epoch_id}), rec_depth {rec_depth}")
 
