@@ -508,6 +508,7 @@ async def w3_get_and_cache_finalized_cid_bulk_using_previous_snapshots(
         blank_epochs_bitmap_key = blank_epochs_bitmap(project_id)
         missing_epochs = []
         cid_data_with_epochs = []
+        processed_snapshot_cids = []
 
         blank_epochs = await redis_bitmap.get_bits_in_range(
             redis_conn,
@@ -535,10 +536,12 @@ async def w3_get_and_cache_finalized_cid_bulk_using_previous_snapshots(
             closest_epoch_with_data = find_closest_larger_epoch_with_data(epoch_to_fetch, known_cid_data_with_epochs)
             if closest_epoch_with_data:
                 closest_epoch_cid = closest_epoch_with_data[0]
-                logger.info(f"Processing closest epoch with data {closest_epoch_with_data[1]} for project {project_id}")
-                # process but don't recurse
-                processed_closest_epoch = await process_snapshot_cid(redis_conn, ipfs_reader, project_id, closest_epoch_cid, closest_epoch_with_data[1], closest_epoch_with_data[1], rec_depth=MAX_RECURSION_DEPTH + 1)
-            
+                if closest_epoch_cid not in processed_snapshot_cids:
+                    logger.info(f"Processing closest epoch with data {closest_epoch_with_data[1]} for project {project_id}")
+                    # process but don't recurse
+                    processed_closest_epoch = await process_snapshot_cid(redis_conn, ipfs_reader, project_id, closest_epoch_cid, closest_epoch_with_data[1], closest_epoch_with_data[1], rec_depth=MAX_RECURSION_DEPTH + 1)
+                    processed_snapshot_cids.append(closest_epoch_cid)
+                
             cid, epoch_id = await w3_get_and_cache_finalized_cid(
                 redis_conn, state_contract_obj, rpc_helper, ipfs_reader, epoch_to_fetch, project_id
             )

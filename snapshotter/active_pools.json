@@ -1,0 +1,6169 @@
+[{
+  "pool_address": "0xE0554a476A092703abdB3Ef35c80e0D76d32939F",
+  "frequency": 10628
+}, {
+  "pool_address": "0xc7bBeC68d12a0d1830360F8Ec58fA599bA1b0e9b",
+  "frequency": 9416
+}, {
+  "pool_address": "0x88e6A0c2dDD26FEEb64F039a2c41296FcB3f5640",
+  "frequency": 8423
+}, {
+  "pool_address": "0xEc215DFC360C2cFE3447467E8966336498DFAc35",
+  "frequency": 6366
+}, {
+  "pool_address": "0x017E1Dc7A0e8310D9eb86870E4282F1f59321987",
+  "frequency": 4401
+}, {
+  "pool_address": "0x11b815efB8f581194ae79006d24E0d814B7697F6",
+  "frequency": 3303
+}, {
+  "pool_address": "0x4585FE77225b41b697C938B018E2Ac67Ac5a20c0",
+  "frequency": 2059
+}, {
+  "pool_address": "0x96Ac47ED85F86E1784cc8d05fAD2A8B28825363F",
+  "frequency": 1893
+}, {
+  "pool_address": "0xBD575080a5004Bc2837201581368000E3Fa7b707",
+  "frequency": 1857
+}, {
+  "pool_address": "0xD60e8129A49fDc00Ab5680f24cF1eeA087035F84",
+  "frequency": 1770
+}, {
+  "pool_address": "0xd6fFFB73902BBe982a86525024b66e6ECEe88a74",
+  "frequency": 1574
+}, {
+  "pool_address": "0x57E167150F5DDF5414D6a21f2d311eA94c6f8594",
+  "frequency": 1496
+}, {
+  "pool_address": "0x06EC65C5fB27fa6b381440930f8D11676a1D77E5",
+  "frequency": 1440
+}, {
+  "pool_address": "0xEE7A87bC97d8Ed1F875c3cb18fb3A7924148f7DC",
+  "frequency": 1348
+}, {
+  "pool_address": "0x5d5D73f271Be27bd6CaEac87e82B54C0F3EB5765",
+  "frequency": 1334
+}, {
+  "pool_address": "0x60594a405d53811d3BC4766596EFD80fd545A270",
+  "frequency": 1227
+}, {
+  "pool_address": "0x17DaB92a93C5d17D13299E7b3E18CD7443276195",
+  "frequency": 1176
+}, {
+  "pool_address": "0xd9e2c2721a30dabF283fe5E6942DDa631DD4820A",
+  "frequency": 1146
+}, {
+  "pool_address": "0x85Fe9bE2A8aF0FA170ea232e19C386a0c262Cf72",
+  "frequency": 1140
+}, {
+  "pool_address": "0xA0d86DA432476E1F5A50a21999269D81B3108416",
+  "frequency": 1060
+}, {
+  "pool_address": "0xd807Bd8eb0C2e9F1e8aA3A895Fd1cd7CE37795B4",
+  "frequency": 1006
+}, {
+  "pool_address": "0x7C706586679Af2BA6D1A9fC2DA9C6aF59883fdD3",
+  "frequency": 979
+}, {
+  "pool_address": "0x2DB4Dd4f0d284613343Ad2BafD61908Ca12cd1eE",
+  "frequency": 959
+}, {
+  "pool_address": "0xcDbC3A56e8a981BBb583053357639F989C2362BA",
+  "frequency": 953
+}, {
+  "pool_address": "0x0A89617bfEbF9fD0511c18c8c003941E7BDc5Bb8",
+  "frequency": 952
+}, {
+  "pool_address": "0x7b1E5D984A43eE732de195628d20d05CFaBc3cC7",
+  "frequency": 914
+}, {
+  "pool_address": "0x4e68Ccd3E89f51C3074ca5072bbAC773960dFa36",
+  "frequency": 820
+}, {
+  "pool_address": "0x464BD7e6718a815c20a5AD529003d7a93a9676B3",
+  "frequency": 817
+}, {
+  "pool_address": "0x7666841ff54b8008DB3E6C2614aF73CF65AaA000",
+  "frequency": 799
+}, {
+  "pool_address": "0x6f045BB9F37081d717A604451D32e5B2B7F449b1",
+  "frequency": 752
+}, {
+  "pool_address": "0xF99569fA9e04D303430A914fF9E299ae18632b09",
+  "frequency": 704
+}, {
+  "pool_address": "0xdE7C935c25Fc678A194a3b93514496d95A078D10",
+  "frequency": 640
+}, {
+  "pool_address": "0x5aB53EE1d50eeF2C1DD3d5402789cd27bB52c1bB",
+  "frequency": 588
+}, {
+  "pool_address": "0x109830a1AAaD605BbF02a9dFA7B0B92EC2FB7dAa",
+  "frequency": 576
+}, {
+  "pool_address": "0xD1D5A4c0eA98971894772Dcd6D2f1dc71083C44E",
+  "frequency": 572
+}, {
+  "pool_address": "0x8ad599c3A0ff1De082011EFDDc58f1908eb6e6D8",
+  "frequency": 570
+}, {
+  "pool_address": "0x26CfeF1FB7AABf718e3517a66f4c4cE78C04a58d",
+  "frequency": 566
+}, {
+  "pool_address": "0x4bf7b3c1Eaf7ecF8f68A92Ca0B076c00E4e21512",
+  "frequency": 564
+}, {
+  "pool_address": "0x537c468943ACda040732d4509EC61cCa3b6FBCf4",
+  "frequency": 563
+}, {
+  "pool_address": "0x8E0606E46b63F1d78c8B1DA0ddf77E1549e02410",
+  "frequency": 552
+}, {
+  "pool_address": "0xD2A0CAE67437bfAE2F0083f829fb958d9A018B23",
+  "frequency": 538
+}, {
+  "pool_address": "0xc0321c3eF3f311Ba2e6453e622BA2E7464f7941F",
+  "frequency": 534
+}, {
+  "pool_address": "0xeEC10E7dc087c5CD64D81966031BBeDa37a0e8f3",
+  "frequency": 529
+}, {
+  "pool_address": "0xeF9553FCacD93681afd34813DB5E0a967d701780",
+  "frequency": 528
+}, {
+  "pool_address": "0x6880e2ea62efA9BA7683785174B5A182AEB95d89",
+  "frequency": 484
+}, {
+  "pool_address": "0x91aAf7BcDc0437eC393b638345A6BB3bD7a711E9",
+  "frequency": 448
+}, {
+  "pool_address": "0xa438331326895b65c7b8c7Ef3Ea6046F37AF4751",
+  "frequency": 416
+}, {
+  "pool_address": "0xa6Cc3C2531FdaA6Ae1A3CA84c2855806728693e8",
+  "frequency": 411
+}, {
+  "pool_address": "0xF8Ab8Ef28763C76f427D94e62dE69318696D2b57",
+  "frequency": 409
+}, {
+  "pool_address": "0x1d42064Fc4Beb5F8aAF85F4617AE8b3b5B8Bd801",
+  "frequency": 404
+}, {
+  "pool_address": "0xD3e9895230E8FB1460852F6cDA3C4B926FbC29D8",
+  "frequency": 403
+}, {
+  "pool_address": "0x69E52E990D8CfFeEDa251de8C32408932b229701",
+  "frequency": 403
+}, {
+  "pool_address": "0x3150B450F8325ac4AFbfA52f33EcF00232F1294E",
+  "frequency": 402
+}, {
+  "pool_address": "0x2982d3295A0E1a99e6E88Ece0E93FfDfc5c761ae",
+  "frequency": 393
+}, {
+  "pool_address": "0xE789c41EFdB1b3723D775D373a6C873DAc3dCFfc",
+  "frequency": 390
+}, {
+  "pool_address": "0x31Ff55987291f512C3F05Fe312E2763B5B3cfBfb",
+  "frequency": 380
+}, {
+  "pool_address": "0x102eDacfB7fb133D9F1Bb89c5FA6685D3BF17F8f",
+  "frequency": 379
+}, {
+  "pool_address": "0x561599fFf95a3104a43025Dddf277332fE5eCe2A",
+  "frequency": 373
+}, {
+  "pool_address": "0x3654AAFD6fea91a1E25BAa1C44e4c2C7935ff3F1",
+  "frequency": 367
+}, {
+  "pool_address": "0x5e14A46C4C84B21A307A424110cc42DBDcEaB9F0",
+  "frequency": 362
+}, {
+  "pool_address": "0xFBd3Bc3AfBb9575a361B08B6531f772bC87f25Ff",
+  "frequency": 360
+}, {
+  "pool_address": "0xE331DE28cd81B768C19A366b0e4e4675c45eC2dA",
+  "frequency": 359
+}, {
+  "pool_address": "0xF752004E4b07c1D6fd22CA537b928a8e15B39618",
+  "frequency": 356
+}, {
+  "pool_address": "0xAD6E4Ae09C4B9B9158849da99C8539De01dFE9e5",
+  "frequency": 344
+}, {
+  "pool_address": "0xe8c6c9227491C0a8156A0106A0204d881BB7E531",
+  "frequency": 341
+}, {
+  "pool_address": "0xa339d4c41aD791E27A10cd0F9A80DeEC815b79ee",
+  "frequency": 330
+}, {
+  "pool_address": "0xfB012EbF4E7E28359fcfD5f2f4fD6Fe787FE8f7F",
+  "frequency": 327
+}, {
+  "pool_address": "0x3Cd7C6f115F1F3Dcc842C87ddAFf638111199dC8",
+  "frequency": 324
+}, {
+  "pool_address": "0xE061B362aa157a5037b225570cFf9ebf1d657929",
+  "frequency": 320
+}, {
+  "pool_address": "0xCBCdF9626bC03E24f779434178A73a0B4bad62eD",
+  "frequency": 314
+}, {
+  "pool_address": "0x0d951F9fb65a0f36C44152a146F3914c06A8D7C1",
+  "frequency": 311
+}, {
+  "pool_address": "0x59D813c1D0266278e2f5F146c0e222a6cFEa83dF",
+  "frequency": 308
+}, {
+  "pool_address": "0xA93f2B515c984d9b8f57F9dAB3307AB7211F26f9",
+  "frequency": 300
+}, {
+  "pool_address": "0xBe91314fDc48C52c0763989aD47922a12b7A72c3",
+  "frequency": 299
+}, {
+  "pool_address": "0xC2C390c6CD3C4e6c2b70727d35a45e8a072F18cA",
+  "frequency": 296
+}, {
+  "pool_address": "0x2606eCa86C5BE267eEDd8D8E3F9455818e3DEF54",
+  "frequency": 296
+}, {
+  "pool_address": "0x51e112A9E684BbE91DfF2Dfb384e97EEEad51C33",
+  "frequency": 293
+}, {
+  "pool_address": "0x4301a8F8AC023B953bC47B3217d79fBD082470fb",
+  "frequency": 293
+}, {
+  "pool_address": "0x4633aFa7C69379Ba09912A42b7E59388Af596081",
+  "frequency": 292
+}, {
+  "pool_address": "0x9d1E1fd5CB7e91484fC03cdf6F0A501745fbBb20",
+  "frequency": 287
+}, {
+  "pool_address": "0x06f00544C0bc62E6db10F46D370dFCcDC23d8189",
+  "frequency": 283
+}, {
+  "pool_address": "0x9cc29D2cad010425F629f29C47234c8D2F9a79F9",
+  "frequency": 283
+}, {
+  "pool_address": "0x558082BbA548aa51C8bB64849ab15bE812B5611d",
+  "frequency": 281
+}, {
+  "pool_address": "0x732D057d5b984d5eB7b5C035c960a21B53a68Ee1",
+  "frequency": 278
+}, {
+  "pool_address": "0x3CadE0D80dd5B951653b048D1f923Ab6a998CaB4",
+  "frequency": 278
+}, {
+  "pool_address": "0x084B5191Bd08412952337b1108b6e5942418928f",
+  "frequency": 275
+}, {
+  "pool_address": "0x24EE2c6B9597F035088CDa8575E9D5e15a84B9DF",
+  "frequency": 273
+}, {
+  "pool_address": "0x8F1E5F261e30eE68ED463bCD1D2166eF77E321F7",
+  "frequency": 273
+}, {
+  "pool_address": "0xf359492d26764481002eD88BD2acae83cA50B5C9",
+  "frequency": 266
+}, {
+  "pool_address": "0xDA87DBC44C018690CaD7D9f430F0812C925Be6E1",
+  "frequency": 266
+}, {
+  "pool_address": "0x84309B1eEDD15c20658817a80Af415C8d350cbDF",
+  "frequency": 265
+}, {
+  "pool_address": "0xbf85f94D3233Ee588F0907A9147FBB59d7246b54",
+  "frequency": 264
+}, {
+  "pool_address": "0xc3Db44ADC1fCdFd5671f555236eae49f4A8EEa18",
+  "frequency": 263
+}, {
+  "pool_address": "0xd31d41DfFa3589bB0c0183e46a1eed983a5E5978",
+  "frequency": 263
+}, {
+  "pool_address": "0x0c30062368eEfB96bF3AdE1218E685306b8E89Fa",
+  "frequency": 261
+}, {
+  "pool_address": "0x2a8Ff49323d42Be0Af7a1b2f3005b67da55E0c6b",
+  "frequency": 258
+}, {
+  "pool_address": "0xE92f631971c6C8a6060531E4288eAD13a7528902",
+  "frequency": 250
+}, {
+  "pool_address": "0x128788061F8168F526006072927DFCF9f24a74AD",
+  "frequency": 246
+}, {
+  "pool_address": "0x57aF956d3E2cCa3B86f3D8C6772C03ddca3eAacB",
+  "frequency": 245
+}, {
+  "pool_address": "0x648c91a93D43f6af7630B1EF315B23143023550A",
+  "frequency": 245
+}, {
+  "pool_address": "0x01DF367dA2FB20AF112D59Dbe96a0A8F21524196",
+  "frequency": 242
+}, {
+  "pool_address": "0xA3C2076eB97D573CC8842f1Db1ECDF7B6F77ba27",
+  "frequency": 240
+}, {
+  "pool_address": "0xc1B9F6863953dEBb71AF00ba3f990d8F86d28c21",
+  "frequency": 240
+}, {
+  "pool_address": "0xa200A823426f449C5768c3693e7d21E5b84344e3",
+  "frequency": 238
+}, {
+  "pool_address": "0x055081e35B9382d0B4034b48c909890688F66b05",
+  "frequency": 236
+}, {
+  "pool_address": "0xc593Fe9193B745447e86b45eA0Bf62565eE030cc",
+  "frequency": 235
+}, {
+  "pool_address": "0xa3f558aebAecAf0e11cA4b2199cC5Ed341edfd74",
+  "frequency": 234
+}, {
+  "pool_address": "0xB91512A6E60f4Cc9F3C6A037265E3A85D6a5CD60",
+  "frequency": 231
+}, {
+  "pool_address": "0x4C54Ff7F1c424Ff5487A32aaD0b48B19cBAf087F",
+  "frequency": 231
+}, {
+  "pool_address": "0x92560C178cE069CC014138eD3C2F5221Ba71f58a",
+  "frequency": 229
+}, {
+  "pool_address": "0x764510aB1d39CF300e7abe8F5B8977D18F290628",
+  "frequency": 227
+}, {
+  "pool_address": "0x127452F3f9cDc0389b0Bf59ce6131aA3Bd763598",
+  "frequency": 225
+}, {
+  "pool_address": "0x6dCAe50c6eaA2E4aC96871046e5290f35BAC1Efc",
+  "frequency": 225
+}, {
+  "pool_address": "0x4628a0A564DEBFc8798eb55DB5c91f2200486c24",
+  "frequency": 218
+}, {
+  "pool_address": "0x20e6022F17eF0447C7fBb1A25FB0bF2BC3fAe3f1",
+  "frequency": 216
+}, {
+  "pool_address": "0xF242AC3e49e8fEd54D15237978D925E3D9bA22D5",
+  "frequency": 215
+}, {
+  "pool_address": "0x04Ca435f1e88440398712a6E5Ccf878E550AE8Cc",
+  "frequency": 213
+}, {
+  "pool_address": "0x039b9CF3407F4573B7D37530c42ef9C7dB424fC8",
+  "frequency": 210
+}, {
+  "pool_address": "0xc761f36A54A77d61EEb3cac925206BD85a49E641",
+  "frequency": 210
+}, {
+  "pool_address": "0x7b3Ed3A3444144ff526554D5F4Aa463D1759f51a",
+  "frequency": 205
+}, {
+  "pool_address": "0x2fCa61E6d02923AC3A642c9E5c5F67AC30ad637a",
+  "frequency": 200
+}, {
+  "pool_address": "0xCB488B8452996454237D824d72f86090470292f4",
+  "frequency": 199
+}, {
+  "pool_address": "0xeE34f493fe73b586b5A6352761E9a10355F4497A",
+  "frequency": 196
+}, {
+  "pool_address": "0x2d7a17310aAB9A756d54f4FcA03182F8cec83429",
+  "frequency": 193
+}, {
+  "pool_address": "0x11950d141EcB863F01007AdD7D1A342041227b58",
+  "frequency": 192
+}, {
+  "pool_address": "0x57F52C9faa6D40c5163D76b8D7dD81ddB7c95434",
+  "frequency": 191
+}, {
+  "pool_address": "0x18Bbe20F81bdcB340325E28a6eE6BB426B7cCbc1",
+  "frequency": 187
+}, {
+  "pool_address": "0x261B077caEd5DB39f3B88D15b8a080C4e48a7173",
+  "frequency": 185
+}, {
+  "pool_address": "0xC2e9F25Be6257c210d7Adf0D4Cd6E3E881ba25f8",
+  "frequency": 184
+}, {
+  "pool_address": "0x27941A235804f33D81aDaBb2d56589c5f6Ea6556",
+  "frequency": 184
+}, {
+  "pool_address": "0xb9743D008D984f4D97fc9faeb97Fd1A5Df1725A0",
+  "frequency": 182
+}, {
+  "pool_address": "0xef530078320f3A9223661e2Fe37001023048a7dF",
+  "frequency": 181
+}, {
+  "pool_address": "0x1098cEBC48A93218d9639319d04F21b0cb6107A3",
+  "frequency": 179
+}, {
+  "pool_address": "0x15153Da0E9e13cfC167b3D417d3721bF545479bB",
+  "frequency": 178
+}, {
+  "pool_address": "0xc45A81BC23A64eA556ab4CdF08A86B61cdcEEA8b",
+  "frequency": 177
+}, {
+  "pool_address": "0xC3aBd8C07f0D669906f4bE495389f2dcc598020f",
+  "frequency": 176
+}, {
+  "pool_address": "0xe1Cf9CE239891b2B0Aca1f87c6534FC25beb23e3",
+  "frequency": 176
+}, {
+  "pool_address": "0xBE0E71171Fd8075f891A83e2389cB8Ea0310C71E",
+  "frequency": 175
+}, {
+  "pool_address": "0x9f8b52A95e7d52c984141C04798c015D12c5bB23",
+  "frequency": 174
+}, {
+  "pool_address": "0xC4ce8E63921b8B6cBdB8fCB6Bd64cC701Fb926f2",
+  "frequency": 170
+}, {
+  "pool_address": "0xEc903d253BB6c6bE5127fc268F0DFdcd3504d240",
+  "frequency": 169
+}, {
+  "pool_address": "0x0e9D66fcC38C9b6a2Dc390F512527E2Db32417EF",
+  "frequency": 167
+}, {
+  "pool_address": "0xD47E206Df088b2ef8a332F2fBE83216A28d3d434",
+  "frequency": 166
+}, {
+  "pool_address": "0xcCCb34774C753234F9e2Fef3De5c7677Db26c341",
+  "frequency": 164
+}, {
+  "pool_address": "0x692BB5b14B2AD19dDda0034986D3c6ec221ce3A2",
+  "frequency": 162
+}, {
+  "pool_address": "0x16588709ca8f7B84829B43cC1c5cb7e84a321b16",
+  "frequency": 157
+}, {
+  "pool_address": "0x32D9259e6792B2150FD50395D971864647FA27B2",
+  "frequency": 157
+}, {
+  "pool_address": "0xF12533a96712133d9Bb97C24de5BCf52F48851BD",
+  "frequency": 156
+}, {
+  "pool_address": "0x8C1eC160B92D65eb45d3Fac91be9B1DFeb5EB9E1",
+  "frequency": 155
+}, {
+  "pool_address": "0xa8E780d818Ed009357Bd4eE9b2Dd70955Bf81560",
+  "frequency": 152
+}, {
+  "pool_address": "0x7F63306A62C345365881e0fFF85CB2c8BaaA13D5",
+  "frequency": 148
+}, {
+  "pool_address": "0xb25500f2993a6fD337B6b534432453a600b5cE19",
+  "frequency": 148
+}, {
+  "pool_address": "0x4C9C4c9DdbB36330eD9d996041c44fe64ed6E67F",
+  "frequency": 146
+}, {
+  "pool_address": "0x5d4F3C6fA16908609BAC31Ff148Bd002AA6b8c83",
+  "frequency": 145
+}, {
+  "pool_address": "0xBCF35C1Bb8AA1c0ecAe1B363986B5FfDcc709a84",
+  "frequency": 145
+}, {
+  "pool_address": "0xd86cf902914E42b6A012FDa6451102D69c5C25E4",
+  "frequency": 142
+}, {
+  "pool_address": "0xAc4b3DacB91461209Ae9d41EC517c2B9Cb1B7DAF",
+  "frequency": 140
+}, {
+  "pool_address": "0xcE8111eAf63540753230cf8b0FF759A3d5F80BB8",
+  "frequency": 139
+}, {
+  "pool_address": "0x744159757caC173A7A3eCf5e97ADB10d1a725377",
+  "frequency": 138
+}, {
+  "pool_address": "0x8C4b6F846fcb38dBA36932fe261538E01459c7ad",
+  "frequency": 137
+}, {
+  "pool_address": "0x7ba2c6db565BD0d5d071Aea8aB872f9B2553562d",
+  "frequency": 137
+}, {
+  "pool_address": "0x33632C97F63F603B8763201e027e4B744F26827d",
+  "frequency": 135
+}, {
+  "pool_address": "0xbaD17915ebfe2623F30C845A0611AD445E05C9eD",
+  "frequency": 135
+}, {
+  "pool_address": "0x7770451456B81E3CC2C93beF67f72a8EcefC14e6",
+  "frequency": 134
+}, {
+  "pool_address": "0x0105b9B95f63e54650f70125402588AD329d5B00",
+  "frequency": 132
+}, {
+  "pool_address": "0xed385Dcfa5be0f7210597d20Fa44890CB485324c",
+  "frequency": 132
+}, {
+  "pool_address": "0x10d42eA8C16d4Ff29101C3FB5B3eB2DC55a46abd",
+  "frequency": 127
+}, {
+  "pool_address": "0x95A45A87Dd4d3A1803039072f37E075F37B23D75",
+  "frequency": 126
+}, {
+  "pool_address": "0x5AAA28Ca43C6646fD1403e508f0FCA1D92357dde",
+  "frequency": 126
+}, {
+  "pool_address": "0xe0CfA17aa9B8f930Fd936633c0252d5cB745C2C3",
+  "frequency": 125
+}, {
+  "pool_address": "0x6C45028DCb596F91e1e702F1082b554964b6168E",
+  "frequency": 125
+}, {
+  "pool_address": "0x88FCd13dbaFF8eEbC95102bC425d40EAE760161a",
+  "frequency": 124
+}, {
+  "pool_address": "0x59354356Ec5d56306791873f567d61EBf11dfbD5",
+  "frequency": 122
+}, {
+  "pool_address": "0x2eF1832c2592Ed963fa36Cc6A52c059cE061Fd0b",
+  "frequency": 122
+}, {
+  "pool_address": "0x12C5c7C5C7BaA786C4426e4e5c65C7f057a21177",
+  "frequency": 122
+}, {
+  "pool_address": "0x4BCe399bB34971030CBccC1B9cEB8d0DfaA7289C",
+  "frequency": 120
+}, {
+  "pool_address": "0xA04d13F092f68F603A193832222898B0d9f52c71",
+  "frequency": 119
+}, {
+  "pool_address": "0x29567ae23d65225870C5bd738a6debe7Ac5A1D66",
+  "frequency": 117
+}, {
+  "pool_address": "0x15aA01580ae866f9FF4DBe45E06e307941d90C7b",
+  "frequency": 116
+}, {
+  "pool_address": "0x3E32ede691128B56a0fE08213eC607294c611288",
+  "frequency": 116
+}, {
+  "pool_address": "0x610adf57F0E9148e23eAB6f45C6F0Eeb330A7196",
+  "frequency": 116
+}, {
+  "pool_address": "0xC7eC87AEB9D1129C42123859220C525aBa1ca617",
+  "frequency": 113
+}, {
+  "pool_address": "0xCdE2Bb7aD54AE5e615b35E7b16f906136D62dFC3",
+  "frequency": 111
+}, {
+  "pool_address": "0x6c063a6E8Cd45869b5Eb75291E65a3de298f3AA8",
+  "frequency": 110
+}, {
+  "pool_address": "0xF260d15e8eBe54D210ef53F5b61Cb46bD9Aa29EE",
+  "frequency": 110
+}, {
+  "pool_address": "0x9C7eD68B00DC4f45243b07Ce71a54A86e8f8FcBB",
+  "frequency": 109
+}, {
+  "pool_address": "0x919Fa96e88d67499339577Fa202345436bcDaf79",
+  "frequency": 108
+}, {
+  "pool_address": "0x841820459769cd629B10a36FD12E603938cc2679",
+  "frequency": 108
+}, {
+  "pool_address": "0x8c351099E51ADd6E9958b6672bA070904a35BcB2",
+  "frequency": 107
+}, {
+  "pool_address": "0x2D8543C4693f1C47Ce593865dfc75A63e1124019",
+  "frequency": 106
+}, {
+  "pool_address": "0xc136249E3F8E0B270cb6B2E96cb2C4eF375DB708",
+  "frequency": 106
+}, {
+  "pool_address": "0xE6bB0dA23D23E29f69910B0A8B6da60463d0D3dd",
+  "frequency": 105
+}, {
+  "pool_address": "0xa1bDf02A34a1c841e01956072e112B345bf5b1a1",
+  "frequency": 104
+}, {
+  "pool_address": "0xCBfb8d042342EC7816432d12120fc4e740a2d419",
+  "frequency": 103
+}, {
+  "pool_address": "0x4E0eb027c2866f5d006605C4aaD5C87940288ED3",
+  "frequency": 103
+}, {
+  "pool_address": "0x2a0330c7e979A4d18E5B0C987b877DA24dd37D04",
+  "frequency": 102
+}, {
+  "pool_address": "0xD755eCCc5A8AACc5dD1e8505e282B49D8f3558f8",
+  "frequency": 102
+}, {
+  "pool_address": "0x7B1742F5a538b6f109088C8aDFA0c84608d77e18",
+  "frequency": 102
+}, {
+  "pool_address": "0xd31853a9517DeDB2a7C718F4C3689BFcDf4f3cB8",
+  "frequency": 102
+}, {
+  "pool_address": "0xdb336a91D9937E13D15b365Cb84f0F3407C8ade5",
+  "frequency": 102
+}, {
+  "pool_address": "0x9e0905249CeEFfFB9605E034b534544684A58BE6",
+  "frequency": 101
+}, {
+  "pool_address": "0xe092769bc1fa5262D4f48353f90890Dcc339BF80",
+  "frequency": 101
+}, {
+  "pool_address": "0x236b0b03b6C063653b021C9A3262635eA40B6019",
+  "frequency": 100
+}, {
+  "pool_address": "0xf43315231E3E0e0E87C1A645999E25172c307c11",
+  "frequency": 100
+}, {
+  "pool_address": "0x555b928A41c4ec1DEF49f645CD7d868A1CF0B0DB",
+  "frequency": 100
+}, {
+  "pool_address": "0x77843EA21a4cC006766bBa8BDeFd934cBeA20f4a",
+  "frequency": 99
+}, {
+  "pool_address": "0xefdbF897cE8CCEc59E8Ea34DCC49C29dE4C3aE6F",
+  "frequency": 98
+}, {
+  "pool_address": "0x4d1Eff861316396dD1915F69B49f4C2d7B11590d",
+  "frequency": 98
+}, {
+  "pool_address": "0xc008794B20A69480De50398D9bC14887DE19A8c1",
+  "frequency": 98
+}, {
+  "pool_address": "0x6A8d68af345bD213c1BfE1f815b5488D253D1bEd",
+  "frequency": 97
+}, {
+  "pool_address": "0xE7F6720C1F546217081667A5ab7fEbB688036856",
+  "frequency": 97
+}, {
+  "pool_address": "0x3C5258de848Dcfca47862F70912F8E5cA3239446",
+  "frequency": 97
+}, {
+  "pool_address": "0x3D691DDe72F1eF852b30e0456fCDc35f8B2DDDb6",
+  "frequency": 97
+}, {
+  "pool_address": "0x3eBEC0a1b4055c8D1180FCe64Db2a8C068170880",
+  "frequency": 96
+}, {
+  "pool_address": "0x7f74c86CD8BA48be647d541B3E7f5A2184A3AfA4",
+  "frequency": 95
+}, {
+  "pool_address": "0x755F01736f93C91585b840C2179c560B754D69F3",
+  "frequency": 95
+}, {
+  "pool_address": "0x7AeB0AC84d534D28Da9f51d8394eC5e930776CdD",
+  "frequency": 95
+}, {
+  "pool_address": "0x753Af313A4Dd84cafdbd067F67701DBc82F1F3FE",
+  "frequency": 93
+}, {
+  "pool_address": "0x9e9e2B4Ea64a36ef7cE494e5bDBF010729163dF6",
+  "frequency": 92
+}, {
+  "pool_address": "0xB13349d361f776fA7c05C2e9680Dc2B0F6f3b506",
+  "frequency": 92
+}, {
+  "pool_address": "0xE3776908C5544CCBf24A209c148F2437743218c4",
+  "frequency": 92
+}, {
+  "pool_address": "0x44806D7f1d2065Bd26E192F284701B85d6B4C6d5",
+  "frequency": 91
+}, {
+  "pool_address": "0x1f2B107d58Dd3587e27d39CD57086DAFf7B1DF3b",
+  "frequency": 91
+}, {
+  "pool_address": "0x6b52a0160f056b43E9c091997494BC5b6c323662",
+  "frequency": 91
+}, {
+  "pool_address": "0x134ddfa28ADD702169A5D8d90e4fF0c4c278404f",
+  "frequency": 90
+}, {
+  "pool_address": "0xBfCAE9f989e47436fD1678Ef5F9182D94b81Dbac",
+  "frequency": 89
+}, {
+  "pool_address": "0x52C6fd628D59Ce6B342107aF5E058441cD20fa81",
+  "frequency": 89
+}, {
+  "pool_address": "0xF3b51dC39838b3D38c29FB61b4a46a4Cdb4d458f",
+  "frequency": 88
+}, {
+  "pool_address": "0x214848946877cB0FF46037Ce97723f3c7f609aA7",
+  "frequency": 87
+}, {
+  "pool_address": "0x2F62f2B4c5fcd7570a709DeC05D68EA19c82A9ec",
+  "frequency": 85
+}, {
+  "pool_address": "0x8d32cF983aFF258eC3e2B5C389998b841EF094E1",
+  "frequency": 85
+}, {
+  "pool_address": "0x482cA22e5276Df2c79a55e8dc6Cb4e360D5576B1",
+  "frequency": 85
+}, {
+  "pool_address": "0xab6d00D6bE6341957b3C754388e32B4b05F62B53",
+  "frequency": 82
+}, {
+  "pool_address": "0x7baecE5d47f1BC5E1953FBE0E9931D54DAB6D810",
+  "frequency": 81
+}, {
+  "pool_address": "0x465E56cD21ad47d4d4790F17de5E0458F20C3719",
+  "frequency": 80
+}, {
+  "pool_address": "0x202A6012894Ae5c288eA824cbc8A9bfb26A49b93",
+  "frequency": 79
+}, {
+  "pool_address": "0x82b733D710d12B998B95783385320091F18E6F6E",
+  "frequency": 79
+}, {
+  "pool_address": "0xe2680fd7CdBb04E9087a647Ad4D023EF6C8fb4e2",
+  "frequency": 79
+}, {
+  "pool_address": "0x4edAb94D75B850865DD221bF74b240C167557638",
+  "frequency": 79
+}, {
+  "pool_address": "0xd2D48d328C5143DCef5DCd2817e9c2e1Dec96762",
+  "frequency": 79
+}, {
+  "pool_address": "0x1385Fc1Fe0418ea0B4Fcf7Adc61FC7535AB7F80d",
+  "frequency": 78
+}, {
+  "pool_address": "0x9E26232D11c39B05092c70C6782B7cAADBa06138",
+  "frequency": 78
+}, {
+  "pool_address": "0x7832310Cd0de39c4cE0A635F34d9a4B5b47fd434",
+  "frequency": 77
+}, {
+  "pool_address": "0x2d6987713F635f5216f5802fE166767152c4659c",
+  "frequency": 76
+}, {
+  "pool_address": "0x826b34e62320108A9fa38a080360d693A8a73111",
+  "frequency": 76
+}, {
+  "pool_address": "0x290A6a7460B308ee3F19023D2D00dE604bcf5B42",
+  "frequency": 75
+}, {
+  "pool_address": "0x1a3Fb049C2D88A16B927Be6a4CAE48ca38D93d4C",
+  "frequency": 75
+}, {
+  "pool_address": "0xBE24f9952bf2a15bc4d2661151049D9588d6c0cB",
+  "frequency": 75
+}, {
+  "pool_address": "0xDd949D1fE117744A38319C7B7dcc045d630BCc8d",
+  "frequency": 75
+}, {
+  "pool_address": "0x65D6FBa573E1DA5eb4329D47B656A9139c2874B2",
+  "frequency": 75
+}, {
+  "pool_address": "0x108f8c888387B4b4950d1a1000f2A861866Fe42b",
+  "frequency": 73
+}, {
+  "pool_address": "0xFA45c879Fd120d6Cc493113Ae212A853531F3d91",
+  "frequency": 73
+}, {
+  "pool_address": "0x433a00819C771b33FA7223a5B3499b24FBCd1bBC",
+  "frequency": 73
+}, {
+  "pool_address": "0x218db53D36b68F6d5B0328727F350016B01878e7",
+  "frequency": 73
+}, {
+  "pool_address": "0xc8219b876753A85025156b22176c2eDEA17aAC53",
+  "frequency": 72
+}, {
+  "pool_address": "0x2a9d2ba41aba912316D16742f259412B681898Db",
+  "frequency": 72
+}, {
+  "pool_address": "0xCba27C8e7115b4Eb50Aa14999BC0866674a96eCB",
+  "frequency": 72
+}, {
+  "pool_address": "0x25CA2719B2B4bc137Be0Ea6E5Bb83bF3a3dbdB7E",
+  "frequency": 71
+}, {
+  "pool_address": "0x3F93976Bf885534707e5D443CE02E50b1CefF785",
+  "frequency": 71
+}, {
+  "pool_address": "0x2E0F3AD5d205c3391985Ec53C28c0a252aFFaAD3",
+  "frequency": 71
+}, {
+  "pool_address": "0x8390EDFB1CeaB5A2E186F7e0676e64C456fA9E87",
+  "frequency": 71
+}, {
+  "pool_address": "0xcD83055557536EFf25FD0eAfbC56e74a1b4260B3",
+  "frequency": 70
+}, {
+  "pool_address": "0x14154C15fc0fD3f91DE557a1B6FdD2059972Cd0B",
+  "frequency": 70
+}, {
+  "pool_address": "0x8e274b949534EF11aA75cea99328215af9117afA",
+  "frequency": 70
+}, {
+  "pool_address": "0x785e4674C2A27E5911149E72F75A70F21c307fe4",
+  "frequency": 70
+}, {
+  "pool_address": "0xA79858586C1D4C76299B1323cF2cDbAdda2FedB6",
+  "frequency": 70
+}, {
+  "pool_address": "0x510100D5143e011Db24E2aa38abE85d73D5B2177",
+  "frequency": 69
+}, {
+  "pool_address": "0xb1914469141Ebb6e244e75cEe3f35d43BF6B85e5",
+  "frequency": 69
+}, {
+  "pool_address": "0x948b54A93f5aD1df6B8bFF6Dc249D99CA2EcA052",
+  "frequency": 67
+}, {
+  "pool_address": "0x32BDd7324ABb91EDE3127Ba1CD38dB2f80e35Ee4",
+  "frequency": 67
+}, {
+  "pool_address": "0xF251f4FEFE6F6418023308cBdc0356137262F995",
+  "frequency": 67
+}, {
+  "pool_address": "0xfeb09c7e130a4b87B27ebD648ec485657b688B34",
+  "frequency": 66
+}, {
+  "pool_address": "0xC134e31518e38A504A5279C990a0bb1B45E6414F",
+  "frequency": 66
+}, {
+  "pool_address": "0x88051B0eea095007D3bEf21aB287Be961f3d8598",
+  "frequency": 65
+}, {
+  "pool_address": "0x553e9C493678d8606d6a5ba284643dB2110Df823",
+  "frequency": 65
+}, {
+  "pool_address": "0x6eEC83292fA69C8FF7e98F951E621E6EBd14aF55",
+  "frequency": 65
+}, {
+  "pool_address": "0x6FB092521191ab1Ec60c83Ae9e71DfAFb25da9d6",
+  "frequency": 65
+}, {
+  "pool_address": "0xC56E8B7DADE55878c6bc41a718452dCe62280c6D",
+  "frequency": 65
+}, {
+  "pool_address": "0x876B8c5944125E71A00D5dDd56723094F7A765eE",
+  "frequency": 65
+}, {
+  "pool_address": "0x43e7AdE137b86798654D8e78c36D5a556a647224",
+  "frequency": 64
+}, {
+  "pool_address": "0x177622E79aCECe98C39F6E12fa78aC7Fc8a8bf62",
+  "frequency": 64
+}, {
+  "pool_address": "0xb011e4EB4111ef00b620A5ed195836dCd69dB1FF",
+  "frequency": 64
+}, {
+  "pool_address": "0x92d793CFf1341A28083D504F9DECD33554595660",
+  "frequency": 64
+}, {
+  "pool_address": "0x305702BD526d65ECd53fc2a2d6a059a9Ad449842",
+  "frequency": 63
+}, {
+  "pool_address": "0x5b60EEd941Aa99BB2d8Ee6359872ED64E64280C8",
+  "frequency": 63
+}, {
+  "pool_address": "0x3B685307C8611AFb2A9E83EBc8743dc20480716E",
+  "frequency": 63
+}, {
+  "pool_address": "0xe9C761b372A9e98C966Baac334A05FC8c12771b3",
+  "frequency": 63
+}, {
+  "pool_address": "0x7F3C5aB7EFF0aC57B9538F88D1558709acb45821",
+  "frequency": 62
+}, {
+  "pool_address": "0xe42CA07D83442bd1FF553D21295149b16527D162",
+  "frequency": 62
+}, {
+  "pool_address": "0x4376422305346aA4fe92Cbf83cADA731d2c2663c",
+  "frequency": 62
+}, {
+  "pool_address": "0xa4eBFAa0171ab70Fc8195226CA4660A49B736C6e",
+  "frequency": 61
+}, {
+  "pool_address": "0x000ba527862e5b82cff0F7c66b646AF023274aA1",
+  "frequency": 61
+}, {
+  "pool_address": "0x791935820c5dE029013EF379D8D3c41604b5E832",
+  "frequency": 61
+}, {
+  "pool_address": "0x2349A69875aAD7beB787F6f230EA2d71a52d6283",
+  "frequency": 60
+}, {
+  "pool_address": "0xCB6aF33487eEA8ED5EA5A783Fe9Ed402A54DAc63",
+  "frequency": 60
+}, {
+  "pool_address": "0x05faD5446e9c2Cf533f39635B99A115C01109dA4",
+  "frequency": 60
+}, {
+  "pool_address": "0x88ada7b1dd1C728ea87404CEa7a0780139EB35d1",
+  "frequency": 59
+}, {
+  "pool_address": "0x31482F8ed3E6849AfeeC72B5Dec847761019fF23",
+  "frequency": 59
+}, {
+  "pool_address": "0x39c9E3128b8736e02A30B2B9b7E50FF522b935c5",
+  "frequency": 58
+}, {
+  "pool_address": "0x26FA8b07DcE29Fb1F0fb3C889E01b59dEbADeFdA",
+  "frequency": 58
+}, {
+  "pool_address": "0x0c2b6BF7322a3ccEb47c7BA74f2c75a19F530F11",
+  "frequency": 58
+}, {
+  "pool_address": "0x006Bd2FbbA17d76eadE2489012D7959EA83E8554",
+  "frequency": 58
+}, {
+  "pool_address": "0x54342F8f0Ab4035C47D05A4EDBF7F2aDF14Cba7B",
+  "frequency": 58
+}, {
+  "pool_address": "0xa1527EAE5cdF8eeF30a64F6E495183043428a88d",
+  "frequency": 58
+}, {
+  "pool_address": "0xc07Ff7eB83cB8d06D2B9893385b18C54fe4e5b1c",
+  "frequency": 57
+}, {
+  "pool_address": "0x331399c614cA67DEe86733E5A2FBA40DbB16827c",
+  "frequency": 57
+}, {
+  "pool_address": "0x4eC260F2d10ACa697184c929Aa3f8074B6cBC3ca",
+  "frequency": 57
+}, {
+  "pool_address": "0x881B8d0B1aD9d1b1DB918342B064D10aFb9eaa69",
+  "frequency": 56
+}, {
+  "pool_address": "0x2F7c61cA05A53E3B38E808D90f5eDDBeaCe2EC99",
+  "frequency": 56
+}, {
+  "pool_address": "0x32aEa6703491B6B26cd21eD7E0177b12aC84bde5",
+  "frequency": 56
+}, {
+  "pool_address": "0x9B5EDf620E46020862016e7B5dF6fa745415848a",
+  "frequency": 56
+}, {
+  "pool_address": "0xad27f14B831Cb05F4Cd8e9924f74F9E7Ff085715",
+  "frequency": 56
+}, {
+  "pool_address": "0x863240d75e44e910F8327237C7cb683a1EC854FC",
+  "frequency": 56
+}, {
+  "pool_address": "0x05f63dc38bfeb686ca68B9D237b192cB43067Ce0",
+  "frequency": 55
+}, {
+  "pool_address": "0xc2fA5fD1c1Ad37701Ef1B26C5F0680Ac807E3Efd",
+  "frequency": 55
+}, {
+  "pool_address": "0x08A5a1E2671839dADc25e2E20f9206FD33C88092",
+  "frequency": 55
+}, {
+  "pool_address": "0xcA02FAB433723BAcD177c56dF07695585366F318",
+  "frequency": 55
+}, {
+  "pool_address": "0x0572a0E36b7C4aD64080395D77828b3997c7b698",
+  "frequency": 55
+}, {
+  "pool_address": "0x7d43B430c821eF3bDc8C823Cad20165391ABb6D6",
+  "frequency": 55
+}, {
+  "pool_address": "0xa2542303c9A01c011da9106128D9B0838e6c3e57",
+  "frequency": 54
+}, {
+  "pool_address": "0xe42318eA3b998e8355a3Da364EB9D48eC725Eb45",
+  "frequency": 53
+}, {
+  "pool_address": "0x533783Cda7241420100de4A2a739c7b88AB88F96",
+  "frequency": 53
+}, {
+  "pool_address": "0x7BeA39867e4169DBe237d55C8242a8f2fcDcc387",
+  "frequency": 53
+}, {
+  "pool_address": "0x9628105808292699874f20d77d50a09BC26850C5",
+  "frequency": 53
+}, {
+  "pool_address": "0x69fB9F0e05bbdcd9f2C74be70E40D0da537f2089",
+  "frequency": 53
+}, {
+  "pool_address": "0x738ea57616FA9dab407E9e7920d446eAF4E7eAAa",
+  "frequency": 53
+}, {
+  "pool_address": "0x217932B0062bE3f4b5ea0EE282E127D9A6D5BD0C",
+  "frequency": 53
+}, {
+  "pool_address": "0x8f7057a1F25780aF4486C910368354eF067ECF5b",
+  "frequency": 53
+}, {
+  "pool_address": "0xeC2061372a02D5e416F5D8905eea64Cab2c10970",
+  "frequency": 52
+}, {
+  "pool_address": "0x3aFdC5e6DfC0B0a507A8e023c9Dce2CAfC310316",
+  "frequency": 52
+}, {
+  "pool_address": "0x09117BfF68B5939319e61b226BF1f3F5f985EBa1",
+  "frequency": 52
+}, {
+  "pool_address": "0x2e8d73FCE6bf5230c3876959252688D025a7a64A",
+  "frequency": 52
+}, {
+  "pool_address": "0x5F51539f52b45021ec70F280E21cEcB4B716C433",
+  "frequency": 52
+}, {
+  "pool_address": "0xea4Ba4CE14fdd287f380b55419B1C5b6c3f22ab6",
+  "frequency": 51
+}, {
+  "pool_address": "0xED6b5FB20322C2822CD97845261422f9d581b9C4",
+  "frequency": 51
+}, {
+  "pool_address": "0x18Adbc0144059be823a5d0De1d6445002f858Eb5",
+  "frequency": 51
+}, {
+  "pool_address": "0xeFd69F1FF464Ed673dab856c5b9bCA4D2847a74f",
+  "frequency": 51
+}, {
+  "pool_address": "0xA4e489d21dDdF750fB0E71B512189504427c48C9",
+  "frequency": 51
+}, {
+  "pool_address": "0xc3881FBB90daf3066dA30016d578eD024027317c",
+  "frequency": 50
+}, {
+  "pool_address": "0xF0230b6f9604e3Edc13E125806E4C5446C34dfdf",
+  "frequency": 50
+}, {
+  "pool_address": "0x18689c26C6968fB43eE3C2398576230811d3c6cA",
+  "frequency": 50
+}, {
+  "pool_address": "0x0A55882F4E1117ADc54aFbbac4A39079AD52fB89",
+  "frequency": 49
+}, {
+  "pool_address": "0x4aBa8eccf4aE29bfF900eDc7D99bb017F239C871",
+  "frequency": 49
+}, {
+  "pool_address": "0xd6E420F6B1c4035fFD566963301b92067A8C34CD",
+  "frequency": 48
+}, {
+  "pool_address": "0xCEb63A909d95C9222cdf5B08044f5Dae72Cd036e",
+  "frequency": 48
+}, {
+  "pool_address": "0xf9F7F108B3e2323343acf9bD9D34906aA478DE6d",
+  "frequency": 48
+}, {
+  "pool_address": "0x70fEa5d2f86076741DdA8d02c773b4e1775C9dB1",
+  "frequency": 48
+}, {
+  "pool_address": "0xc8C2CE8601243Aef693f01b76640B2ABC402fc40",
+  "frequency": 48
+}, {
+  "pool_address": "0xFAaCE66BD25abFF62718AbD6DB97560E414eC074",
+  "frequency": 47
+}, {
+  "pool_address": "0xC7Cf089FB4BC91F1981dF2285ca019Ab09A5dd3B",
+  "frequency": 47
+}, {
+  "pool_address": "0x7a233f0e957A9FF4726c738E9D790b9956f4C894",
+  "frequency": 47
+}, {
+  "pool_address": "0x2d8aFE0838313fA3A24E53830f3f93D1185BCE05",
+  "frequency": 46
+}, {
+  "pool_address": "0x98409d8CA9629FBE01Ab1b914EbF304175e384C8",
+  "frequency": 45
+}, {
+  "pool_address": "0xF546024eaC22953f7A9592146D8FA2bF1B5c9DdE",
+  "frequency": 45
+}, {
+  "pool_address": "0xde28B851E26f3D257C9F47ff72FdC121E02d8158",
+  "frequency": 44
+}, {
+  "pool_address": "0xEC7Bbf5E81095D2F58d43962Bdce6A7F779Cb17B",
+  "frequency": 44
+}, {
+  "pool_address": "0x4c41C368B6E362a326142a3caB76230C08ca53A8",
+  "frequency": 44
+}, {
+  "pool_address": "0xa6f3d4CA07C247CA7efb537657e0539e4b2C3CD9",
+  "frequency": 43
+}, {
+  "pool_address": "0xDf47636BF318f9d5cc9AaFe38f7e7BF893d58fAc",
+  "frequency": 43
+}, {
+  "pool_address": "0xbA2a013b29631d3277BBBCE80C970D06C1Bda0C3",
+  "frequency": 43
+}, {
+  "pool_address": "0xB2146221466f26C3F65dD66E8BF5C57355bB25B4",
+  "frequency": 43
+}, {
+  "pool_address": "0xc64350c0eab6faeD8f17CC2CDff0761C53fb4152",
+  "frequency": 43
+}, {
+  "pool_address": "0x1495d23396324e37B7f26b049ca051Db044B4022",
+  "frequency": 43
+}, {
+  "pool_address": "0xc65B9dd63175A6c0DC7E975EB9F6fD7677abA052",
+  "frequency": 43
+}, {
+  "pool_address": "0x157Dfa656Fdf0D18E1bA94075a53600D81cB3a97",
+  "frequency": 42
+}, {
+  "pool_address": "0xE3FE800B0de664bf0bCa8aD58eCbc73B259047b0",
+  "frequency": 42
+}, {
+  "pool_address": "0x403b1b747b1EFB309070436c9aC99Bf476f299ea",
+  "frequency": 42
+}, {
+  "pool_address": "0x97a5a0B2D7Ed3accb7FD6404A1f5CA29320905AF",
+  "frequency": 42
+}, {
+  "pool_address": "0xb5761Dbce0B6dad590c46b6e95839d60F0b888E8",
+  "frequency": 42
+}, {
+  "pool_address": "0x30eA22C879628514f1494d4BBFEF79D21A6B49A2",
+  "frequency": 42
+}, {
+  "pool_address": "0x602Cb3931406C9b98cc328AB406e50d6A32e559c",
+  "frequency": 42
+}, {
+  "pool_address": "0x10Bbd35A02Be3302B5930D2C347cc093AaA61903",
+  "frequency": 42
+}, {
+  "pool_address": "0x633504d9912205DEbd2a83A00FD27550753b6F1e",
+  "frequency": 42
+}, {
+  "pool_address": "0x1BEcf1Ac50F31C3441181563F9D350dDF72a2Bfa",
+  "frequency": 41
+}, {
+  "pool_address": "0x677d05B8BC5C691AFD0Dcb8ed81404C1ebE114d6",
+  "frequency": 41
+}, {
+  "pool_address": "0x4B2C930F88a87D1BfFaC291b6a7e01c9F13dD03e",
+  "frequency": 41
+}, {
+  "pool_address": "0x44C95bf226A6A1385beacED2bb3328D6aFb044a3",
+  "frequency": 41
+}, {
+  "pool_address": "0x1Ef68d35B1a307AF5e8EA67d29CE511D89D8fAEa",
+  "frequency": 41
+}, {
+  "pool_address": "0x5F44Dd3588833eCBf2715962C8f0062Ed549B110",
+  "frequency": 41
+}, {
+  "pool_address": "0xa3Cf8A21f52329bbEe77cFa77F1610E291A24013",
+  "frequency": 41
+}, {
+  "pool_address": "0x7CA69108d50839780a720019d7aAA11bBE53e1DC",
+  "frequency": 41
+}, {
+  "pool_address": "0x9e7A993D058883899Fb25d75942AfC612fdDa4b3",
+  "frequency": 41
+}, {
+  "pool_address": "0x2A4d547Ea2c35D03A501a8BB5d12d81D0a222dC5",
+  "frequency": 40
+}, {
+  "pool_address": "0x00Ed26e794b949E18B142F9108429b74CE08aC99",
+  "frequency": 40
+}, {
+  "pool_address": "0x126C781E39dAAC013DB8b3353D17Fc5dD8044a87",
+  "frequency": 40
+}, {
+  "pool_address": "0x2B7E68Fa478eBf6B1B4697fABAEdB61FE17CfAb5",
+  "frequency": 40
+}, {
+  "pool_address": "0xf8f6191561997010870056fC265d0f7DdAF105BF",
+  "frequency": 40
+}, {
+  "pool_address": "0xCD423F3ab39a11ff1D9208B7D37dF56E902C932B",
+  "frequency": 40
+}, {
+  "pool_address": "0xC579dbE9C232AE6a9F9FB18069E3a50C7A8de6e3",
+  "frequency": 40
+}, {
+  "pool_address": "0x7202BeDF49dB538752f87469490A1f9cB8B3668b",
+  "frequency": 40
+}, {
+  "pool_address": "0x7F7332f0484af00fc33E09Ba03B4683e232a30ea",
+  "frequency": 40
+}, {
+  "pool_address": "0x865E9408dE5F622643F2846B4a4EC1F251c76a8A",
+  "frequency": 40
+}, {
+  "pool_address": "0x8FbDD7e08f8DCb5C1FA564827044b0Aa6f5e3CE3",
+  "frequency": 40
+}, {
+  "pool_address": "0x6dcba3657EE750A51A13A235B4Ed081317dA3066",
+  "frequency": 39
+}, {
+  "pool_address": "0x6C1bCF1B99D9F0819459DAD661795802d232437e",
+  "frequency": 39
+}, {
+  "pool_address": "0xD017617f6F0fD22796E137a8240cc38F52a147B2",
+  "frequency": 39
+}, {
+  "pool_address": "0x91bCb7819933a60353B7120215052C203Cf146cE",
+  "frequency": 39
+}, {
+  "pool_address": "0x34EF34191474Fa23AB0684767e58D804D077DF6C",
+  "frequency": 39
+}, {
+  "pool_address": "0x0a3032d9a2251A24F62BEA0122EC1BD667467a72",
+  "frequency": 39
+}, {
+  "pool_address": "0xe11Ee9c18d03B43d6A7fC53e51AeDda8451e837A",
+  "frequency": 38
+}, {
+  "pool_address": "0xb6a7Dd1CA1FCfe1B4B107EF02843bB88Ce400fe9",
+  "frequency": 38
+}, {
+  "pool_address": "0xe6ff8b9A37B0fab776134636D9981Aa778c4e718",
+  "frequency": 38
+}, {
+  "pool_address": "0x61192EB6ca9fe34a3Ccc5f4cd4bf6feFB77a037f",
+  "frequency": 38
+}, {
+  "pool_address": "0x36095C32623186aA74257FC6729E2Aa80ee17CeE",
+  "frequency": 38
+}, {
+  "pool_address": "0x88395224c3709BE9A700624bD9246459585c56b0",
+  "frequency": 38
+}, {
+  "pool_address": "0x783d4247AAa5704372F9c907B315b6672E6803CC",
+  "frequency": 38
+}, {
+  "pool_address": "0x3AC9231dd1D1F8CF0294009919C326d53FB33bb7",
+  "frequency": 38
+}, {
+  "pool_address": "0xB26a868fFA4Cbba926970D7ae9c6a36D088eE38C",
+  "frequency": 37
+}, {
+  "pool_address": "0x9f2EbE69A86c079f3d4C3B94a11932b676B72f74",
+  "frequency": 37
+}, {
+  "pool_address": "0xA499B5E6Af1d554316bcd96947940de0c3b5836E",
+  "frequency": 37
+}, {
+  "pool_address": "0x88fc97e4Dce27eAF1872c5Dd21F912A88b9D43C3",
+  "frequency": 37
+}, {
+  "pool_address": "0x90957817bBB7eC5f9B592364604C32a8c66aBEBb",
+  "frequency": 37
+}, {
+  "pool_address": "0x02eDd21F1DB8EB146be60998e9801691e725F119",
+  "frequency": 36
+}, {
+  "pool_address": "0xB7F27E5Ebf97d88f37e16eddECC59523361A60E1",
+  "frequency": 36
+}, {
+  "pool_address": "0x5628F3bb1f352f86Ea173184ffEe2E34b8fc2dc8",
+  "frequency": 36
+}, {
+  "pool_address": "0xf649df4372D8bB3E6178e52fCD515519c78dA348",
+  "frequency": 36
+}, {
+  "pool_address": "0xe434675cE9a48183ee989FA10c6cc588596db847",
+  "frequency": 36
+}, {
+  "pool_address": "0x6Df1DEE4eb15754248AAf939F89f060b482D0883",
+  "frequency": 36
+}, {
+  "pool_address": "0x76c12EECDEc67d88754Ac537C9689044d615B22e",
+  "frequency": 36
+}, {
+  "pool_address": "0x597a148cC765dACe8A2e2Cd211c656993b28Def9",
+  "frequency": 36
+}, {
+  "pool_address": "0xcF880b4344b791B1b1153fF7E8723065F7aD2112",
+  "frequency": 35
+}, {
+  "pool_address": "0xFCfDFC98062d13a11cec48c44E4613eB26a34293",
+  "frequency": 35
+}, {
+  "pool_address": "0xDa99F4f2FE926b90F07f5F4EB0Ce773f7173c6a0",
+  "frequency": 35
+}, {
+  "pool_address": "0xC5aF84701f98Fa483eCe78aF83F11b6C38ACA71D",
+  "frequency": 35
+}, {
+  "pool_address": "0x8863765Df5Ae37B6683EAcfCF39511f11e96E9C6",
+  "frequency": 35
+}, {
+  "pool_address": "0x9f8b9dB9Eeb39Ca305Ca8d63A95e6D7d9882Db21",
+  "frequency": 35
+}, {
+  "pool_address": "0xAa46D45aB5f3b4aa9c2c10661CfdA428767Cd48e",
+  "frequency": 35
+}, {
+  "pool_address": "0x71A7f2eFA7D6cbDE8142134cbA19F52370f80536",
+  "frequency": 35
+}, {
+  "pool_address": "0x41FF5E19Ff6Ba796689647C2c59e4df57E150C12",
+  "frequency": 34
+}, {
+  "pool_address": "0xAE614a7a56cB79c04Df2aeBA6f5dAB80A39CA78E",
+  "frequency": 34
+}, {
+  "pool_address": "0x3bD4c71155De785328Bd7D1118aCAD7798CbAF6B",
+  "frequency": 34
+}, {
+  "pool_address": "0x94E4b2E24523CF9B3e631A6943C346dF9687c723",
+  "frequency": 34
+}, {
+  "pool_address": "0x6Ea64863B84fb4401751B9064BE2975A86c2E71B",
+  "frequency": 34
+}, {
+  "pool_address": "0xC3Bc9B91bA5bE073D51a740F9181DC4571492fF0",
+  "frequency": 34
+}, {
+  "pool_address": "0x09437F5DF7786259045df490f33a81F23389bfd1",
+  "frequency": 34
+}, {
+  "pool_address": "0x83abECf7204d5Afc1Bea5dF734f085f2535a9976",
+  "frequency": 34
+}, {
+  "pool_address": "0x73B304623c462996aE420643f2d70dbeDDA7F116",
+  "frequency": 34
+}, {
+  "pool_address": "0x1c98562A2FaB5aF19D8Fb3291a36AC3C618835D9",
+  "frequency": 33
+}, {
+  "pool_address": "0x489cEbE6Cd5DC5dcB7047A1F0D4F358a5d2fB295",
+  "frequency": 33
+}, {
+  "pool_address": "0xf53606232f973E7ce6678dBC7545bcCc4b52ab8f",
+  "frequency": 33
+}, {
+  "pool_address": "0xE9145f0ff823Eaffa0115Be8eAe608F6705D835B",
+  "frequency": 33
+}, {
+  "pool_address": "0x601feACd77a28105A592873e442Cb5B8143FB4f6",
+  "frequency": 33
+}, {
+  "pool_address": "0xc30B8e7FCa26B4D7d3b12981c211406FAd143737",
+  "frequency": 33
+}, {
+  "pool_address": "0x566218337f31D8E27dc473284F75BE6b56295Ec8",
+  "frequency": 33
+}, {
+  "pool_address": "0xAC4fD96fcF729390A3c8044422a529028eC36751",
+  "frequency": 32
+}, {
+  "pool_address": "0xC987D503a9f78F6D1d782C1fFF5aF4cb34437E3F",
+  "frequency": 32
+}, {
+  "pool_address": "0xE936f0073549AD8b1fA53583600d629Ba9375161",
+  "frequency": 32
+}, {
+  "pool_address": "0xcC9175Ab89997F4cCfCeb6c93203fBcd164638a3",
+  "frequency": 32
+}, {
+  "pool_address": "0x5d183E36718C9Fd637A1a37E0a55cB68951186bc",
+  "frequency": 32
+}, {
+  "pool_address": "0x419E84438a88431BB51C690C8AD65746A4c954AA",
+  "frequency": 32
+}, {
+  "pool_address": "0x218CD5364163c06500df7201c8914f66c990628e",
+  "frequency": 32
+}, {
+  "pool_address": "0xFBe35d8893F6d7F871d6D79C4523313C71BC7F70",
+  "frequency": 32
+}, {
+  "pool_address": "0x3B5A919e1Dd853B00D23222179Ad4293c4a620C6",
+  "frequency": 32
+}, {
+  "pool_address": "0x5C22d58aDB6830ec814eeA8058663A4e53d14519",
+  "frequency": 32
+}, {
+  "pool_address": "0x8cD6C8c449918D92d2ad4658C32F2e2fF1e7096D",
+  "frequency": 31
+}, {
+  "pool_address": "0xeaDDe4A603f0209cc07f68fd49482211A364ea53",
+  "frequency": 31
+}, {
+  "pool_address": "0xAF81e930620eb55A9a6927C4b2AFCb4d61040C32",
+  "frequency": 31
+}, {
+  "pool_address": "0xE8c2030686fC3b0161Ee1def0E8d01dFe4FAc0Ac",
+  "frequency": 31
+}, {
+  "pool_address": "0x44a269978f4c3348D70F1d8bFB83f9eb50975091",
+  "frequency": 31
+}, {
+  "pool_address": "0x353d231900b0614D72f50F052B18Cd399550DD32",
+  "frequency": 31
+}, {
+  "pool_address": "0xE472A9450974D9Bae8BE0Eaebe556dfC892297Cd",
+  "frequency": 31
+}, {
+  "pool_address": "0x05DBD9540A2c658712BC9945F97085A6e50850Aa",
+  "frequency": 31
+}, {
+  "pool_address": "0x66BEA722346efC72A5A2FC3D35abD7915547fEA0",
+  "frequency": 31
+}, {
+  "pool_address": "0xd34E8935A0DC5c9Bb8b93909B8C9484c508fEe0B",
+  "frequency": 31
+}, {
+  "pool_address": "0x4feEDF3D2D7767d0315525f3D5af664622084b52",
+  "frequency": 31
+}, {
+  "pool_address": "0x28537E296F8c8A877F043e7ad4289Ef673f354aC",
+  "frequency": 31
+}, {
+  "pool_address": "0x2AA89d6d122464466877F447327D19c083d8e756",
+  "frequency": 31
+}, {
+  "pool_address": "0xE26C8506d6C3Bab909c2d54A06701264CaB8b013",
+  "frequency": 31
+}, {
+  "pool_address": "0x135c0BCdA41081932828BF4Eabd9cFbe59Ee61fA",
+  "frequency": 31
+}, {
+  "pool_address": "0x2aFeAF811FE57B72cB496E841113b020a5cf0D60",
+  "frequency": 30
+}, {
+  "pool_address": "0x86bC870520aCF4e9c255270d7f51C814Ad184960",
+  "frequency": 30
+}, {
+  "pool_address": "0x61d329FDD20f396921C8bBe0A9c8874cC6E59f1e",
+  "frequency": 30
+}, {
+  "pool_address": "0xE931b03260B2854e77e8dA8378A1BC017b13cb97",
+  "frequency": 30
+}, {
+  "pool_address": "0x2efeC2097beede290B2eED63e2FAf5ECbBC528FC",
+  "frequency": 30
+}, {
+  "pool_address": "0xd82Cae6BC5DD8E0CBF26857276cE54e8dFA79E7e",
+  "frequency": 30
+}, {
+  "pool_address": "0x8661aE7918C0115Af9e3691662f605e9c550dDc9",
+  "frequency": 30
+}, {
+  "pool_address": "0xcfAAfec15704d0a64d38B154393285124FC96539",
+  "frequency": 30
+}, {
+  "pool_address": "0x3D26699C38a309Ea67398647857840D2F31d284C",
+  "frequency": 30
+}, {
+  "pool_address": "0x536BA2746E0CEA6eFea6774b8D1C48C6F8c022dd",
+  "frequency": 30
+}, {
+  "pool_address": "0x11479482ce2Da3b8d9cf12ec424a6F22665625A6",
+  "frequency": 29
+}, {
+  "pool_address": "0xdebD374B68E4133f20AB90e31cAE04f18ecF2818",
+  "frequency": 29
+}, {
+  "pool_address": "0x6bDc835235Da911e94e1eA2EAD06Dd55Ae8f38f0",
+  "frequency": 29
+}, {
+  "pool_address": "0xc5c9a9AB6403CDBa9722463000146C18b504F0bA",
+  "frequency": 29
+}, {
+  "pool_address": "0xCfaC0661d802Ef85Ece2f02ca691Cd2079a19456",
+  "frequency": 29
+}, {
+  "pool_address": "0x23E182724f1b00A3C5A2c76502096625B5fe87CD",
+  "frequency": 29
+}, {
+  "pool_address": "0x9188D6690a84023cCFb712F409376587eE3B6B63",
+  "frequency": 29
+}, {
+  "pool_address": "0xAB26D20964CC0284e190Bc22e67d52b8A88a3084",
+  "frequency": 29
+}, {
+  "pool_address": "0x3CC491BE8b42fbf02Ab3A94738FcB67da80cA086",
+  "frequency": 29
+}, {
+  "pool_address": "0xb790C7f2634a95Ee4dA94477B6c3D5b21F442959",
+  "frequency": 29
+}, {
+  "pool_address": "0xf7f37D3FB864ebb19e371Cf2de55CF34403C3de8",
+  "frequency": 29
+}, {
+  "pool_address": "0xb4e06434b87E2127120708c3ab065338b04D6D4c",
+  "frequency": 29
+}, {
+  "pool_address": "0x8Bc37f3BF4f02C3fA3e93fA76CCC194999Adc2d1",
+  "frequency": 29
+}, {
+  "pool_address": "0x44529C66782cacB73120630e5193F8078916836c",
+  "frequency": 29
+}, {
+  "pool_address": "0x7be29eEe49d0D100cBa21757B43b29b5abe88751",
+  "frequency": 29
+}, {
+  "pool_address": "0xdF2eEd309764f062C331ac06E14B0Da229D9e33c",
+  "frequency": 29
+}, {
+  "pool_address": "0x5141Ef0CC5c1A4142bb103F086bC0eAD9F5Deb66",
+  "frequency": 29
+}, {
+  "pool_address": "0xF39A06E03316aA29be7C5Cbc936E521E113191c9",
+  "frequency": 29
+}, {
+  "pool_address": "0xc548016a337f0dF094a899EC9cD474485ba6Ee58",
+  "frequency": 28
+}, {
+  "pool_address": "0x6A888fB73f13104473a4BdFb1bEb220aC1eAFda3",
+  "frequency": 28
+}, {
+  "pool_address": "0xC7cbFF2a23D0926604F9352f65596e65729b8a17",
+  "frequency": 28
+}, {
+  "pool_address": "0x5696C2c2FcB7e304A5B9fAaEc9cd37d369C9D067",
+  "frequency": 28
+}, {
+  "pool_address": "0x6b55E8A50dB7cCc8F7Bdb437cE03a32a47D221d5",
+  "frequency": 28
+}, {
+  "pool_address": "0x0e2c4bE9F3408E5b1FF631576D946Eb8C224b5ED",
+  "frequency": 28
+}, {
+  "pool_address": "0x7138eAe57e8a214F7297E5E67bB6e183dF3572D5",
+  "frequency": 28
+}, {
+  "pool_address": "0x0127588aAF0404b62FE00044CD33533b221a32D7",
+  "frequency": 28
+}, {
+  "pool_address": "0xab0BAb8cB8E7f2aA098bd14fb178b2CC4F44bfBe",
+  "frequency": 28
+}, {
+  "pool_address": "0x646C5CAad5728e1c6589C05c0004ec967c975eee",
+  "frequency": 28
+}, {
+  "pool_address": "0x5EFf1E660B1D4Ef80247F2B2d369e4684AD52312",
+  "frequency": 28
+}, {
+  "pool_address": "0xa6C157307DF3d0dd3b5e39BBE99145E08449C855",
+  "frequency": 28
+}, {
+  "pool_address": "0x22e31BA6D4F6972fa0D24e2D8b8fa02079FA2295",
+  "frequency": 28
+}, {
+  "pool_address": "0xe76154de890a34a3aF778F06b2af535a584aEB1E",
+  "frequency": 27
+}, {
+  "pool_address": "0x360acF12e72044ba3eaAA654E51E4725c699DcB1",
+  "frequency": 27
+}, {
+  "pool_address": "0x31c0bA10e4e12BE6cDCEb612E5E829d977532bfC",
+  "frequency": 27
+}, {
+  "pool_address": "0x732ee2714b08479541F9a8aC0779457c7F6A4910",
+  "frequency": 27
+}, {
+  "pool_address": "0xa03d5df1fabf36df8A4c4D6BA6d7eB9EAf012304",
+  "frequency": 27
+}, {
+  "pool_address": "0xb6F23F452D553b27f829556F8DD747F0f71aC012",
+  "frequency": 27
+}, {
+  "pool_address": "0x7B6774E175F0f11f96e6901716e085CD074200ba",
+  "frequency": 27
+}, {
+  "pool_address": "0xAe4045ffeDdF61D570E6d1fE2D71DED1A2E85a88",
+  "frequency": 26
+}, {
+  "pool_address": "0xadDd24A001243E6D446Ed8d088c82aEfF84073A3",
+  "frequency": 26
+}, {
+  "pool_address": "0xBDB04e915B94FbFD6e8552ff7860E59Db7d4499a",
+  "frequency": 26
+}, {
+  "pool_address": "0x05391bd57D8C6fB30d9C39F6618f2207893922dC",
+  "frequency": 26
+}, {
+  "pool_address": "0x1a89Ae3BA4F9a97B10bAC6A77061f00bb956858B",
+  "frequency": 26
+}, {
+  "pool_address": "0xF4c5e0F4590b6679B3030d29A84857F226087FeF",
+  "frequency": 26
+}, {
+  "pool_address": "0x2176B61b7f6154d0ED787Cfe90b242Bd2f9129A7",
+  "frequency": 26
+}, {
+  "pool_address": "0x04708077eCa6bb527a5BBbD6358ffb043a9c1C14",
+  "frequency": 26
+}, {
+  "pool_address": "0xf5A1B4b874F503fce0D637d5a0D6A8d02f6bb755",
+  "frequency": 26
+}, {
+  "pool_address": "0x725E0c45E3cf028617184f89d39A7bAc41836C14",
+  "frequency": 26
+}, {
+  "pool_address": "0xacD093A3e09e3d46b990e28f0B1b9F138A9c9770",
+  "frequency": 26
+}, {
+  "pool_address": "0xf7F1dCDA0a3A95354A758772658AC611FA7775Df",
+  "frequency": 26
+}, {
+  "pool_address": "0xe230C83a695f3B212C3f5aFA3722DE4da2699f08",
+  "frequency": 26
+}, {
+  "pool_address": "0xcC3A67b5d860CEB32571354ea976B5ee333BDF5f",
+  "frequency": 26
+}, {
+  "pool_address": "0xa764a354b47bc2Fd93E875736F45f39217F8e339",
+  "frequency": 26
+}, {
+  "pool_address": "0x1F7A7Dec5A3a6A7662b8B2E85f4f596437C8F4F2",
+  "frequency": 26
+}, {
+  "pool_address": "0x21e88F4482CD48DEAb1Ca5eDDABDfb14Cb8AD76F",
+  "frequency": 25
+}, {
+  "pool_address": "0xA29d18f6a73F6f65c9F0eEAe2Dd0563d6f615c0f",
+  "frequency": 25
+}, {
+  "pool_address": "0xB003DF4B243f938132e8CAdBEB237AbC5A889FB4",
+  "frequency": 25
+}, {
+  "pool_address": "0x5C2891e67cBA6B5481F89D3701a78A1cFdaC117F",
+  "frequency": 25
+}, {
+  "pool_address": "0xF214d89EA69C6696473b0Dee25698723B8011961",
+  "frequency": 25
+}, {
+  "pool_address": "0xf9e18e98A0bB56fe7E663F5AB1170b3105c4c56D",
+  "frequency": 25
+}, {
+  "pool_address": "0xFDC4aFA94E92Df92d88B1AF279133BE048C8720e",
+  "frequency": 25
+}, {
+  "pool_address": "0x01fA95e3b3d073746a2ed6dC51C421e3e58C8748",
+  "frequency": 25
+}, {
+  "pool_address": "0x5d69DF9333CCf4Cdbbf361b7ea3497c76519Ce3b",
+  "frequency": 25
+}, {
+  "pool_address": "0x31Fee802A7739835f838d4E8980225FAd3F3E8Ea",
+  "frequency": 25
+}, {
+  "pool_address": "0x393b1E96dCac9d84563AE9EE0690a49c3CD7f822",
+  "frequency": 25
+}, {
+  "pool_address": "0x2281C72DB65970573a855F8449811640b64C14E0",
+  "frequency": 25
+}, {
+  "pool_address": "0xC511FF68aE3A1379e8eF3F599F88559c9eC77D9c",
+  "frequency": 24
+}, {
+  "pool_address": "0xcBcC3cBaD991eC59204be2963b4a87951E4d292B",
+  "frequency": 24
+}, {
+  "pool_address": "0x6792Ff48F3164030f09F21cC5894FD5644418c30",
+  "frequency": 24
+}, {
+  "pool_address": "0x0d67F8b52d3d2b59040E6264cC5F11573743F1f7",
+  "frequency": 24
+}, {
+  "pool_address": "0x5932c2fCdf03A9BD4733b54D445af44866374137",
+  "frequency": 24
+}, {
+  "pool_address": "0xF25962Dd652A6996B9777034760902853DEd798E",
+  "frequency": 24
+}, {
+  "pool_address": "0x3aE50534Ced76ff89ECE2270bee28E2aA555cE96",
+  "frequency": 24
+}, {
+  "pool_address": "0x8E88B7D22aF482612C071031da86D477Bb2B7DB1",
+  "frequency": 24
+}, {
+  "pool_address": "0x948f4242b6c5FE08009faD17C8cB64e1A0bD7361",
+  "frequency": 24
+}, {
+  "pool_address": "0x1fb4B2350Bb491906a4694D437F10BCc2db600D5",
+  "frequency": 24
+}, {
+  "pool_address": "0x98521E5e87eFEecE447e0D6051eA4748e6E56b76",
+  "frequency": 24
+}, {
+  "pool_address": "0x6529555554A86A6dc208ea0c97f6093cb8A5e3c9",
+  "frequency": 24
+}, {
+  "pool_address": "0x128C3C7a8220B3c09Ab88e6ADC0F44750ef19Fa8",
+  "frequency": 23
+}, {
+  "pool_address": "0xA6D6BDb66131B45C61a54D47F096EC036428FC0D",
+  "frequency": 23
+}, {
+  "pool_address": "0xAd6b651dF72b443f57b76fF79165Ee771272e18e",
+  "frequency": 23
+}, {
+  "pool_address": "0xd04d14D2F9122372e41D2dE9a82f721E9Ea2F069",
+  "frequency": 23
+}, {
+  "pool_address": "0x412940FDaC1214Fc3Df430769F54e69210A18e49",
+  "frequency": 23
+}, {
+  "pool_address": "0x6D7daD627651bAd1F607269B4ad940c5f980087B",
+  "frequency": 23
+}, {
+  "pool_address": "0x5D6c7CF9b70e7b8a5397Bf254E29Eeb172Ba3705",
+  "frequency": 23
+}, {
+  "pool_address": "0x8107fcA5494375Fc743A9Fc4d4844353a1AF3D94",
+  "frequency": 23
+}, {
+  "pool_address": "0xcCeE93E4CE272Aab3a75CE7D505A5b850C7777cF",
+  "frequency": 23
+}, {
+  "pool_address": "0x087666F3cE6650D1cb051a22703707720b80CF33",
+  "frequency": 23
+}, {
+  "pool_address": "0x04C2a6c847a00f886DbB9B896bb0cDac849b8B49",
+  "frequency": 23
+}, {
+  "pool_address": "0xF126277E5C0da1d6B03920e6bbDb073870435128",
+  "frequency": 23
+}, {
+  "pool_address": "0xf377707F6D5d79fAaa74866303f474E9D30b53E3",
+  "frequency": 23
+}, {
+  "pool_address": "0x4c3432C13BF2F4Fd06567442C53e3093528F26B3",
+  "frequency": 23
+}, {
+  "pool_address": "0x6F5Ad69406f6f11f61cD6A6b8e7178fe0B8E5Bb9",
+  "frequency": 23
+}, {
+  "pool_address": "0xC091EAB83890C733D3a9C718343F695A9b7e18A4",
+  "frequency": 23
+}, {
+  "pool_address": "0xC897bfE53890660E4ded6E6860397a480354C183",
+  "frequency": 23
+}, {
+  "pool_address": "0x9c0dF79f119be0Fc4107c6c49d8CA45e587B1a1B",
+  "frequency": 22
+}, {
+  "pool_address": "0x12D92D69c6DE36D972E2C1046E615B7f53bF9C8E",
+  "frequency": 22
+}, {
+  "pool_address": "0x0C4F9D0648a3e051bd926311418f5275a7d56347",
+  "frequency": 22
+}, {
+  "pool_address": "0x983b92EA1F0A20844466f3E4BB988c1dE145293E",
+  "frequency": 22
+}, {
+  "pool_address": "0x87F9EAedE70419f704b361cF040693A30d731DcF",
+  "frequency": 22
+}, {
+  "pool_address": "0xE8E2f01112Db88E696d2bb7AdA246D7bdF5C82F1",
+  "frequency": 22
+}, {
+  "pool_address": "0x530637787449e5B0F529DC14aaCfD3E008E53376",
+  "frequency": 22
+}, {
+  "pool_address": "0xD5e572A168F3F64152808b25CDe25B92aeaF2740",
+  "frequency": 22
+}, {
+  "pool_address": "0xA8ef445350D3Da2bFF5157b71996799423e3D491",
+  "frequency": 22
+}, {
+  "pool_address": "0xB60B34d830F26C5a11c47ddb1E0A1F31D90A78b1",
+  "frequency": 22
+}, {
+  "pool_address": "0xEd3e467F2d32898C991357dD9d2879cd080f84f9",
+  "frequency": 22
+}, {
+  "pool_address": "0xd0B50C375789Bf7756e27c8b268882b15A784439",
+  "frequency": 22
+}, {
+  "pool_address": "0x37dCA5456C03B131018DEBD17C870D3Bb5cA694B",
+  "frequency": 22
+}, {
+  "pool_address": "0x057632cCd2A9C085154d50626D8cABB813bCE931",
+  "frequency": 22
+}, {
+  "pool_address": "0x9Bf06A7CF6da249a9dbbccC3b5d1CA805AfF73ea",
+  "frequency": 22
+}, {
+  "pool_address": "0xc6d7AF3Ce841a6570C76394F5db924A619c7be20",
+  "frequency": 22
+}, {
+  "pool_address": "0xD54EC40db41D14EE34661f3933f895bBE884F09A",
+  "frequency": 22
+}, {
+  "pool_address": "0xf817eA5931543d8E21D85AD85e3Ea91d7B312Ba8",
+  "frequency": 22
+}, {
+  "pool_address": "0xfae6Bb89c54aE6123fAD43B0EfD8298e5Ac95CDf",
+  "frequency": 22
+}, {
+  "pool_address": "0x8836Cf3C88E54D0D1231BA7f0b07cBFb50FE3130",
+  "frequency": 22
+}, {
+  "pool_address": "0x912060f1b1FF3923f5bCE897D14aCe2d41fbaDEF",
+  "frequency": 22
+}, {
+  "pool_address": "0x1CA6750086C90a0732D0BE7b9a52875dE64f6745",
+  "frequency": 22
+}, {
+  "pool_address": "0x1aED980AB6FD0080a91bb9B53CFe2b0a3300cDC3",
+  "frequency": 22
+}, {
+  "pool_address": "0x6dFBf91cBf4197AcB1880242b64843932cE49a17",
+  "frequency": 21
+}, {
+  "pool_address": "0xB61A4da17B87d8761d39B57888b0FcFD9b7BFF7D",
+  "frequency": 21
+}, {
+  "pool_address": "0x079472c97E254d22F3cAe8EC8e5223E20EE55807",
+  "frequency": 21
+}, {
+  "pool_address": "0x70cF99553471FE6C0d513ebFac8aCC55BA02ab7B",
+  "frequency": 21
+}, {
+  "pool_address": "0x41b5b06Ccf883FC1652E8d4f73A444f6Bb75e384",
+  "frequency": 21
+}, {
+  "pool_address": "0x40b97e50F6ddf7D6ca2617579863c2C065530958",
+  "frequency": 21
+}, {
+  "pool_address": "0x2a72F9ceDcD25f5772C398f809f8881C84Ad210b",
+  "frequency": 21
+}, {
+  "pool_address": "0x3019D4e366576A88D28B623afAF3eCb9ec9d9580",
+  "frequency": 21
+}, {
+  "pool_address": "0x87B1d1B59725209879CC5C5adEb99d8BC9EcCf12",
+  "frequency": 21
+}, {
+  "pool_address": "0x8D0c76CEeA8E0ee26b8D50777815A9F77405CAcB",
+  "frequency": 21
+}, {
+  "pool_address": "0x1dF4C6e36d61416813B42fE32724eF11e363EDDc",
+  "frequency": 21
+}, {
+  "pool_address": "0x87EE2514a29D89228cD8df637dc5a1efc10e897b",
+  "frequency": 21
+}, {
+  "pool_address": "0x02dd651b9958e34DE9Ecdb93b2510E84d4D37859",
+  "frequency": 21
+}, {
+  "pool_address": "0x1D14D3Fbe33Bdd4E044a2Fa77e6C35234C1356E3",
+  "frequency": 21
+}, {
+  "pool_address": "0xB210265458bD3Ae5684E885155b418D8cc8f00EF",
+  "frequency": 21
+}, {
+  "pool_address": "0xCdE5B0fe5A082CDb213C9963Cfe6445852956987",
+  "frequency": 21
+}, {
+  "pool_address": "0x9Ee213B4f9b44FAEec8C9932a611b7F721424DA5",
+  "frequency": 21
+}, {
+  "pool_address": "0x3459C097A91A8645735b352BBCc3EaFBe7136D1F",
+  "frequency": 21
+}, {
+  "pool_address": "0x65386C192879779951E75ed005EF4EF1169F09bd",
+  "frequency": 21
+}, {
+  "pool_address": "0x627129c41c8f4b4a64D927c923a95011901d72c5",
+  "frequency": 21
+}, {
+  "pool_address": "0x0f273006273307236F907DAeA55c6e194B8D955c",
+  "frequency": 21
+}, {
+  "pool_address": "0x17995d729a73EdeC101B6C4119e92f482bf4037D",
+  "frequency": 21
+}, {
+  "pool_address": "0x8E4c93614ac322d028B8748F904c2C6EF5Bd9DeA",
+  "frequency": 21
+}, {
+  "pool_address": "0x4E4a4C4C46d3488ff35fF05a0233785a30F03ec4",
+  "frequency": 20
+}, {
+  "pool_address": "0x9E7809C21BA130c1A51C112928eA6474D9a9Ae3C",
+  "frequency": 20
+}, {
+  "pool_address": "0x173A77805B59613a52D921234878aaD9AC8fAFE1",
+  "frequency": 20
+}, {
+  "pool_address": "0xeB4626c5149894022C2066120ea7F20f217995Fb",
+  "frequency": 20
+}, {
+  "pool_address": "0x6c4c7f46D9d4eF6bc5C9E155F011AD19Fc4EF321",
+  "frequency": 20
+}, {
+  "pool_address": "0x447631d5ed720945392348E915460679E57D948b",
+  "frequency": 20
+}, {
+  "pool_address": "0x9cB91e5451d29C84b51FFD40dF0b724b639bf841",
+  "frequency": 20
+}, {
+  "pool_address": "0xE2c12d4bA7C5DA6255Bcece6222e0A5389191d29",
+  "frequency": 20
+}, {
+  "pool_address": "0xccDa51723E0D6Acf10E377e109FC3fD7BD8C8F59",
+  "frequency": 20
+}, {
+  "pool_address": "0x508acdC358be2ed126B1441F0Cff853dEc49d40F",
+  "frequency": 20
+}, {
+  "pool_address": "0x56Ea002B411FD5887E55329852D5777EcB170713",
+  "frequency": 20
+}, {
+  "pool_address": "0xbEe4937798eA36e73f931021bfd02486a8c9Beb4",
+  "frequency": 20
+}, {
+  "pool_address": "0x1e2F6e533e8D0E8D0D733773F8Be144fBe201ad7",
+  "frequency": 20
+}, {
+  "pool_address": "0x4Efc9E2E3E77732Ce2F9612b8F050082C01688BD",
+  "frequency": 20
+}, {
+  "pool_address": "0xBeeAC208e89600580F0e481c848d1bB9921f8542",
+  "frequency": 20
+}, {
+  "pool_address": "0x850240a57148B9D5c957adf8091E09073e2d08C5",
+  "frequency": 20
+}, {
+  "pool_address": "0x82263c3ec30D49661B55E5f1625608D3e8a572B0",
+  "frequency": 20
+}, {
+  "pool_address": "0x06a198A6442BE6C2ebb21E91de6B2100Cb253D49",
+  "frequency": 20
+}, {
+  "pool_address": "0xFe47D885d3378827B6f34e0943Bc3Fd1D27B4e8C",
+  "frequency": 20
+}, {
+  "pool_address": "0x4388b25c48DC3206B01C06a8195f24C2c2BE638E",
+  "frequency": 20
+}, {
+  "pool_address": "0x47e49985B716ED468263105927F416c05E1D9619",
+  "frequency": 20
+}, {
+  "pool_address": "0x6d69DCE31606AbD62C58E95BA984718EEbD540eA",
+  "frequency": 19
+}, {
+  "pool_address": "0x2cB5818B465615Dc5DEE9443d722e916769020bc",
+  "frequency": 19
+}, {
+  "pool_address": "0xE00258b04AE0895f8045e8f3732A16B8DE75a8Bc",
+  "frequency": 19
+}, {
+  "pool_address": "0xD6041dDBaBE06222631E88194631B53A9dfd2a1C",
+  "frequency": 19
+}, {
+  "pool_address": "0x880ED8E3C0BaD6a4a2FA6355BB0CAa7Fe03199F4",
+  "frequency": 19
+}, {
+  "pool_address": "0x062B5073E30e0F4BdB5e7437CfDC659916D631C0",
+  "frequency": 19
+}, {
+  "pool_address": "0x23655ec96b201Bf1574316783f3d943A955Ce5Fe",
+  "frequency": 19
+}, {
+  "pool_address": "0x38F44ebEca8CfBec93Ae86aa6F00ccB55c2a4D22",
+  "frequency": 19
+}, {
+  "pool_address": "0x7d60220578D99dcE0F0F59cB1368787B8dBB312B",
+  "frequency": 19
+}, {
+  "pool_address": "0xF19d04DfA4de5ba854592B3B789ebCEbBBD828d2",
+  "frequency": 19
+}, {
+  "pool_address": "0x699b8E3719635117220E4D1D772762739C7D01d9",
+  "frequency": 19
+}, {
+  "pool_address": "0x019D14cfC015EeFf68a8AABe0dfE0A89A33790B0",
+  "frequency": 19
+}, {
+  "pool_address": "0x5Bd63d59994b6C15DB1B8E7b983057664513eC37",
+  "frequency": 19
+}, {
+  "pool_address": "0xb6d2AA18dd2bBF0d1F38d930EB159D620B239147",
+  "frequency": 19
+}, {
+  "pool_address": "0x51D4929a4Bf200EF212A31488De2F168527e113b",
+  "frequency": 19
+}, {
+  "pool_address": "0xeFE00F707bA1D9c104eA383D7036BEe56CA82cf6",
+  "frequency": 19
+}, {
+  "pool_address": "0xcfE0F3C420B3E59B86b91CF2DB73e38ba9a60938",
+  "frequency": 19
+}, {
+  "pool_address": "0xd9A6421cC21d4362A1e141AE39144C7F79245FEf",
+  "frequency": 19
+}, {
+  "pool_address": "0x358522DB165E4F096c5d86e209aF34d7378a172F",
+  "frequency": 19
+}, {
+  "pool_address": "0xa96D9B52132e5aEe2688f7B9128A2878a8757b7c",
+  "frequency": 19
+}, {
+  "pool_address": "0x609e478f140fF781C8F9bf15bAF3e93c5F76Fc63",
+  "frequency": 19
+}, {
+  "pool_address": "0x81b8339249EAdAffE388729CeEa88f1190c1dDe2",
+  "frequency": 19
+}, {
+  "pool_address": "0x6c60A61001Abec7b2E91a565db4f01b0141d31b0",
+  "frequency": 19
+}, {
+  "pool_address": "0x0F640a919907BCA72489d8a8cb8E7E46F2E04EEc",
+  "frequency": 19
+}, {
+  "pool_address": "0x0Ea79Ab0e34C5b0F70d2D32E2f0E910A3470095f",
+  "frequency": 18
+}, {
+  "pool_address": "0x86Bd450587f94792b5A3494AD93315411d940d8d",
+  "frequency": 18
+}, {
+  "pool_address": "0x4b62Fa30Fea125e43780DC425C2BE5acb4BA743b",
+  "frequency": 18
+}, {
+  "pool_address": "0x5221AAfc7F7E0ff5A7aeaa8555681c9F7f42A014",
+  "frequency": 18
+}, {
+  "pool_address": "0x13CB62D331A0c5db59ccF0Af689a3A393e7E66D6",
+  "frequency": 18
+}, {
+  "pool_address": "0xeb8DB8da9Ef8bCF6D724FdBcf6F7A4eE62153e26",
+  "frequency": 18
+}, {
+  "pool_address": "0x0dc9877F6024CCf16a470a74176C9260beb83AB6",
+  "frequency": 18
+}, {
+  "pool_address": "0x968510ce860030060283aEDc4d951bb72f939334",
+  "frequency": 18
+}, {
+  "pool_address": "0x21EdAD4D801974A824404e4eD4B3BD95AB876B34",
+  "frequency": 18
+}, {
+  "pool_address": "0x6637D3D16bf761289e0E2dc7668135c49E9dD801",
+  "frequency": 18
+}, {
+  "pool_address": "0x53bbDF4EA397D17A6F904dC882b3fB78A6875a66",
+  "frequency": 18
+}, {
+  "pool_address": "0x120FFad35bB97a5BaF9aB68f9Dd7667864530245",
+  "frequency": 18
+}, {
+  "pool_address": "0xFd76bE67FFF3BAC84E3D5444167bbC018f5968b6",
+  "frequency": 18
+}, {
+  "pool_address": "0xE697B7bc261Ada9cBD93525F92e1436d75b86468",
+  "frequency": 18
+}, {
+  "pool_address": "0xaA683fd3Ae3033E0F3ffbA14619e5371057740B7",
+  "frequency": 18
+}, {
+  "pool_address": "0x959C7D5706AC0B5a29F506a1019Ba7F2a1C70c70",
+  "frequency": 18
+}, {
+  "pool_address": "0x3CD80800A1403A96C4c8AA28CC291CB8cd6442b3",
+  "frequency": 18
+}, {
+  "pool_address": "0xD050430dd432876cF5622fF60c4Dc106b64fA753",
+  "frequency": 18
+}, {
+  "pool_address": "0xfFB0802A54F3dd0AF497E50637f934e96159D7DC",
+  "frequency": 18
+}, {
+  "pool_address": "0xeE9F3E8c9fFcc656c25e8ee46DB2175eec0Baa5e",
+  "frequency": 18
+}, {
+  "pool_address": "0xE229d6FdA9cca314d4718f5b95E456e43C557F73",
+  "frequency": 18
+}, {
+  "pool_address": "0x31A08DFE94e9086dA6F34d418A20A66c691d6aD7",
+  "frequency": 18
+}, {
+  "pool_address": "0x3BCf665BD1B05d8286982d7137D5b4e271434a3C",
+  "frequency": 18
+}, {
+  "pool_address": "0x26f187027e57f5C444944a6e1C44D64ffCb9bb18",
+  "frequency": 18
+}, {
+  "pool_address": "0x8AFA8bfd515D6cDc3933A536705141F2dF13b1d5",
+  "frequency": 18
+}, {
+  "pool_address": "0x03260312A37E73d3687E35b9D2F42795C3150257",
+  "frequency": 18
+}, {
+  "pool_address": "0x018Bece854B7c2eF0172bee9003cD0f46516C717",
+  "frequency": 18
+}, {
+  "pool_address": "0xc2cE902e9C97e142D11C124422252AA869F12718",
+  "frequency": 18
+}, {
+  "pool_address": "0x07b993530C3E987A0D38D52aF1CE9301C0EC0BCc",
+  "frequency": 18
+}, {
+  "pool_address": "0xc4285F00606c9BB0CF00f38b338cA8cDb7f3d7Da",
+  "frequency": 18
+}, {
+  "pool_address": "0x3c30d38ec285BBb5D7E805e140B5Ca75509ce213",
+  "frequency": 17
+}, {
+  "pool_address": "0x151CcB92bc1eD5c6D0F9Adb5ceC4763cEb66AC7f",
+  "frequency": 17
+}, {
+  "pool_address": "0xc789130A5b127449F439D17267744d24d69a5876",
+  "frequency": 17
+}, {
+  "pool_address": "0x8fe199d58EBBeC1C9C8dC45C9961Ce3Ac33E939C",
+  "frequency": 17
+}, {
+  "pool_address": "0x85218527945d48167A682e277867F1539AD00068",
+  "frequency": 17
+}, {
+  "pool_address": "0x885Bed4dd2286da809C1F5432c80eACD696CBe4C",
+  "frequency": 17
+}, {
+  "pool_address": "0xf7849D0852FC588210B9C0d8b26F43C0c9bc1470",
+  "frequency": 17
+}, {
+  "pool_address": "0xf44876Dbfa10609fCdd68CB4122C3A6E1D4aCd8f",
+  "frequency": 17
+}, {
+  "pool_address": "0x7939639C322c641978b970E9940051360074B072",
+  "frequency": 17
+}, {
+  "pool_address": "0xE4e86C6805884736C0faEa1e559c51F37Da15812",
+  "frequency": 17
+}, {
+  "pool_address": "0xea4591D8422fF050b7ad30D172708F45A6bEB8e4",
+  "frequency": 17
+}, {
+  "pool_address": "0x9bDC7dFd19b75B023E28BBB8e197295C51ce55e4",
+  "frequency": 17
+}, {
+  "pool_address": "0xa063432F32611c3e1313Eb3c99bC9CB7a6d6d4bF",
+  "frequency": 17
+}, {
+  "pool_address": "0x3b6A79B913430A2c883e59F03Ff62AA9C9c3d189",
+  "frequency": 17
+}, {
+  "pool_address": "0x62F1BD5d039A03b75460B412305EC877a54f7453",
+  "frequency": 17
+}, {
+  "pool_address": "0x705a5bf576599D791aAE04F6A1faC37E204b9961",
+  "frequency": 17
+}, {
+  "pool_address": "0x77417fe978e3C196b9640A99A705325047AC8F12",
+  "frequency": 17
+}, {
+  "pool_address": "0x6A42cF0c3a88bAf8b742633DBe1bCc1C5b48e8BF",
+  "frequency": 17
+}, {
+  "pool_address": "0x8f4bE5082589aCeD7D5b8792beaBb01c538122CD",
+  "frequency": 17
+}, {
+  "pool_address": "0x244bC10A72De68822b4c3b3b6196361d5cA83C1a",
+  "frequency": 17
+}, {
+  "pool_address": "0xFd73D53CE0B4c6D20F149D9a8563CCE6d2E425FA",
+  "frequency": 17
+}, {
+  "pool_address": "0xfb97B6be04ceA13Bd830be5AD3B0Eacf7C75345B",
+  "frequency": 17
+}, {
+  "pool_address": "0x7b87C9c57a492c17564f8AA983a705A548D33540",
+  "frequency": 17
+}, {
+  "pool_address": "0x9689F45BD38ED72d52954a690Aa7171c5ed97C8d",
+  "frequency": 17
+}, {
+  "pool_address": "0xAdcbB7AD214C3b70eD8d1f9D5231ceBe78f963fc",
+  "frequency": 17
+}, {
+  "pool_address": "0xE3Af70369478721BABAE89De4c36D2D42E93f1Ba",
+  "frequency": 17
+}, {
+  "pool_address": "0x930b5967d1CBc46B3f0878b2fa53B43767aa88E3",
+  "frequency": 17
+}, {
+  "pool_address": "0xe6ca7A3d2e5725229c0f4C49975DF3256D3e5e7c",
+  "frequency": 17
+}, {
+  "pool_address": "0xf9d51E4602A72CcE185F990F4D8Df79EF777092c",
+  "frequency": 17
+}, {
+  "pool_address": "0xB05EB6a5d4801534c166ec7d934fA7e68b753811",
+  "frequency": 17
+}, {
+  "pool_address": "0xc8C585F778ebcA9FCceb707B376C82Ba49C37764",
+  "frequency": 16
+}, {
+  "pool_address": "0x884aCcD11c12104DbD273B97159002486489c0CA",
+  "frequency": 16
+}, {
+  "pool_address": "0xAF585783337434FeE47C9abfBD737156f9a84Dd1",
+  "frequency": 16
+}, {
+  "pool_address": "0x2ea336fd2F215EEA475F113EB57558C5EaBd29C6",
+  "frequency": 16
+}, {
+  "pool_address": "0x68a70d80424a3f558873a0c467C554bcB723b227",
+  "frequency": 16
+}, {
+  "pool_address": "0xA20C7017615C09A166d36e2BaeB22e37108C8Edf",
+  "frequency": 16
+}, {
+  "pool_address": "0x9b3423373E6e786C9AC367120533abe4Ee398373",
+  "frequency": 16
+}, {
+  "pool_address": "0x43966B0C7D87d4060E7FDD15b8Eb79854Eba3c28",
+  "frequency": 16
+}, {
+  "pool_address": "0x5A6799c11AFb8Aa3B766f354d2d9863dDa118553",
+  "frequency": 16
+}, {
+  "pool_address": "0x695b30d636e4F232d443af6a93dF95AFD2FF485C",
+  "frequency": 16
+}, {
+  "pool_address": "0x9c213C491caf6d199f4A6ca9106dD50D4B7c9c0d",
+  "frequency": 16
+}, {
+  "pool_address": "0x9bb352ecaFA7b3e24b2C764A0480ddD1Da3C7ec9",
+  "frequency": 16
+}, {
+  "pool_address": "0xcdB136a1f41b5b078bB58882080D34DDA9D2062f",
+  "frequency": 16
+}, {
+  "pool_address": "0x3efB74CD6d00bBE476c6FE3cA7C2851321B56994",
+  "frequency": 16
+}, {
+  "pool_address": "0x28Fe5B9f736b6BE9f360e4E6eF91DA375Ff55983",
+  "frequency": 16
+}, {
+  "pool_address": "0x9532836fbaff450028202c814ABC8FF0F4B4B624",
+  "frequency": 16
+}, {
+  "pool_address": "0x74Bddcb5bf0A2A96F0516a888A98A5f8cdf99D65",
+  "frequency": 16
+}, {
+  "pool_address": "0x7d54B5CA71e5cE4e7B1c958419005C8F0dA1432c",
+  "frequency": 16
+}, {
+  "pool_address": "0xF1e31c8f8eF886581ff1AB6E1FF9AC1E2828d5eB",
+  "frequency": 16
+}, {
+  "pool_address": "0xe4e016B87A77F56F5dd34872e0C50B34E972E8A8",
+  "frequency": 16
+}, {
+  "pool_address": "0xbEDA528640Be02b4bba2C2A58246dA67Aba41fF4",
+  "frequency": 16
+}, {
+  "pool_address": "0x8543A9f6Cb4445a334b4999699f146cA27232a99",
+  "frequency": 16
+}, {
+  "pool_address": "0xbFF7FB5Be070cD6CCA9Deba8dfe1CC449EfB77aD",
+  "frequency": 16
+}, {
+  "pool_address": "0x67A628809C4e7f357CB3900A57db3ADe9F2BD570",
+  "frequency": 16
+}, {
+  "pool_address": "0x6273292Ea899a9b99420776C40dE66734f2a313a",
+  "frequency": 16
+}, {
+  "pool_address": "0x8102D8Dc9Af0da720f3C0E3Bc5629aDD93581bb4",
+  "frequency": 16
+}, {
+  "pool_address": "0xECFDd46dB43c49639D15D531458fF401ed836664",
+  "frequency": 16
+}, {
+  "pool_address": "0x86F7d089779B293ECBec8F8f8e71eDb150111Fc1",
+  "frequency": 16
+}, {
+  "pool_address": "0xFf4810C22A723d858235b5fabe526Bfcb8E4Af01",
+  "frequency": 16
+}, {
+  "pool_address": "0xFCE7f76d0D0bA70Cd44d6B9B5Eac55327E23D79D",
+  "frequency": 16
+}, {
+  "pool_address": "0x6562e3766127B707c7Adcb8C87E3c8c70575136C",
+  "frequency": 16
+}, {
+  "pool_address": "0x88B81BC7f6Dd4032eD626f452d66028eCD50E64a",
+  "frequency": 15
+}, {
+  "pool_address": "0x64B7139167C2e680F132737CAe3D7c3a0e843CeE",
+  "frequency": 15
+}, {
+  "pool_address": "0xbc8dB50150d6A4eD42486662a19ef5D305e7705b",
+  "frequency": 15
+}, {
+  "pool_address": "0xcb1Abb2731a48D8819f03808013C0a0E48D9B3d9",
+  "frequency": 15
+}, {
+  "pool_address": "0x6981449dDaa030f83bc5AC9fde1c19544521906e",
+  "frequency": 15
+}, {
+  "pool_address": "0xB90326664Bae75AD7fA889D07965eEC7d0fbe70D",
+  "frequency": 15
+}, {
+  "pool_address": "0x5615Af7746f6c6dA1c8B9B2F17c27604Fb5b5dB9",
+  "frequency": 15
+}, {
+  "pool_address": "0x1728ed5E049d6Dd358e568B554A766D919E61677",
+  "frequency": 15
+}, {
+  "pool_address": "0x8d273d572b17fC4bB5b60f824dd264fA1B316ad9",
+  "frequency": 15
+}, {
+  "pool_address": "0x2F8378DA2B0D2cED856912D6fB1fc2B2DC2F1400",
+  "frequency": 15
+}, {
+  "pool_address": "0xacee743763F5A310005663c231192bDd7aBf2A3F",
+  "frequency": 15
+}, {
+  "pool_address": "0x0E85672AC5D6DA2Dc6A6a6f4449d1BE28aa14bd1",
+  "frequency": 15
+}, {
+  "pool_address": "0xD439983d446a513F63555E8F3553b269DA457cb4",
+  "frequency": 15
+}, {
+  "pool_address": "0x292b739900E5d877b24848211a3ADAC97a04166f",
+  "frequency": 15
+}, {
+  "pool_address": "0xFB9EE80Ae8cF68bCaef74dFcD4675911E101Eee5",
+  "frequency": 15
+}, {
+  "pool_address": "0x95EBefA2e09e23a76CF7545b841bb6401AE31Bb1",
+  "frequency": 15
+}, {
+  "pool_address": "0x5786512d5cCE703f0c261bCc7CE0a1cf8C5B1C1D",
+  "frequency": 15
+}, {
+  "pool_address": "0x1B35976c2721D02391744DCA0F8450e1171B2172",
+  "frequency": 15
+}, {
+  "pool_address": "0x1CB6837d007cA8Af153747E1a32154C77c2aC640",
+  "frequency": 15
+}, {
+  "pool_address": "0x89ACB02308d78EE1e2173b877F3879CD53FeB65D",
+  "frequency": 15
+}, {
+  "pool_address": "0x4672Bd2F9147f86e01252Bda14F737dd82134c17",
+  "frequency": 15
+}, {
+  "pool_address": "0x2cD1C64C35Fb33306CfD5325487EeD7D9DEC9d78",
+  "frequency": 15
+}, {
+  "pool_address": "0x80967fC0A09cf2bdfeB42AEc63d8D43d1980bD2a",
+  "frequency": 15
+}, {
+  "pool_address": "0x26c5FB525e893af5A04f5b7c2e450b604B3512d1",
+  "frequency": 15
+}, {
+  "pool_address": "0xAC28976571d42fCeb24eee54EC0D0f68399A7C81",
+  "frequency": 15
+}, {
+  "pool_address": "0xC49Eb33CeC7297D912cB41aD72359A94a809F4df",
+  "frequency": 15
+}, {
+  "pool_address": "0x78C21d0d55e1bDc8a804B07F509bcdf505233641",
+  "frequency": 15
+}, {
+  "pool_address": "0xf185FC9c0624009AF8Cf3ab13885E6604CD93469",
+  "frequency": 15
+}, {
+  "pool_address": "0xEBc812D00c99FFc77bC8B16744B96f3730f1c8E8",
+  "frequency": 15
+}, {
+  "pool_address": "0xFE7C6389012B4841F28c230D1c69441893091e3b",
+  "frequency": 15
+}, {
+  "pool_address": "0x8104204A3803f8940087AC1784C8F81892f7ad2b",
+  "frequency": 15
+}, {
+  "pool_address": "0xB9C6FBFBe7CFFDa5EAF7b26A034c86F1f3dd20A2",
+  "frequency": 15
+}, {
+  "pool_address": "0xa8Ad11B1d7dE421Eecfc7d45A511D19967f36921",
+  "frequency": 15
+}, {
+  "pool_address": "0x844EB5C280F38c7462316AaD3F338eF9bDa62668",
+  "frequency": 14
+}, {
+  "pool_address": "0xb02045AD2CA16E8f4675088140e369260BB280c8",
+  "frequency": 14
+}, {
+  "pool_address": "0xCab82C42B5195624671b92b1b0D91adf171f103c",
+  "frequency": 14
+}, {
+  "pool_address": "0x965E3A3007C02162D11AD3Db98d475b8B9c690F7",
+  "frequency": 14
+}, {
+  "pool_address": "0xE2c5D82523E0E767B83D78E2bFc6FcD74D1432Ef",
+  "frequency": 14
+}, {
+  "pool_address": "0x545b7Db6632ab230FD84897488291dEF7912319c",
+  "frequency": 14
+}, {
+  "pool_address": "0xE6c9774F18C11Ebe7B993093DA432bcc422bec26",
+  "frequency": 14
+}, {
+  "pool_address": "0x4c22977AA3eA92dD5b71ee48406cd31A55AB1644",
+  "frequency": 14
+}, {
+  "pool_address": "0xb9EBF49F3C12A3f9aA18f4Ff0383C0EC29750070",
+  "frequency": 14
+}, {
+  "pool_address": "0x0A0b2c28470bF68A6144DF04b08360559fb4aAf1",
+  "frequency": 14
+}, {
+  "pool_address": "0x3a4f800741bc6917eDED1E748AB1a6Ea481434Cf",
+  "frequency": 14
+}, {
+  "pool_address": "0x8bDEf1a57652F4cc24Be447732b7F1484c7C41eA",
+  "frequency": 14
+}, {
+  "pool_address": "0x8b6eD5Fa776F10787F1171bDEea4f3c40974DF6E",
+  "frequency": 14
+}, {
+  "pool_address": "0xD8de6af55F618a7Bc69835D55DDC6582220c36c0",
+  "frequency": 14
+}, {
+  "pool_address": "0xbDB1152401975E1e67066013d193d57E608d9Bc5",
+  "frequency": 14
+}, {
+  "pool_address": "0x9C94B712A5677e94c31d6C081eed1b370306f0cE",
+  "frequency": 14
+}, {
+  "pool_address": "0xc73d0086cB5604E95cDC4c755Af61b98E240A77e",
+  "frequency": 14
+}, {
+  "pool_address": "0x6b14940cf02f63d13caAb9f478622aEb6DC55697",
+  "frequency": 14
+}, {
+  "pool_address": "0xf33270A870E3C20B6Dde7DD57FAf9D5Ee5e7fd8d",
+  "frequency": 14
+}, {
+  "pool_address": "0x930256869F5b7aBb9e5ea7e40fF536A2061eAaC5",
+  "frequency": 14
+}, {
+  "pool_address": "0x14775b954038f48D79A5d7b350f674a58D46E825",
+  "frequency": 14
+}, {
+  "pool_address": "0x9Fb1a1a98F995b2B3362a1238De1366BFa790006",
+  "frequency": 14
+}, {
+  "pool_address": "0xcaC6DC20B19db3d468E1B0F8BC6572F552cdd468",
+  "frequency": 14
+}, {
+  "pool_address": "0x38a29467E7b63C61455346e6711e1BC6c319Db0A",
+  "frequency": 14
+}, {
+  "pool_address": "0x73C173EEc27413FAE8a152b7f10956eD938936Ad",
+  "frequency": 14
+}, {
+  "pool_address": "0xb73C081238B2a6d120AA61eF6BD23e73faC3824E",
+  "frequency": 14
+}, {
+  "pool_address": "0xbf51B1684aBE480c142765d9F816F485975F4c87",
+  "frequency": 14
+}, {
+  "pool_address": "0xaEb3fF74Cd629591C005b07974f55DDc3593EFA3",
+  "frequency": 14
+}, {
+  "pool_address": "0x307474FFee9ab6Ad9caDBfe29f095DDdeFF03C19",
+  "frequency": 14
+}, {
+  "pool_address": "0x54D5b4E2b43A6457712BC8948b07FdA3292C9601",
+  "frequency": 14
+}, {
+  "pool_address": "0xeD5521fc87E11f09bFcbFDAB98db8F4A7C4F802b",
+  "frequency": 14
+}, {
+  "pool_address": "0xe5a6dd22C481f14c74B0e7f665535197fe8A5841",
+  "frequency": 14
+}, {
+  "pool_address": "0xd50822241F45b16191c0B40Dd4DEB9F39af410E9",
+  "frequency": 14
+}, {
+  "pool_address": "0xBc061a59e2535B897C5D7Fb52DD179fEE3347705",
+  "frequency": 14
+}, {
+  "pool_address": "0x2a10b779105aBBF81501e72656AB4DA0C27DcE39",
+  "frequency": 14
+}, {
+  "pool_address": "0xe9c1C2cec90ec66F70E190B604294bE3B367703e",
+  "frequency": 14
+}, {
+  "pool_address": "0x490A1914e4d38c5757E82d87c0ADb58399dea032",
+  "frequency": 14
+}, {
+  "pool_address": "0x269Bd600dAD7Bb21fB51F5Aa94836Fc55Eb4EDC1",
+  "frequency": 14
+}, {
+  "pool_address": "0xe560fbFc271b987EF8A318A0af6d519e61DB918E",
+  "frequency": 14
+}, {
+  "pool_address": "0x421398bBd99de132F77d5f767C50de58640C6eEe",
+  "frequency": 14
+}, {
+  "pool_address": "0x11B7a6bc0259ed6Cf9DB8F499988F9eCc7167bf5",
+  "frequency": 13
+}, {
+  "pool_address": "0x763d3b7296e7C9718AD5B058aC2692A19E5b3638",
+  "frequency": 13
+}, {
+  "pool_address": "0xCD8286b48936cDAC20518247dBD310ab681A9fBf",
+  "frequency": 13
+}, {
+  "pool_address": "0x2B8574482d62D8DF670DfD3bE15F2f092941284E",
+  "frequency": 13
+}, {
+  "pool_address": "0xe3170D65018882a336743a9c396C52eA4B9c5563",
+  "frequency": 13
+}, {
+  "pool_address": "0x53606dA0b764E262d195c90C246eB3F4448523f8",
+  "frequency": 13
+}, {
+  "pool_address": "0x49727bbe3ba46AeB1058749Ed2741a42fd1ccdA8",
+  "frequency": 13
+}, {
+  "pool_address": "0x7c0c4735211c0f898A2A5B7E74aD7a54cF7DC4C1",
+  "frequency": 13
+}, {
+  "pool_address": "0x9d87494B184286986B4358cE9217f98645ed3418",
+  "frequency": 13
+}, {
+  "pool_address": "0x20faD0953846f72c02D0303c13019082F29D6E58",
+  "frequency": 13
+}, {
+  "pool_address": "0xc3f6B81FB9e6DB259272026601689e383f94c0B0",
+  "frequency": 13
+}, {
+  "pool_address": "0xb378846C2f1C2D1A1Da4a7292CA397a784F92775",
+  "frequency": 13
+}, {
+  "pool_address": "0x6916f79669F745aeBD82433583c85665bfaE6FBB",
+  "frequency": 13
+}, {
+  "pool_address": "0xB8f3e1AD595BEF5CC6174b5Ef888010e230f3efa",
+  "frequency": 13
+}, {
+  "pool_address": "0xD8C7B685caE56609e93A7af77A06cC98db960C9e",
+  "frequency": 13
+}, {
+  "pool_address": "0x7dd3d8087a6aE84D80C1b294ed87183e67Cbd872",
+  "frequency": 13
+}, {
+  "pool_address": "0xA16B6f91a89B0537aa4E82023e27c3d88f765B8d",
+  "frequency": 13
+}, {
+  "pool_address": "0xF4F5e1Ea0607DEA1cd55561Ef5a1d6191CD7A8e4",
+  "frequency": 13
+}, {
+  "pool_address": "0xA36e89Eb7F095F6e23209C507327A8A9C4E2364f",
+  "frequency": 13
+}, {
+  "pool_address": "0xa06F19193c76De8e923f1418D1Da8949a409A00b",
+  "frequency": 13
+}, {
+  "pool_address": "0x143B650c40AA4581FAF383F0Bc14f3835D07eDE2",
+  "frequency": 13
+}, {
+  "pool_address": "0xd3Fc008c9919a2bff30fEC88Db75A2b661629D4B",
+  "frequency": 13
+}, {
+  "pool_address": "0x5ba5b55F18CaB78F83151744F1f3c7E6A30D610B",
+  "frequency": 13
+}, {
+  "pool_address": "0x4d46ceF43b54902E598B093E2946e1966eded87e",
+  "frequency": 13
+}, {
+  "pool_address": "0xC4Cc7AcaFE7B2bFFD4F00f1F3E0Fab039a5556a2",
+  "frequency": 13
+}, {
+  "pool_address": "0x972F79fEDf3184808c1947BAC97EB1BF8DDD80aD",
+  "frequency": 13
+}, {
+  "pool_address": "0x5D262471826aB3f8169a7D57D999eC4c67CEcA22",
+  "frequency": 13
+}, {
+  "pool_address": "0xC197AC7C1541472DB878c900d3f4e605041d2d50",
+  "frequency": 13
+}, {
+  "pool_address": "0x9075ad69A5075552b2E6e0d89C8A2DDF66adE45D",
+  "frequency": 13
+}, {
+  "pool_address": "0xaec81A42dBc915cbcAe91233D9084283817e6CA3",
+  "frequency": 13
+}, {
+  "pool_address": "0xD1e38C049aF4337C4C205a23816a1acC2ce529fc",
+  "frequency": 13
+}, {
+  "pool_address": "0x8c2D8d529696f895962099757884C6577BA7075C",
+  "frequency": 13
+}, {
+  "pool_address": "0x4F4F6d20A18Cc48064644617C08c8329025d09a3",
+  "frequency": 13
+}, {
+  "pool_address": "0x4F906D7DFcF319fEdc668980579Edf203762ea1A",
+  "frequency": 13
+}, {
+  "pool_address": "0x73B6d77c2428d12cfc2bcE450089B3B484E0EB6E",
+  "frequency": 13
+}, {
+  "pool_address": "0xa5CC517bD606AC2Cb6936A38CbC665C34DDdc06a",
+  "frequency": 13
+}, {
+  "pool_address": "0xA52FaD5484d3F10fbeCEb5cb20F4B0630304b283",
+  "frequency": 13
+}, {
+  "pool_address": "0xfB9bEcD0c181f19b107404E1C22817C33A35069F",
+  "frequency": 13
+}, {
+  "pool_address": "0x190a6e305990f202ac98DC3A76500F339a35982d",
+  "frequency": 13
+}, {
+  "pool_address": "0xdB35bbb262b0Fd7E04500B048aF7E6e2e08112f0",
+  "frequency": 13
+}, {
+  "pool_address": "0xa9dd1e3A961253796890715e1c7AAE287403c38A",
+  "frequency": 13
+}, {
+  "pool_address": "0x97Ec71Be05EbaC6709eec137c222998644ec293C",
+  "frequency": 13
+}, {
+  "pool_address": "0x680f67eba28F6e1Da177dd1E461AbEE212A4B65D",
+  "frequency": 13
+}, {
+  "pool_address": "0x5eC6E12B26C86915a23D4ecc4680772312B8d939",
+  "frequency": 13
+}, {
+  "pool_address": "0x2501748C49aa3836db5ae8e9e36257d342867f5B",
+  "frequency": 13
+}, {
+  "pool_address": "0x96cd2a6c2877Bc2E617dBCb8e1488afADf0f1185",
+  "frequency": 13
+}, {
+  "pool_address": "0x1620e52f9c86B3C48De761e68ac7480E30aADeAC",
+  "frequency": 13
+}, {
+  "pool_address": "0xbFa33Fd6175fa08eD56FfA5B4C9327daA8E42399",
+  "frequency": 13
+}, {
+  "pool_address": "0x81f1D91AEf3b11DaBEed3A752F0be639725496A1",
+  "frequency": 12
+}, {
+  "pool_address": "0x9DeDf5bb0d5921C057f2e62Aa36Ce48bca127f7c",
+  "frequency": 12
+}, {
+  "pool_address": "0x5d138d840df5C8c762F5A3ba80900832c9a1DB50",
+  "frequency": 12
+}, {
+  "pool_address": "0x7A0FBcC466E6830d3a813826ddeeC608978bde2f",
+  "frequency": 12
+}, {
+  "pool_address": "0x5eCEf3b72Cb00DBD8396EBAEC66E0f87E9596e97",
+  "frequency": 12
+}, {
+  "pool_address": "0xC57cac126676471C547d2d9b1c283e56EF1B28f4",
+  "frequency": 12
+}, {
+  "pool_address": "0x2519042aa735eDb4688a8376d69D4BB69431206c",
+  "frequency": 12
+}, {
+  "pool_address": "0x0a9f8B90D2bC2B126fcEB93ee747C2b707e23764",
+  "frequency": 12
+}, {
+  "pool_address": "0xC1dF8037881df17Dc88998824b9aeA81c71bbB1b",
+  "frequency": 12
+}, {
+  "pool_address": "0x840DEEef2f115Cf50DA625F7368C24af6fE74410",
+  "frequency": 12
+}, {
+  "pool_address": "0xe69f0EE0e3dd1a04b41580d310F57B408aCDE87e",
+  "frequency": 12
+}, {
+  "pool_address": "0x94981F69F7483AF3ae218CbfE65233cC3c60d93a",
+  "frequency": 12
+}, {
+  "pool_address": "0xe089E490aBa7f4A7fEB3a73b8F4713631FaBbaeB",
+  "frequency": 12
+}, {
+  "pool_address": "0x9d52d8a9f2fBf430fd634a21267B4414049C0064",
+  "frequency": 12
+}, {
+  "pool_address": "0x9e0Fc414E8d5C45b0890C32aB9329Ac90b3ab534",
+  "frequency": 12
+}, {
+  "pool_address": "0x7D45a2557bECd766A285d07a4701f5c64D716e2f",
+  "frequency": 12
+}, {
+  "pool_address": "0x7F808fD904FFA3eb6A6F259e6965Fb1466A05372",
+  "frequency": 12
+}, {
+  "pool_address": "0xC02D0fA00C0bEC48186026c71da2E54Ebf680139",
+  "frequency": 12
+}, {
+  "pool_address": "0xd1361d49c5FcC6Ab0b8E4CabcC312931A61b41B7",
+  "frequency": 12
+}, {
+  "pool_address": "0xa7c473B8367627eB59425b9f65697C264A3651da",
+  "frequency": 12
+}, {
+  "pool_address": "0x105E9ae88e954238eD7168C5E5bD5216d824E6f7",
+  "frequency": 12
+}, {
+  "pool_address": "0x6727e942B562644Ae3F34Cc23bE1e2563261cdD3",
+  "frequency": 12
+}, {
+  "pool_address": "0x91d77ffE893497Ba4e31FE446756C7fF13B8127F",
+  "frequency": 12
+}, {
+  "pool_address": "0x7E0FC516770338Ba6722Bac1E05F48c50FC99D73",
+  "frequency": 12
+}, {
+  "pool_address": "0x1215225B1ccCB4b46a42F930713688da3cd0A279",
+  "frequency": 12
+}, {
+  "pool_address": "0x044586A024A8406B77eCb620A129Bd73c56DC65f",
+  "frequency": 12
+}, {
+  "pool_address": "0xC863e4549e51466C4cD815feE42d77EA4871DFFF",
+  "frequency": 12
+}, {
+  "pool_address": "0x3602cD84D3A9D6F997788537EC180fcA2DB0BBAe",
+  "frequency": 12
+}, {
+  "pool_address": "0xD60E3f1f050cD4995CbdD7D603Bb87c7F40779b8",
+  "frequency": 12
+}, {
+  "pool_address": "0x2006DD53D3f16B6796741cf5CBAE764c397D9bFD",
+  "frequency": 12
+}, {
+  "pool_address": "0xa69B805Ea33395CF0bCcAfAEA4bDb099236B8f1E",
+  "frequency": 12
+}, {
+  "pool_address": "0x4856296b9F4558eF8d20ee5b623349b3a040b335",
+  "frequency": 12
+}, {
+  "pool_address": "0x7c3C36FAF272481Cda9fCfa413d1EA98F61c20C0",
+  "frequency": 12
+}, {
+  "pool_address": "0x6FC7eb5aaC0D4d990434754B44C61ddb8641747c",
+  "frequency": 12
+}, {
+  "pool_address": "0x04Ba6EA823CEB5162a63f5cFE4051ED20e7d032b",
+  "frequency": 12
+}, {
+  "pool_address": "0xb4aa05B6970d2B7314a37Fa72018a93333787C2E",
+  "frequency": 12
+}, {
+  "pool_address": "0xBA50DfeD5471C98639Ff9774e494D212944c1F57",
+  "frequency": 12
+}, {
+  "pool_address": "0x2C8147Aa91Cc8a8ae478bcd5560CdfcE50896073",
+  "frequency": 12
+}, {
+  "pool_address": "0xD441C22E0d434650d6FaF69D44A52B7f246BF103",
+  "frequency": 12
+}, {
+  "pool_address": "0x16962b39a52413ee2881D838D64485a3CA50AD04",
+  "frequency": 12
+}, {
+  "pool_address": "0x64B37C5378AC0c65CB6aC757d9D5e89721F0eeef",
+  "frequency": 12
+}, {
+  "pool_address": "0x00aBeACFE0beD1aC0cB7969b0a43B6B55c99C5da",
+  "frequency": 12
+}, {
+  "pool_address": "0xD7F70A72e1693804a42Afd9D73c77b2f1F8f8F6d",
+  "frequency": 11
+}, {
+  "pool_address": "0x13Dfb248926E35B45218a854fcE2379F3825a790",
+  "frequency": 11
+}, {
+  "pool_address": "0xbaEC0E18C770993ffb1175FEf493B5113CC6E32d",
+  "frequency": 11
+}, {
+  "pool_address": "0x92C99af4193Dc213c895f7c911507d92DD4c6Ee1",
+  "frequency": 11
+}, {
+  "pool_address": "0x79DC831D556954FBC37615A711df16B0b61Df083",
+  "frequency": 11
+}, {
+  "pool_address": "0x715a3cEAc0D039d674F50b07804592e87e8C6D77",
+  "frequency": 11
+}, {
+  "pool_address": "0x6e064484BcF7985BF164cD04BF67F4728d651d72",
+  "frequency": 11
+}, {
+  "pool_address": "0x119F1BbB25E8894929229b592A98a328e039aE96",
+  "frequency": 11
+}, {
+  "pool_address": "0x1910E073709Ee97ed0898273C4D58338a2A4AE94",
+  "frequency": 11
+}, {
+  "pool_address": "0xeB7AbE950985709c34af514eB8cf72f62DEF9E75",
+  "frequency": 11
+}, {
+  "pool_address": "0x3E04d683f7187BC0293e05006203AcCB29311767",
+  "frequency": 11
+}, {
+  "pool_address": "0xc39E83fE4E412A885c0577C08eB53BdB6548004a",
+  "frequency": 11
+}, {
+  "pool_address": "0x27DbAbCC58F25063526Fa414C5f852B3B505Cf76",
+  "frequency": 11
+}, {
+  "pool_address": "0xf3b8C79f8B6c34948a225335Dc125F1E2d6Ad92D",
+  "frequency": 11
+}, {
+  "pool_address": "0x590E245F4B927b0f32934D95edc1e619fb204817",
+  "frequency": 11
+}, {
+  "pool_address": "0xE0397c1C28e587b55ad18C126cDCc5CDEeAffe41",
+  "frequency": 11
+}, {
+  "pool_address": "0xBC5f1d2A0C411AAdfB95557365ABfDd4633Ea882",
+  "frequency": 11
+}, {
+  "pool_address": "0x99132b53aB44694eeB372E87bceD3929e4ab8456",
+  "frequency": 11
+}, {
+  "pool_address": "0xBD35130bd84A3f016D1b6AF257E0e0544887A42A",
+  "frequency": 11
+}, {
+  "pool_address": "0xC4522C2FA4627F9dCcAa820305B9c2E9AC7d9f61",
+  "frequency": 11
+}, {
+  "pool_address": "0xB6085156dF45d4E1d7d434B5Db98AA9C8c208a74",
+  "frequency": 11
+}, {
+  "pool_address": "0x8fe2943948868F519Ef60C594d8a79d991BBa68D",
+  "frequency": 11
+}, {
+  "pool_address": "0x8F417B9DfB0F3775b99F088e37D8E84c9925A7eF",
+  "frequency": 11
+}, {
+  "pool_address": "0xd894828415B2bd3D348d1BBE09Ef8041E976e7E0",
+  "frequency": 11
+}, {
+  "pool_address": "0xe7817df45Df06e89c3D68e5a5C711f8F3aA95500",
+  "frequency": 11
+}, {
+  "pool_address": "0x3A0f221eA8B150f3D3d27DE8928851aB5264bB65",
+  "frequency": 11
+}, {
+  "pool_address": "0xEA622aCCD0De1f8a15F668773d040Ff6b6399617",
+  "frequency": 11
+}, {
+  "pool_address": "0xa75841Dc610296D01b783cAaBB931E10Ead28c9d",
+  "frequency": 11
+}, {
+  "pool_address": "0x3719D2fD6168719fDcAA702EfC25Be4f1a9Fe03A",
+  "frequency": 11
+}, {
+  "pool_address": "0xC34738E516C8F7224B1cbD12515eaC752099375D",
+  "frequency": 11
+}, {
+  "pool_address": "0x5c3eC2362c083545D5430985FcBE3527c187281c",
+  "frequency": 11
+}, {
+  "pool_address": "0x9b78B472806b0c20B6d6052cf6e9Ce628a6753c0",
+  "frequency": 11
+}, {
+  "pool_address": "0x385F01DE44903D2237099aE72802B70F9B25CCA5",
+  "frequency": 11
+}, {
+  "pool_address": "0x815B24c3bD57F44b21f0F4F184cfa5ab3f908F37",
+  "frequency": 11
+}, {
+  "pool_address": "0x8B3bdbeA29E642EF9c2C0a190E9a787bf9771eaa",
+  "frequency": 11
+}, {
+  "pool_address": "0x2F14b5316d7633e398e14D5Ee65103CD5c19C013",
+  "frequency": 11
+}, {
+  "pool_address": "0xd408Ab611F413B1088C044D74f171F9Cd24f17fa",
+  "frequency": 11
+}, {
+  "pool_address": "0x4A8325F94e6712977FB61E281F229Fdc2589Cf71",
+  "frequency": 11
+}, {
+  "pool_address": "0x14523BD21eeBFf85069bda524526674312C5E00b",
+  "frequency": 11
+}, {
+  "pool_address": "0x74944FDa1C5170d08320D9c6b1830d0cd19636f4",
+  "frequency": 11
+}, {
+  "pool_address": "0xB661410469A829828cAa7078727e39D31AF7b677",
+  "frequency": 11
+}, {
+  "pool_address": "0x7D5Cf88Db1654d7aF0db39f6a73Af19E8AD3C98E",
+  "frequency": 11
+}, {
+  "pool_address": "0x5214D02fC557d573cC5F205EcAC8BAe1c6eA512F",
+  "frequency": 11
+}, {
+  "pool_address": "0x3CD7369c3Eca7AB67fd7d1039BE42EddDE5d76CC",
+  "frequency": 11
+}, {
+  "pool_address": "0x3AFE44d83DF5be1c3a1D6f650C8896118Ff57144",
+  "frequency": 11
+}, {
+  "pool_address": "0x1E81BD6b4c6a4d3d447fCd833FA79d02f227694B",
+  "frequency": 11
+}, {
+  "pool_address": "0x25c2cF6d3C19af954cA0913D17B962503e5a63E4",
+  "frequency": 11
+}, {
+  "pool_address": "0x153D8c80E242435E6218F8B75C22d59d3aBec5f3",
+  "frequency": 11
+}, {
+  "pool_address": "0x3611f68C742863358A3A9744ffD371fFbeCF138E",
+  "frequency": 11
+}, {
+  "pool_address": "0x7294cB7F85d1b0Dc3710A9a6A0b2D5174c3e8276",
+  "frequency": 11
+}, {
+  "pool_address": "0x9F2E35C8e8f6Cd53E878513A09e65b89828159d7",
+  "frequency": 11
+}, {
+  "pool_address": "0xFA195465DFD06bB07ff3Ddc7d9686Ef39a84E54a",
+  "frequency": 11
+}, {
+  "pool_address": "0x8eAA18B3B87f838134771e7e11606Ab015fE39D4",
+  "frequency": 11
+}, {
+  "pool_address": "0xE0B6599eE2205309743E39317e498b5FCA1a7941",
+  "frequency": 11
+}, {
+  "pool_address": "0xfF58Fb8E1628e29fF7F5e26Df2477fdf15517826",
+  "frequency": 11
+}, {
+  "pool_address": "0xD1BC7202b242a84252A7F7E309C4aE6aFa347F0F",
+  "frequency": 11
+}, {
+  "pool_address": "0x2E37D7bCEd71BE15e4eF19fDC46BDa5506C723cC",
+  "frequency": 11
+}, {
+  "pool_address": "0xcd6e3bDd8C00D0D95268797a11dcfE72238B7E63",
+  "frequency": 11
+}, {
+  "pool_address": "0x37b20d6482280752D1841BB7578b60A76D295f3A",
+  "frequency": 11
+}, {
+  "pool_address": "0x9029A601c77F30B8c627fa66e9603Cb359A2a49B",
+  "frequency": 11
+}, {
+  "pool_address": "0x30e5660E7943E0499fF1ffa737FF9365025462e6",
+  "frequency": 11
+}, {
+  "pool_address": "0x5fe8eD0C401808dcf876AB018C78a0218655bcD1",
+  "frequency": 11
+}, {
+  "pool_address": "0x2D63C03A351260F7ECa49d5181e2ADD5f9ecBdA8",
+  "frequency": 11
+}, {
+  "pool_address": "0xfcFB3845Fd23BE28C7468aF74C015Bc780fE80f9",
+  "frequency": 11
+}, {
+  "pool_address": "0xeae91fD3aeee91105a779ED670C3446E2074918e",
+  "frequency": 11
+}, {
+  "pool_address": "0xA295C1301e063728d733F9FB2155448fFf9c70B7",
+  "frequency": 10
+}, {
+  "pool_address": "0x360b9726186C0F62cc719450685ce70280774Dc8",
+  "frequency": 10
+}, {
+  "pool_address": "0xbEb797f523b463500bDC94C8B9eA3d4D1790f773",
+  "frequency": 10
+}, {
+  "pool_address": "0x2E4784446A0a06dF3D1A040b03e1680Ee266c35a",
+  "frequency": 10
+}, {
+  "pool_address": "0x98841d25E7c84fB82e2F15556DA974d4d7a5f0C9",
+  "frequency": 10
+}, {
+  "pool_address": "0xB986a32F468EdaD2F2F890094Ea39aE484FBCaF4",
+  "frequency": 10
+}, {
+  "pool_address": "0x14424eEeCbfF345B38187d0B8b749E56FAA68539",
+  "frequency": 10
+}, {
+  "pool_address": "0x5598931BfBb43EEC686fa4b5b92B5152ebADC2f6",
+  "frequency": 10
+}, {
+  "pool_address": "0x33f6E97Ea6F5dfa6691176B33aD5677E08Fb6b38",
+  "frequency": 10
+}, {
+  "pool_address": "0x381fE4Eb128db1621647cA00965da3F9e09F4fAc",
+  "frequency": 10
+}, {
+  "pool_address": "0xB7865FA9d9579FD0e017Ef30456b2511bFb5cF6A",
+  "frequency": 10
+}, {
+  "pool_address": "0x531b6A4b3F962208EA8Ed5268C642c84BB29be0b",
+  "frequency": 10
+}, {
+  "pool_address": "0x05c70d5a1E36abC6Fb05CfdC562C1a094cA9E6f9",
+  "frequency": 10
+}, {
+  "pool_address": "0xaF627f2259d981a68449d4491F48c5ad9769BA7c",
+  "frequency": 10
+}, {
+  "pool_address": "0x7b4c9183cDa9D5e2B8F5CE8832D8B6c2Cb5725F6",
+  "frequency": 10
+}, {
+  "pool_address": "0x9507F5c18b0178BEA743727fF00F1619f97E2bfb",
+  "frequency": 10
+}, {
+  "pool_address": "0xa805F3198C70662bD59BdbE58910216E759005b3",
+  "frequency": 10
+}, {
+  "pool_address": "0x9359c87B38DD25192c5f2b07b351ac91C90E6ca7",
+  "frequency": 10
+}, {
+  "pool_address": "0x103b0fd723594814147a7E926B3FC848A696719B",
+  "frequency": 10
+}, {
+  "pool_address": "0x7bc5c9dE2DFe90CFE1e01967096915ba8ea1Bc53",
+  "frequency": 10
+}, {
+  "pool_address": "0x5Da9ebACf105AEedb62c7BCB1e0111a04aC2BB3e",
+  "frequency": 10
+}, {
+  "pool_address": "0x1390eB1e522F7231D10FF8e3df739cB5fC98F16A",
+  "frequency": 10
+}, {
+  "pool_address": "0x3F153545FA22CdDAd697156Bffe34DAc7bC5021A",
+  "frequency": 10
+}, {
+  "pool_address": "0xE60de835c8CEab5110C2F8fBD025C864bA8fFcCC",
+  "frequency": 10
+}, {
+  "pool_address": "0x9f306d91f4d818d411566F152c36855E5453483d",
+  "frequency": 10
+}, {
+  "pool_address": "0x05EaE243764A57B436Bb3144B02393C0aa7bA1c9",
+  "frequency": 10
+}, {
+  "pool_address": "0x33D1E8375B26BBab0E58b88c26D28CD62eebe55B",
+  "frequency": 10
+}, {
+  "pool_address": "0x924B45ECdD1CB51FF57eFc9196F8c3Ab39921166",
+  "frequency": 10
+}, {
+  "pool_address": "0x1b40be6375a9Fc412b0AF7d44F53e7F664713713",
+  "frequency": 10
+}, {
+  "pool_address": "0xA3413B0135E3733dCC1eb9aAAb0aD56CC83D8778",
+  "frequency": 10
+}, {
+  "pool_address": "0x7C29Fc690DBee5cba5EAd56766CB330803388Aa3",
+  "frequency": 10
+}, {
+  "pool_address": "0x85e926D6FFCD0b271905EB234E01E3e0dB102ea0",
+  "frequency": 10
+}, {
+  "pool_address": "0x090F4c5f0Fc835331Aab14d43F8F40A6Ee9bb83b",
+  "frequency": 10
+}, {
+  "pool_address": "0x93942ef488dFe290df509fa1763830A401d81a81",
+  "frequency": 10
+}, {
+  "pool_address": "0x1601b57C5Ab3a7a359A79282Ba0891F3B691C837",
+  "frequency": 10
+}, {
+  "pool_address": "0x1fafDa0090f5c3d48F7Ac800527C2fFF812BBd25",
+  "frequency": 10
+}, {
+  "pool_address": "0x5B2670C72D37d5b2Eb50bd4071a58aD748F0956A",
+  "frequency": 10
+}, {
+  "pool_address": "0x52AaCdF4bAE229A80D52A28A2615c1Cd27cC0968",
+  "frequency": 10
+}, {
+  "pool_address": "0x4c7697d798a124f95e9f6bbBC771D5760a940573",
+  "frequency": 10
+}, {
+  "pool_address": "0x606fdDaB185aa1dAf8e0963972035f92De91AD59",
+  "frequency": 10
+}, {
+  "pool_address": "0x545e6A7C4ECf55872aCA9b79Ad40AEc911229F23",
+  "frequency": 10
+}, {
+  "pool_address": "0x23865f04F54Cc9a2A5812707a66122fF764588Ce",
+  "frequency": 10
+}, {
+  "pool_address": "0xA9a48C5BB00Cf1e1Ac0752519A63798ec00b2033",
+  "frequency": 10
+}, {
+  "pool_address": "0x256bD88baf707EAaD1B73Dc8B2b8a5D599B45584",
+  "frequency": 9
+}, {
+  "pool_address": "0x7348873Da491071cAb8ece3947626335101DD2b9",
+  "frequency": 9
+}, {
+  "pool_address": "0xEad96f5f14e53C146A9650590ED5D458aB4fD746",
+  "frequency": 9
+}, {
+  "pool_address": "0x00C07A7E77C9ffA6E0E3C58790E0DCb81ceF89E1",
+  "frequency": 9
+}, {
+  "pool_address": "0xC410573Af188f56062Ee744cC3D6F2843f5bC13b",
+  "frequency": 9
+}, {
+  "pool_address": "0xE8b977aA5a9303fA94818441D78575e0f697aE72",
+  "frequency": 9
+}, {
+  "pool_address": "0x83a9F314C7025Bba470DCb3fcf0be4Ac3B7b623e",
+  "frequency": 9
+}, {
+  "pool_address": "0xfBa26C3F9C8eCeF989def3C5c8aD037487462d83",
+  "frequency": 9
+}, {
+  "pool_address": "0xa80964C5bBd1A0E95777094420555fead1A26c1e",
+  "frequency": 9
+}, {
+  "pool_address": "0xE6D370A3A308E443760CDD301F3AF61EAF268ce6",
+  "frequency": 9
+}, {
+  "pool_address": "0x7C2caefE7EF6F5EdF53CDcea8D60ea615f102E0c",
+  "frequency": 9
+}, {
+  "pool_address": "0x69373efEb3B3A39ae56105318b822C1f8A43594d",
+  "frequency": 9
+}, {
+  "pool_address": "0x8dB1b906d47dFc1D84A87fc49bd0522e285b98b9",
+  "frequency": 9
+}, {
+  "pool_address": "0x9496D107a4b90c7d18c703e8685167f90ac273B0",
+  "frequency": 9
+}, {
+  "pool_address": "0x43D1A02ffD1e2397C4C24148e4e19cC6EDD81A09",
+  "frequency": 9
+}, {
+  "pool_address": "0xa36aEA44C324B417e7d28c927Ea5838b77e46f2c",
+  "frequency": 9
+}, {
+  "pool_address": "0x262faf36239BaA6488C116f273C9b98A1F117Ad9",
+  "frequency": 9
+}, {
+  "pool_address": "0xedC5d54B823873F3bB143a06A5EF2d003C29a933",
+  "frequency": 9
+}, {
+  "pool_address": "0xCaAEaC7CefEE71b0Ae8056d55f41aF51c52e2Dee",
+  "frequency": 9
+}, {
+  "pool_address": "0x3F22cC272Ff2f801Ce0dcC4D016fD3AE12fB7C54",
+  "frequency": 9
+}, {
+  "pool_address": "0xdfE12fDe2e543A14D26d57D65D3d8632B86d0e6f",
+  "frequency": 9
+}, {
+  "pool_address": "0x70C337150e59CDA9F18Cc0A25aE4c78aC9A6f915",
+  "frequency": 9
+}, {
+  "pool_address": "0x1789f71c2Ae7686f607EF991c4114c8C6625F1cF",
+  "frequency": 9
+}, {
+  "pool_address": "0xF9ac5466d153B938ff7139906c329f8c591ce68C",
+  "frequency": 9
+}, {
+  "pool_address": "0x4B75395c221f3699563C56De7A7F76199EAe36f6",
+  "frequency": 9
+}, {
+  "pool_address": "0xf5D2c4209452c567705fe7DcC93DDCF61a63a100",
+  "frequency": 9
+}, {
+  "pool_address": "0xbf5105658f22bB6F88dDfd62bD41e113dc74A023",
+  "frequency": 9
+}, {
+  "pool_address": "0x7C3B1297Ac649B36547B913de50919AcB45A250C",
+  "frequency": 9
+}, {
+  "pool_address": "0xea6Cc93A1320330239278f4eB0Dc5096ae8c8a35",
+  "frequency": 9
+}, {
+  "pool_address": "0x337E3f3367845B1D9A63B94138Ab02ec8C71e913",
+  "frequency": 9
+}, {
+  "pool_address": "0x8c6D5EA2b3051B5bB3b3a392C90B50Eda9ba711B",
+  "frequency": 9
+}, {
+  "pool_address": "0xDd3905B883ce1d037cBBBb588C0b51d20426dB68",
+  "frequency": 9
+}, {
+  "pool_address": "0x28BA6A438794e20A3Fd87178CD054eF549ADBb45",
+  "frequency": 9
+}, {
+  "pool_address": "0x8BE0095F2a74BaDb8C051e85Cb3A3F49eC4ecd71",
+  "frequency": 9
+}, {
+  "pool_address": "0x9bAB9350cD8EA919868dd46b5053CAE774145975",
+  "frequency": 9
+}, {
+  "pool_address": "0xdC05778428080C8D6080043f10EC64d8ab6e3B7f",
+  "frequency": 9
+}, {
+  "pool_address": "0x22DeC3c444FaDD9957de6A9aA0aF4dBC6a93D632",
+  "frequency": 9
+}, {
+  "pool_address": "0x9BFfD1FE6c47AF6f63f9F777971070964CA1fD5c",
+  "frequency": 9
+}, {
+  "pool_address": "0x52D0293A50E0653b2bc02b8386CE636e1b4E00F5",
+  "frequency": 9
+}, {
+  "pool_address": "0x44ba12cb21713991F284De1b37F1749EE0A07dbe",
+  "frequency": 9
+}, {
+  "pool_address": "0xF46C002fF2093945D98e32eCd2D2F739F55B0071",
+  "frequency": 9
+}, {
+  "pool_address": "0x180E3B159Eeae90d670e1087fF4c9798669b00F0",
+  "frequency": 9
+}, {
+  "pool_address": "0xA5f6029a583067Afca10E6912738CCCBA596b54d",
+  "frequency": 9
+}, {
+  "pool_address": "0xd7399Cb900AEE3b0B70e0d74e5f85812044b0Ff7",
+  "frequency": 9
+}, {
+  "pool_address": "0x8c13148228765Ba9E84EAf940b0416a5e349A5e7",
+  "frequency": 9
+}, {
+  "pool_address": "0xce2C811f101b1cb505CD82532B8E27826D8CE319",
+  "frequency": 9
+}, {
+  "pool_address": "0x3fC92834A3Bd83AEC3515108F268Aee5F8349c47",
+  "frequency": 9
+}, {
+  "pool_address": "0xF8814b59CD0A643103ED6b6A3f97e414111ec413",
+  "frequency": 9
+}, {
+  "pool_address": "0x4C6b8417B0f623F1C42f5DCad3c362eeb70fC915",
+  "frequency": 9
+}, {
+  "pool_address": "0x6C097f656CEd9865cC5168bB51b6861bfDd4205e",
+  "frequency": 9
+}, {
+  "pool_address": "0xcDE02c21420A0d6421a3871B86b3972d67E8F9FC",
+  "frequency": 9
+}, {
+  "pool_address": "0x0c36C0911ac32d6f3AF734d96a88332fB5d96D9B",
+  "frequency": 9
+}, {
+  "pool_address": "0x5739C5C6788D49Dc15E9de454aC9a50cd5A984D0",
+  "frequency": 9
+}, {
+  "pool_address": "0x62743E3c6e66e0CC6a4e6163Cf4747D16f5aeDE2",
+  "frequency": 9
+}, {
+  "pool_address": "0xA478Db6e39aa3714B9C26E12241732D5C2B16526",
+  "frequency": 9
+}, {
+  "pool_address": "0xEb51131eeBf2D4ce52e44122961DEfa696c35d41",
+  "frequency": 9
+}, {
+  "pool_address": "0x8598DcEE18e1E95D629cc0c6bef184451d9f5624",
+  "frequency": 9
+}, {
+  "pool_address": "0x7AA932508b07E398b735B1285d8c365b1267C068",
+  "frequency": 9
+}, {
+  "pool_address": "0xA8136401020A47b29e609A841941Ef7D23634AFd",
+  "frequency": 9
+}, {
+  "pool_address": "0xC393a21EBD6b3bAbAec52f08aB60a3d12A45Af3f",
+  "frequency": 9
+}, {
+  "pool_address": "0xCdd63360bC7BAa98907d2E157b0130e733380A23",
+  "frequency": 9
+}, {
+  "pool_address": "0xCcAeBcbD9CCB5810fF0856c9C884C35cd1d5A1f3",
+  "frequency": 9
+}, {
+  "pool_address": "0x680BC22ec814da3F1012e954291971711be482B2",
+  "frequency": 9
+}, {
+  "pool_address": "0x22a80b289670a5676E0be54ad6514Fa601757875",
+  "frequency": 9
+}, {
+  "pool_address": "0x34b8487FC2912C486B04d1436b07f19F7730cd43",
+  "frequency": 9
+}, {
+  "pool_address": "0xE238A1beD999a7a16D97B6BC489F8e5baB1D8Dd5",
+  "frequency": 9
+}, {
+  "pool_address": "0x923d041648070A2714928d1301b43F29AE38420D",
+  "frequency": 9
+}, {
+  "pool_address": "0x86Be31346818B907995c682303CE3561BC40016c",
+  "frequency": 9
+}, {
+  "pool_address": "0x06f171DE64205e4dD881c49D57E6E4adA7c37726",
+  "frequency": 9
+}, {
+  "pool_address": "0x613Ba790Dd91E4893BEEfD7ef058c9D008DcCAA6",
+  "frequency": 9
+}, {
+  "pool_address": "0x78469857380763D9414092219E34c961cAB6DB09",
+  "frequency": 9
+}, {
+  "pool_address": "0x0FF71311d04705CcDB4E4679b2fb0CA373AafB1f",
+  "frequency": 9
+}, {
+  "pool_address": "0x9b63bd499d2992841468EE5c5dA6C4b65E22a588",
+  "frequency": 9
+}, {
+  "pool_address": "0xFFE4ed4378deB9Fa34081D512a572D3A65ea818D",
+  "frequency": 9
+}, {
+  "pool_address": "0x39d459B3C552265255FC9E88014cF6565dcbCB3f",
+  "frequency": 9
+}, {
+  "pool_address": "0x19350eD11D3B12c5ECcb87643D45e0C411A1712D",
+  "frequency": 9
+}, {
+  "pool_address": "0xf217E3CA7DfeD7526F1E52412f9FA293dF68d763",
+  "frequency": 9
+}, {
+  "pool_address": "0x59C631138828C252e13B507985895635f169F118",
+  "frequency": 9
+}, {
+  "pool_address": "0x6eec213aB2b611D88272e7baB657F7350C50EC69",
+  "frequency": 9
+}, {
+  "pool_address": "0x19062EF3e51A9D4C3F62a6fA5077dcD0d1cb1ED9",
+  "frequency": 9
+}, {
+  "pool_address": "0xcF174e05592f256864D706965cc392AA444b86aa",
+  "frequency": 9
+}, {
+  "pool_address": "0x2850f85C88feF4F62bD9d85b7163AdBA7cD8CABa",
+  "frequency": 9
+}, {
+  "pool_address": "0xe2E92fEe90741f1A460e560404C39bEFd89A98A1",
+  "frequency": 9
+}, {
+  "pool_address": "0x9b8e60561772C8E79dF56bBf84ceC1BC6d6fCff6",
+  "frequency": 9
+}, {
+  "pool_address": "0xC85CFEB8c063f9368a6D8428790D811304fEFa03",
+  "frequency": 9
+}, {
+  "pool_address": "0x2030146a653A2c40131c0482b75291B76dEA96a9",
+  "frequency": 9
+}, {
+  "pool_address": "0x9deE9c30F9b41C342023bB85a4bA72354e40F161",
+  "frequency": 9
+}, {
+  "pool_address": "0x808dfA5Fc821e5731ff8439116b81f5667624A53",
+  "frequency": 9
+}, {
+  "pool_address": "0x7A415B19932c0105c82FDB6b720bb01B0CC2CAe3",
+  "frequency": 8
+}, {
+  "pool_address": "0x513C5593A2D3d80911c8a860E205D915eEB4d476",
+  "frequency": 8
+}, {
+  "pool_address": "0xE7f40eEad9CE7E61c9CD34136A1bd3d3C9e35DDA",
+  "frequency": 8
+}, {
+  "pool_address": "0x83A5f5bdc1C6bC32bdd17eD75A69652002E7CaC6",
+  "frequency": 8
+}, {
+  "pool_address": "0xCc2c9204F26C4A2B4b58CA84a1afB9D2C10e7D9C",
+  "frequency": 8
+}, {
+  "pool_address": "0xC29271E3a68A7647Fd1399298Ef18FeCA3879F59",
+  "frequency": 8
+}, {
+  "pool_address": "0x44f9469D0d5393d3a01A0D4Fa14FE7713c1aD1f7",
+  "frequency": 8
+}, {
+  "pool_address": "0x075F4849d3C2088E5599ceCf6Ee0fdF8AddFD124",
+  "frequency": 8
+}, {
+  "pool_address": "0xf9BC02a0f79EE8b6982A754979c9dbD909cceE10",
+  "frequency": 8
+}, {
+  "pool_address": "0x3f96dAD45f4bD0b78231a7b1d1d939DaD9D76BaC",
+  "frequency": 8
+}, {
+  "pool_address": "0x758A5F59b3EbE8a5cb9E6a09B5B876d2414042CD",
+  "frequency": 8
+}, {
+  "pool_address": "0xfe7aFF6F4F1B0D9F65767E96573e6df8B1fF5920",
+  "frequency": 8
+}, {
+  "pool_address": "0x2138a12520C9B45Bb4b2C742923B514D5f662fec",
+  "frequency": 8
+}, {
+  "pool_address": "0x49BD1Fa4C7286c2754ec7607f6F2e835F3Ca6dDD",
+  "frequency": 8
+}, {
+  "pool_address": "0x52299416C469843F4e0d54688099966a6c7d720f",
+  "frequency": 8
+}, {
+  "pool_address": "0x0A6773C78f7b75748574B05912A794B739f360E1",
+  "frequency": 8
+}, {
+  "pool_address": "0xc7060047bCa7593e9D4De4f1c7f370b40EE69D36",
+  "frequency": 8
+}, {
+  "pool_address": "0x1D48Fc96200153033476faAEFb837e3381e081ce",
+  "frequency": 8
+}, {
+  "pool_address": "0xe495BfA137B68a037b1f661Ed47a44B4FB2a6563",
+  "frequency": 8
+}, {
+  "pool_address": "0x49228c8a08fe69BD34228491e4Ae712DfD6c3E4e",
+  "frequency": 8
+}, {
+  "pool_address": "0x6a9Dcc4E2832950A6900B1812f96dc4ccc86f0Cc",
+  "frequency": 8
+}, {
+  "pool_address": "0xaFbC71453E7214d1090a2577A221989E949CF15E",
+  "frequency": 8
+}, {
+  "pool_address": "0x5D343B2d44eF925EdfD0f58A7c7947D872e22C8f",
+  "frequency": 8
+}, {
+  "pool_address": "0x1353fE67fFf8f376762b7034DC9066f0bE15a723",
+  "frequency": 8
+}, {
+  "pool_address": "0x485F70333eA7ce4D86b1957607fe276c3FaFd8F8",
+  "frequency": 8
+}, {
+  "pool_address": "0xE744F5E2edFdCB9FdB43B288ecb8b21C8487e888",
+  "frequency": 8
+}, {
+  "pool_address": "0x38585326da42692d7b2bfeF265Ee2f86b85C07f0",
+  "frequency": 8
+}, {
+  "pool_address": "0x546D4695c4fFF0e0aDF0D904CCDE3A13472f9480",
+  "frequency": 8
+}, {
+  "pool_address": "0xf1afE4C0b815bB9247Df2169094c20A67Eea70B4",
+  "frequency": 8
+}, {
+  "pool_address": "0x4006BEd7bF103D70A1C6B7f1CeF4AD059193dc25",
+  "frequency": 8
+}, {
+  "pool_address": "0x9Ba3F47FE7f5a12562ba0A4A5645d8bf9ea1Dd8e",
+  "frequency": 8
+}, {
+  "pool_address": "0x8a146C0EA951422BE7ad0df45fFD12bba219D74d",
+  "frequency": 8
+}, {
+  "pool_address": "0x5d6E061C5c3c700D374b84aE17B70EB9Cf531a22",
+  "frequency": 8
+}, {
+  "pool_address": "0x5E31db99Eb2a95755dAA062a0cEcAB632e7524B2",
+  "frequency": 8
+}, {
+  "pool_address": "0x4A429b40430e04E2497714767aff9114c8521255",
+  "frequency": 8
+}, {
+  "pool_address": "0xEde0542B647deCe1eBD38D52edBd914fe5E4dB43",
+  "frequency": 8
+}, {
+  "pool_address": "0x84725348A1c7Be9D1eA516e3E14e8f1fBf799f07",
+  "frequency": 8
+}, {
+  "pool_address": "0x36b5261fD23A26fE49e46D0EF8f04426cF7821CF",
+  "frequency": 8
+}, {
+  "pool_address": "0x96063aBd47E89475b44d592f87dBcEA25De07Aa8",
+  "frequency": 8
+}, {
+  "pool_address": "0xa4DB04f64187d21E7510Fd7b00e21AE55428519f",
+  "frequency": 8
+}, {
+  "pool_address": "0x76366D95c2016446247296Ea50c8D06D0585ae00",
+  "frequency": 8
+}, {
+  "pool_address": "0xa87B06bC3a3F9CDd7363FAbf8d2cC3Ed3926b7eF",
+  "frequency": 8
+}, {
+  "pool_address": "0x1a1E678A6Cdb5d67DFefcA7053dB4b47FE175014",
+  "frequency": 8
+}, {
+  "pool_address": "0x7617Dd0B73319e3D327d1b0C768440BD9A490913",
+  "frequency": 8
+}, {
+  "pool_address": "0x5eA6F8d54B34b3912aD2A9344f7e3e3038B6489d",
+  "frequency": 8
+}, {
+  "pool_address": "0x9C7CEe5e3f1b2BAD41Cf683A845783a85eB559F2",
+  "frequency": 8
+}, {
+  "pool_address": "0x8dD6b2e7565445Ba505d8C8a9db3C922c2ca97C3",
+  "frequency": 8
+}, {
+  "pool_address": "0x6f351F85b1e7f096f72E5a37f8e786BB4A4fc0E2",
+  "frequency": 8
+}, {
+  "pool_address": "0xD44AD8f428d8a9A241B699B1630580Ee7B160c22",
+  "frequency": 8
+}, {
+  "pool_address": "0x549E997E517437fa2F72724Ac4a04bd6094d3DB6",
+  "frequency": 8
+}, {
+  "pool_address": "0x9cb246f59Ce2D9E1AD8A8B0Fc1433699f93Dea59",
+  "frequency": 8
+}, {
+  "pool_address": "0x05dEf6d34631BbDd35e212CB749caCAEbf8c963D",
+  "frequency": 7
+}, {
+  "pool_address": "0x404ECA5bde66219346c0334B89C7dCb5d9314196",
+  "frequency": 7
+}, {
+  "pool_address": "0x3C4323f83D91b500b0f52cB19f7086813595F4C9",
+  "frequency": 7
+}, {
+  "pool_address": "0x46077fccD46bC963d32456f931C13324786F8baB",
+  "frequency": 7
+}, {
+  "pool_address": "0x269A70a223F215f31acd4D91F52a3ef99113475E",
+  "frequency": 7
+}, {
+  "pool_address": "0xEE83F6873b1d387FccdE7b1d680ff6a7281e8179",
+  "frequency": 7
+}, {
+  "pool_address": "0x41E570fC65d0F9EfE89a6145306E2ba7B8A0fa6B",
+  "frequency": 7
+}, {
+  "pool_address": "0x3E87d4C24fb56c52A0dBD089a6219b7086d577d8",
+  "frequency": 7
+}, {
+  "pool_address": "0x14DE8287AdC90f0f95Bf567C0707670de52e3813",
+  "frequency": 7
+}, {
+  "pool_address": "0xa9Bf1454569dEDAB50AE96b6CAAC82c8e11146Ff",
+  "frequency": 7
+}, {
+  "pool_address": "0xdC75e957E13487224C273FBA04B2A4cF9A325A57",
+  "frequency": 7
+}, {
+  "pool_address": "0x5B781915b6b610A1aba8135Ad5df084FFe528DA4",
+  "frequency": 7
+}, {
+  "pool_address": "0x9f41a3aC0c16A9feb5400751a34c609211839CFA",
+  "frequency": 7
+}, {
+  "pool_address": "0x0CfBeD8f2248D2735203f602BE0cAe5a3131ec68",
+  "frequency": 7
+}, {
+  "pool_address": "0xab2F2689cDE4EE1a44100Bc4FF9bF292D811E1eB",
+  "frequency": 7
+}, {
+  "pool_address": "0x9aC0c8e3acA828B19149D1922702f0c46961D30d",
+  "frequency": 7
+}, {
+  "pool_address": "0x0552A5e59f80EcCa476CC1e0072FDED8d5522f74",
+  "frequency": 7
+}, {
+  "pool_address": "0x5764a6F2212D502bC5970f9f129fFcd61e5D7563",
+  "frequency": 7
+}, {
+  "pool_address": "0x6b491A852434863A81d41d1f1399075b42424Ec9",
+  "frequency": 7
+}, {
+  "pool_address": "0x9073D1E814483e3c91E9B4D7b2A81C30B93229B1",
+  "frequency": 7
+}, {
+  "pool_address": "0x7e525D134d7d187C44E297C53Dc5c80d2BE83895",
+  "frequency": 7
+}, {
+  "pool_address": "0x8a15b2Dc9c4f295DCEbB0E7887DD25980088fDCB",
+  "frequency": 7
+}, {
+  "pool_address": "0x5E709A7591dEfE00C1c1B6c73a8894C70015869c",
+  "frequency": 7
+}, {
+  "pool_address": "0xa7B845C429e909eddBd1B40431c0Cf539D19724D",
+  "frequency": 7
+}, {
+  "pool_address": "0x961eC3bb28C9E98A040c4bDEd38917aA96B791bE",
+  "frequency": 7
+}, {
+  "pool_address": "0xebA623e4F5c7735427a9EF491ecEE082DD4bF6CE",
+  "frequency": 7
+}, {
+  "pool_address": "0xebcb715AB533be2ebfAF57Ff02497d25a028a1C8",
+  "frequency": 7
+}, {
+  "pool_address": "0xb30041c6e20FF0B8c844082c43592781b26A6379",
+  "frequency": 7
+}, {
+  "pool_address": "0x452B59f876e7ead00a32699aa2FbD499A6eb8262",
+  "frequency": 7
+}, {
+  "pool_address": "0xBf6c6DEE87c13390DcDA9b1E6fCa6dD301eb9c05",
+  "frequency": 7
+}, {
+  "pool_address": "0x54a3f926c6A15461000bd7037586B5DC37E7251C",
+  "frequency": 7
+}, {
+  "pool_address": "0x7FaE24b96101A72A10287a2D08cB73fD550CaC4E",
+  "frequency": 7
+}, {
+  "pool_address": "0x452740267f3FbD1fe004100fB87638484C6cEaF0",
+  "frequency": 7
+}, {
+  "pool_address": "0x54c432dcA01670d930E006F73f1C7DA01921b658",
+  "frequency": 7
+}, {
+  "pool_address": "0xBc844C2eCd719B8A9dF3EDe6a28C6BB06322B176",
+  "frequency": 7
+}, {
+  "pool_address": "0x7D987630D9AB2a52c13e483b5c4cc49F64b09B0e",
+  "frequency": 7
+}, {
+  "pool_address": "0x06eC93EC7aDab067E4e800117B5f1E0c3C0Bab50",
+  "frequency": 7
+}, {
+  "pool_address": "0xC133D9b1786ef845565A1a3eBF1Ed71756dc4E7d",
+  "frequency": 7
+}, {
+  "pool_address": "0x334EA53c91673FBa90cb783675335d64c1Ddb8c1",
+  "frequency": 7
+}, {
+  "pool_address": "0xf2c3bD0328bdb6106d34A3bd0dF0ef744551CC82",
+  "frequency": 7
+}, {
+  "pool_address": "0x5AbB7274f5c687679eDF729DC71e6853cFADfBA1",
+  "frequency": 7
+}, {
+  "pool_address": "0x0D1D336C01D61d858CEF4DCaDdcc2640BA4E1B16",
+  "frequency": 7
+}, {
+  "pool_address": "0x02A80C7D9A36fb0FbDb380dE590D9aA94FaC6E41",
+  "frequency": 7
+}, {
+  "pool_address": "0x8B6a6F5B828f086a2A9D8a3150B958E79e91a82f",
+  "frequency": 7
+}, {
+  "pool_address": "0x3F48EF49CcC8A498876d5ffB3D332D193bf0d336",
+  "frequency": 7
+}, {
+  "pool_address": "0x99573E588AfE6245931AF081165e542308ca86b9",
+  "frequency": 7
+}, {
+  "pool_address": "0xE7454783f1530B7B8039C1d11351eECb130ed50c",
+  "frequency": 7
+}, {
+  "pool_address": "0x08a027f737CDCdf86df2609a370e82114E304f37",
+  "frequency": 7
+}, {
+  "pool_address": "0x40eE99Bc4a58da0D15bd1b7126f29cDb8A262766",
+  "frequency": 7
+}, {
+  "pool_address": "0xaF93Fd0BD1c1cCCf984F35A3eD449A4f8D011Ac8",
+  "frequency": 7
+}, {
+  "pool_address": "0xf254647f91fED4C85b8289708Bd9011dE6Bbd527",
+  "frequency": 7
+}, {
+  "pool_address": "0x47099D2BB21114fE0c8aBce29C1DFfad380F8d47",
+  "frequency": 7
+}, {
+  "pool_address": "0x40d577973b86524F0A29a18b55B5c850f252aEb8",
+  "frequency": 7
+}, {
+  "pool_address": "0xFce312A757C7a971Be820c612c8B397e9A98186D",
+  "frequency": 7
+}, {
+  "pool_address": "0x6E9d57b88261D255dE464Fe95BBB709b1E4aC552",
+  "frequency": 7
+}, {
+  "pool_address": "0x80ac1c363c770498Ee50E5443972bB56862EF980",
+  "frequency": 7
+}, {
+  "pool_address": "0x92F54Ab31Ec5303Cea231E546C302c5eA9e40446",
+  "frequency": 7
+}, {
+  "pool_address": "0x90B8cd493Aa884C61209cf152686cEA7977e4023",
+  "frequency": 7
+}, {
+  "pool_address": "0xa84aFAa253eb79b547AE3A3cf8014f9da296B0A8",
+  "frequency": 7
+}, {
+  "pool_address": "0xF6fCfE778D6fC02DdAF63Ad6b051b6f1a8f9dFd2",
+  "frequency": 7
+}, {
+  "pool_address": "0x2BDaAF4Ee3ed56B6315524fc8265FA3F18149F04",
+  "frequency": 7
+}, {
+  "pool_address": "0xecb90EFb03Ba45000d581862e34C95c1cfb4ad47",
+  "frequency": 7
+}, {
+  "pool_address": "0x20F9a7ae170Faf43CEA49e358Ce25779693bAcE6",
+  "frequency": 7
+}, {
+  "pool_address": "0x034De15Da8E6EA50dBd32bC570A5d87c31032f7C",
+  "frequency": 7
+}, {
+  "pool_address": "0x2DF7f6Afd1e7d6CB0655d9666A880D907EAdd794",
+  "frequency": 7
+}, {
+  "pool_address": "0x5cdFbd6275bdE9Ae6393A36aA101A5BA7E671959",
+  "frequency": 7
+}, {
+  "pool_address": "0x32FDC44e07b447fC82F6271BDae8DbD6BaB2A4a2",
+  "frequency": 7
+}, {
+  "pool_address": "0x1ebaa26b3EfE828C18031568a7c14E75F737A2A7",
+  "frequency": 7
+}, {
+  "pool_address": "0x81C0d5ac84A9974cF96F58f96C6C2c0c8107Aa55",
+  "frequency": 7
+}, {
+  "pool_address": "0x79F5a60D4C7cAb2B1CF280752dD76649aAd65a7c",
+  "frequency": 7
+}, {
+  "pool_address": "0xE274a8159e542DF5E3888C3f819308c47FB409E7",
+  "frequency": 7
+}, {
+  "pool_address": "0x8e09f38a337e57adCc447d06cD56Ac221Ad61A90",
+  "frequency": 7
+}, {
+  "pool_address": "0xEc9F9198216030859fAE09DD8eA5e14d9cfB30Ec",
+  "frequency": 7
+}, {
+  "pool_address": "0x49ad1a79C4851a1946BC3aa9501c6140e1579926",
+  "frequency": 7
+}, {
+  "pool_address": "0xAc6C5b08ADf249378fEc30932c3ADb3b7Ac74Ced",
+  "frequency": 7
+}, {
+  "pool_address": "0x8B741e2d045D333CB94E4C058350c7bAa3421Ba1",
+  "frequency": 7
+}, {
+  "pool_address": "0x4F75c34EaDF59f55474d7582c4747DfD3123681D",
+  "frequency": 7
+}, {
+  "pool_address": "0x9Fc43EB22e4af18516aA24713a64cD3e15A9c749",
+  "frequency": 7
+}, {
+  "pool_address": "0x4Ef3E2178a464a49bf35058b47801fFFB7322D8E",
+  "frequency": 6
+}, {
+  "pool_address": "0x73E0b8361b3b0C59784eBA492d90B04a3060cCBb",
+  "frequency": 6
+}, {
+  "pool_address": "0xAE50Cfd41D300D98dD07a7a7537DE16ACF56Af92",
+  "frequency": 6
+}, {
+  "pool_address": "0x6b6C7bEAdcE465F8f2ada88903BDBBB170Fa1F10",
+  "frequency": 6
+}, {
+  "pool_address": "0x0df407bc6Abe9aF2093dCB4c974e18d40A6A381a",
+  "frequency": 6
+}, {
+  "pool_address": "0xcF7e21b96a7DAe8e1663b5A266FD812CBE973E70",
+  "frequency": 6
+}, {
+  "pool_address": "0x79328ebaBa8D5455c926BE20c85676aeA8db3538",
+  "frequency": 6
+}, {
+  "pool_address": "0x61213Af59A2De1d528022086b20Bec330E0d418D",
+  "frequency": 6
+}, {
+  "pool_address": "0x2770c51f2aCa9ab488832C6BCE4de9B3eD69d7f3",
+  "frequency": 6
+}, {
+  "pool_address": "0x7316F8DD242974F0FD7b16dBCC68920b96Bc4Db1",
+  "frequency": 6
+}, {
+  "pool_address": "0x35B88354C51613Fe8857e02668c68e8c52161BA2",
+  "frequency": 6
+}, {
+  "pool_address": "0x714b8443D0ADA18eCE1fcE5702567e313bfa8f29",
+  "frequency": 6
+}, {
+  "pool_address": "0x5F13bF37407C7C79e0BCd39dc220e176E07443e2",
+  "frequency": 6
+}, {
+  "pool_address": "0x7261bb346cCc02911E4b07f933CcD69dC51ee3E1",
+  "frequency": 6
+}, {
+  "pool_address": "0xF10E8cCdb3F065BF24AFA14d08cc6336d4a9A281",
+  "frequency": 6
+}, {
+  "pool_address": "0x18D02326BB38d351cd874A0959aeFA8C716893d5",
+  "frequency": 6
+}, {
+  "pool_address": "0x3CF3D5B9061FaC75FC66bc33035803Fb067cB4f8",
+  "frequency": 6
+}, {
+  "pool_address": "0x84B54635A43441eE7748658660F79fe05c03ba7c",
+  "frequency": 6
+}, {
+  "pool_address": "0xB09c5Dad762DF413D5fC677F03400D3A3B9993a1",
+  "frequency": 6
+}, {
+  "pool_address": "0x59B4BB1f5D943CF71A10Df63F6B743ee4a4489EE",
+  "frequency": 6
+}, {
+  "pool_address": "0x830325a0558964D374e45f4DA79dF82cc9D73Cd7",
+  "frequency": 6
+}, {
+  "pool_address": "0x931EAdA8660B7bE954eeC2Ac6d992AEC08BcDE88",
+  "frequency": 6
+}, {
+  "pool_address": "0x56cdB8E94860f4d05C8d5D9731cAe4B3Df352413",
+  "frequency": 6
+}, {
+  "pool_address": "0x2CA1D6950182D28434f89A719ED9E915b8c417B5",
+  "frequency": 6
+}, {
+  "pool_address": "0xacDA7e4d5025Ee4DD87D2Ff75eCf6d69e921CEE3",
+  "frequency": 6
+}, {
+  "pool_address": "0x4830570554606cBc37478AB773fde991261FD99C",
+  "frequency": 6
+}, {
+  "pool_address": "0x78194BA1a135A71F7FBa71FDa7cDd3885872b8FF",
+  "frequency": 6
+}, {
+  "pool_address": "0x249da8a8D79D8bDe0e4C3e4f35FBE677d9e5DBd5",
+  "frequency": 6
+}, {
+  "pool_address": "0x09629C4eb8E4c9DE8e59F465d3afA90433A05203",
+  "frequency": 6
+}, {
+  "pool_address": "0xf5E4A4480f5E73CfE697384525D6F4A07617AC71",
+  "frequency": 6
+}, {
+  "pool_address": "0x8Ea48337C6c6677b0973437f2685D17717C0408e",
+  "frequency": 6
+}, {
+  "pool_address": "0xd6Eb9af2B8a37F5A7451E2a445cb93661a466a66",
+  "frequency": 6
+}, {
+  "pool_address": "0x5Cf07d2672C191d2E0dE68F87C0e30b15d6d971B",
+  "frequency": 6
+}, {
+  "pool_address": "0x2CC9dDAA5C30D8889836D4FF99C7801Bd8A7A758",
+  "frequency": 6
+}, {
+  "pool_address": "0xCDff6ddfC9e4807C9927Fd58708C2Ef3484CC305",
+  "frequency": 6
+}, {
+  "pool_address": "0xf9ebD44587D52530E979Bc2F706012a8B9C1c4A3",
+  "frequency": 6
+}, {
+  "pool_address": "0x7F7ff8f22a902bb9B0AEF07c6Cb41d91a47E18E1",
+  "frequency": 6
+}, {
+  "pool_address": "0x3B88485534D296461D2f832Fda27a7055Bd943Bb",
+  "frequency": 6
+}, {
+  "pool_address": "0x14BCe2F206553028D870393Bc47DE22B0ad9B1B7",
+  "frequency": 6
+}, {
+  "pool_address": "0x916f5404BD4F5f4D64FC90CbdF97451f0b497FC2",
+  "frequency": 6
+}, {
+  "pool_address": "0xD0F292Fa6fe694892Bcf52B55ca0F3E277be17c0",
+  "frequency": 6
+}, {
+  "pool_address": "0x2B9431d1BB33D0e0635275F68Fbd6ac72d8f4342",
+  "frequency": 6
+}, {
+  "pool_address": "0xbC3F4E9d0a56E181d9a9a21655464FbBe3a6f2E0",
+  "frequency": 6
+}, {
+  "pool_address": "0xcad6B3C71C8c6DB4921038CEeffdd7F9EBe76e52",
+  "frequency": 6
+}, {
+  "pool_address": "0x9A56A193AA73a322a97C8C5Bf9ef8fD01562662E",
+  "frequency": 6
+}, {
+  "pool_address": "0x97fF0D756032Dee97C83cFCF512fF85aB062E459",
+  "frequency": 6
+}, {
+  "pool_address": "0xE77fa8A57Aa5CbF1D60778866D5bc164Ab913c1C",
+  "frequency": 6
+}, {
+  "pool_address": "0x978578DA29B3513631614932d0F54e65A38c12Ff",
+  "frequency": 6
+}, {
+  "pool_address": "0xcD182fF14C77be0D5932536204878fE08d1E2Bbc",
+  "frequency": 6
+}, {
+  "pool_address": "0x3931B26F2759C369f51E0797A4BED1f1B221Ce1E",
+  "frequency": 6
+}, {
+  "pool_address": "0x67B36C8851c185Bf0f5Ce0252caBC1BEa4018356",
+  "frequency": 6
+}, {
+  "pool_address": "0xBd233D685eDE81E00faaEFEbD55150C76778a34e",
+  "frequency": 6
+}, {
+  "pool_address": "0xEb65Ec88ae9d932Db4fE5bc3b962D378943e1667",
+  "frequency": 6
+}, {
+  "pool_address": "0x4D6396d051d0F3036b01f72Cc9FBafF03bb5D964",
+  "frequency": 6
+}, {
+  "pool_address": "0x7bA7396B454501D96579cf973fefD3835F1ED703",
+  "frequency": 6
+}, {
+  "pool_address": "0x18f200761Ba458b75d5f4C6142eC3e22CeFbC1ad",
+  "frequency": 6
+}, {
+  "pool_address": "0xeb64DCf9B5Ef31C6b206848F99A1F8C72B388179",
+  "frequency": 6
+}, {
+  "pool_address": "0x6208E69d3253420d995592C32e2D5A3918f8654F",
+  "frequency": 6
+}, {
+  "pool_address": "0xF954d40C0c18e707c69318A9e3bd6230D4d56a11",
+  "frequency": 5
+}, {
+  "pool_address": "0x4c294661917e063e912e1A2b2CBb6eb5543872aE",
+  "frequency": 5
+}, {
+  "pool_address": "0x2aF41D838763E3c5cad6AdC111af9c5dA19B9AFa",
+  "frequency": 5
+}, {
+  "pool_address": "0x5F27813aA8644B94c873F488cBE6Ad707C992c19",
+  "frequency": 5
+}, {
+  "pool_address": "0xF239009A101B6B930A527DEaaB6961b6E7deC8a6",
+  "frequency": 5
+}, {
+  "pool_address": "0x6Ab3bba2F41e7eAA262fa5A1A9b3932fA161526F",
+  "frequency": 5
+}, {
+  "pool_address": "0x4Ff7E1E713E30b0D1Fb9CD00477cEF399ff9D493",
+  "frequency": 5
+}, {
+  "pool_address": "0xB5851eB5ec92Afff01840B90eD3BeA51a77b3CC6",
+  "frequency": 5
+}, {
+  "pool_address": "0xF1B63cD9d80f922514c04b0fD0a30373316dd75b",
+  "frequency": 5
+}, {
+  "pool_address": "0x60B0dAd2d7D65b7D6eFc0B746687020cCeF0a233",
+  "frequency": 5
+}, {
+  "pool_address": "0xf9D29c7C0691CA27f076828B4C1de6f6b14C0bDA",
+  "frequency": 5
+}, {
+  "pool_address": "0xa46466ad5507bE77Ff5aBDc27DF9dFeDA9bD7aee",
+  "frequency": 5
+}, {
+  "pool_address": "0x7090Cc8DFA04b0BBAc6520063c9c1ea677C368a0",
+  "frequency": 5
+}, {
+  "pool_address": "0x93D1DF74317D18550E197c146eD29f178D027265",
+  "frequency": 5
+}, {
+  "pool_address": "0x2837809FD68e4a4104af76bbec5b622b6146B2cb",
+  "frequency": 5
+}, {
+  "pool_address": "0x2bE0d904eE2997BC40b06750f4caa36A3fb86B42",
+  "frequency": 5
+}, {
+  "pool_address": "0x475aF30820866eEb5886F42CfCDc11F658a49D2D",
+  "frequency": 5
+}, {
+  "pool_address": "0xbF29B9f288C5eF339525bDd8ABD4a31B37010610",
+  "frequency": 5
+}, {
+  "pool_address": "0x0275885D271c9e5Ae7D4AA15AE6c1Bcb7e5aE2b8",
+  "frequency": 5
+}, {
+  "pool_address": "0x4E680c7162Fe5AbAccf3409aEa564a653F1c91C0",
+  "frequency": 5
+}, {
+  "pool_address": "0x4765AA201B3C457742e93a329A9719E1D129ACD4",
+  "frequency": 5
+}, {
+  "pool_address": "0xE3F6845cFE044E0DDc58031Fe31b2A09FbDf8C70",
+  "frequency": 5
+}, {
+  "pool_address": "0xe6a2ecA14D2b1b0A82dD9A407488004939FB5AAD",
+  "frequency": 5
+}, {
+  "pool_address": "0xBE80225f09645f172B079394312220637C440A63",
+  "frequency": 5
+}, {
+  "pool_address": "0x4858411a69af3351ED7d448A0d65C6146C11C218",
+  "frequency": 5
+}, {
+  "pool_address": "0x6CA298D2983aB03Aa1dA7679389D955A4eFEE15C",
+  "frequency": 5
+}, {
+  "pool_address": "0x57693fBdBC3101D6fB793c2E4beb4d39AC7D89Ac",
+  "frequency": 5
+}, {
+  "pool_address": "0xAdf768402CFa9a755507ACc2cb1a7912158F733F",
+  "frequency": 5
+}, {
+  "pool_address": "0x5552727005cc8194c1559289A532DEb288964FD8",
+  "frequency": 5
+}, {
+  "pool_address": "0xd5Dbc89585e61A96b18689F02bf762c0309c3E73",
+  "frequency": 5
+}, {
+  "pool_address": "0xc13E4BCbB9d8Da61C61d2C2Fc9eC32386Ff9C962",
+  "frequency": 5
+}, {
+  "pool_address": "0xB13B2113dc40E8c2064F6D49577250d9f6131c28",
+  "frequency": 5
+}, {
+  "pool_address": "0x57359187cf8739F214772Dc9254Fc96b1C721121",
+  "frequency": 5
+}, {
+  "pool_address": "0x4A2987c255aD7F9409C54a4fcE7823441e14f08b",
+  "frequency": 5
+}, {
+  "pool_address": "0x7a4C10C50419E2B12dfa3916b84b693bCE304F7d",
+  "frequency": 5
+}, {
+  "pool_address": "0x16440e9aE70c0868D7bf5369348693CBb804D2cc",
+  "frequency": 5
+}, {
+  "pool_address": "0xB722FD570D68D0c2De769A5D7c2Fd11e7f1b0Ef2",
+  "frequency": 5
+}, {
+  "pool_address": "0x776Df7eaDe372B982200e8B1118fc793030F96EE",
+  "frequency": 5
+}, {
+  "pool_address": "0x3DDf8F1AA0595BD7e78513FD998A8321ceE70832",
+  "frequency": 5
+}, {
+  "pool_address": "0x73A6a761FE483bA19DeBb8f56aC5bbF14c0cdad1",
+  "frequency": 5
+}, {
+  "pool_address": "0x4c45a8Fb807881214F38c6f091eCf64800f0d2E7",
+  "frequency": 5
+}, {
+  "pool_address": "0x724d761584745cF7CDF9b4D4602e22E7DE3265F0",
+  "frequency": 5
+}, {
+  "pool_address": "0xF812af469d8685516b9637F2593ED558A2107620",
+  "frequency": 5
+}, {
+  "pool_address": "0xa004ebF296D5C243CEB8f1B6A44025e1b3Bd23c2",
+  "frequency": 5
+}, {
+  "pool_address": "0x0f88a9D642FA9283338e1eC4496E7dC72714831a",
+  "frequency": 5
+}, {
+  "pool_address": "0xb74507acEA70DDf38B8A9d9f2cc980714FF67B62",
+  "frequency": 5
+}, {
+  "pool_address": "0x80Ed1B41476B95Fb47830825B65fD3bf59F6a348",
+  "frequency": 5
+}, {
+  "pool_address": "0xEaAa39097CDc262dC61d29A611FaE130a163079d",
+  "frequency": 5
+}, {
+  "pool_address": "0x4674abc5796e1334B5075326b39B748bee9EaA34",
+  "frequency": 5
+}, {
+  "pool_address": "0xB1608e16609a7fF3AC5b0DA49A0539Bb0C3c3D9D",
+  "frequency": 5
+}, {
+  "pool_address": "0x45C6dc2F6E88445bD85C0D00ec12B13EbEE962A3",
+  "frequency": 5
+}, {
+  "pool_address": "0x8717248c6028A64305F2492Aa6051DF62194dE9B",
+  "frequency": 5
+}, {
+  "pool_address": "0xDa8eD71051e926dfdDf7a664F2820afD7687F51e",
+  "frequency": 5
+}, {
+  "pool_address": "0x072A0F256a95cEE7D0764AFFE5926f37b06CD120",
+  "frequency": 5
+}, {
+  "pool_address": "0x41660eec36b4a90fEd0f313b7Cd77E46586b13E7",
+  "frequency": 5
+}, {
+  "pool_address": "0xe16Be1798F860bC1EB0FEb64cD67Ca00AE9b6E58",
+  "frequency": 5
+}, {
+  "pool_address": "0x5b97B125CF8aF96834F2D08c8f1291BD47724939",
+  "frequency": 5
+}, {
+  "pool_address": "0x69f4a2DfEC7DD5aB64B916a11A7e96f6d46e9cA4",
+  "frequency": 5
+}, {
+  "pool_address": "0xeAa8D5975cf76D4Be35E4E7590F655f1b6342998",
+  "frequency": 5
+}, {
+  "pool_address": "0x4B02A12cec71962d6743466376D3B396Ff3A831E",
+  "frequency": 5
+}, {
+  "pool_address": "0x34369b768B2BE1d100Eb6260c45989026951Cd59",
+  "frequency": 5
+}, {
+  "pool_address": "0x536c607b2D5E746D4026E7e97a9B3e08dE5F3a2b",
+  "frequency": 5
+}, {
+  "pool_address": "0x94E4EfC5D96221B000811964755c0F53c81e168a",
+  "frequency": 5
+}, {
+  "pool_address": "0x0A647107971AFed3cE398DB3e67A3D713cCc8659",
+  "frequency": 5
+}, {
+  "pool_address": "0xaa4681bA64296c0Bd6Fad0dCf32349718a0e14bB",
+  "frequency": 5
+}, {
+  "pool_address": "0x89b357C4FE80A46A374593ba9FAb9c086A30488a",
+  "frequency": 5
+}, {
+  "pool_address": "0x9C9030E274BD72634e72026e13BF659f64EbD532",
+  "frequency": 5
+}, {
+  "pool_address": "0x7a91DCE84A8c4A1a4Ce78535a2a3B9389acA736D",
+  "frequency": 5
+}, {
+  "pool_address": "0x0622304c39e5a2e103F560d1c46f14585d04FECb",
+  "frequency": 5
+}, {
+  "pool_address": "0x6996f2e99Bca6207bB7B40927Ddbf8778DD4924a",
+  "frequency": 5
+}, {
+  "pool_address": "0xDD42CD57f601004499Fe1102d302Ee5Ba9216147",
+  "frequency": 5
+}, {
+  "pool_address": "0x1a81934C46cd72E1F9ca025Be8405C381764Ada0",
+  "frequency": 5
+}, {
+  "pool_address": "0xC4F0FA2E2Cb5AE1138026b10F95cDF305e2F163E",
+  "frequency": 5
+}, {
+  "pool_address": "0xAe91b3BC45379290d9E8fF8a633F34aD3101086B",
+  "frequency": 5
+}, {
+  "pool_address": "0x5d7b4563F794F52423181c8320cdd3bF8Fdf55D7",
+  "frequency": 5
+}, {
+  "pool_address": "0xF039d30498A3A1837e033898e198B2212c7075A6",
+  "frequency": 5
+}, {
+  "pool_address": "0xad729A395657A3D5EcC52e8897D08BCc14392104",
+  "frequency": 5
+}, {
+  "pool_address": "0xaF7Fbf2e97A91B015BD8DC2C1E5b6d2f5fBED978",
+  "frequency": 5
+}, {
+  "pool_address": "0xCc1b5cF178cA1B858978144dde23bA727C9D6d80",
+  "frequency": 5
+}, {
+  "pool_address": "0x1dE64f4e99b1f33Dd1FB56010458A670702bF237",
+  "frequency": 5
+}, {
+  "pool_address": "0x12CC685eEb95D3fCDfAe0a996e214e51FA6f7548",
+  "frequency": 5
+}, {
+  "pool_address": "0x4941Cf62D68A3Bee3258F26ACD77E8592a2ba44d",
+  "frequency": 5
+}, {
+  "pool_address": "0x81d970476738f878fd16Fa1EE642Ab62Dc69f765",
+  "frequency": 5
+}, {
+  "pool_address": "0x65ADdAf841ee12A9a14a97048AF091696BbA0ba8",
+  "frequency": 5
+}, {
+  "pool_address": "0x407857624050D5DB9143c4Bc2287456f1cd83E3d",
+  "frequency": 5
+}, {
+  "pool_address": "0x0BDCDe6854f64A1144192b2e2Bb4C995b50CD849",
+  "frequency": 5
+}, {
+  "pool_address": "0x5F7D99D2645b8C476E4EcBf5794269A366Cd37eF",
+  "frequency": 5
+}, {
+  "pool_address": "0xB9e7D45F22A7DCb015681599c2f2e0E48aa95A4b",
+  "frequency": 5
+}, {
+  "pool_address": "0x72aD797f1e4972C4086735dA6B19Da8d838911bf",
+  "frequency": 5
+}, {
+  "pool_address": "0xb73Fb0d9feEb049cc50F048B96f0d5b6f8649E96",
+  "frequency": 5
+}, {
+  "pool_address": "0x712046B6f8929f45e4915F61E9B9016501899412",
+  "frequency": 5
+}, {
+  "pool_address": "0xAbac8Ed3f6763eF2374bb66c7dABCEf2a2733101",
+  "frequency": 5
+}, {
+  "pool_address": "0x66aDB5A103014D441bBc361F9B8604495F70B802",
+  "frequency": 5
+}, {
+  "pool_address": "0x50102498c0100090CafcefA949169A049734B65f",
+  "frequency": 5
+}, {
+  "pool_address": "0x040D5Ef8c5e3c002720bc187f6DC22C89CaC197a",
+  "frequency": 5
+}, {
+  "pool_address": "0x1d56Ca8E2E14321f7424157161F2e64f1720f4c4",
+  "frequency": 5
+}, {
+  "pool_address": "0x5f83220A113261a239F395e756ca9b0Bd30303Ff",
+  "frequency": 5
+}, {
+  "pool_address": "0x9b4741C6479801F4D0C00c70D77AC674FB15Dff4",
+  "frequency": 5
+}, {
+  "pool_address": "0x571464618A1f7B80D9D56a4B805432BC825aD604",
+  "frequency": 5
+}, {
+  "pool_address": "0xD2624380A006220574c9E75083490b042e71eE42",
+  "frequency": 4
+}, {
+  "pool_address": "0x61847189477150832D658D8f34f84c603Ac269af",
+  "frequency": 4
+}, {
+  "pool_address": "0x9a599cAa30032e55F05f38772C6D0Ed36AFddE07",
+  "frequency": 4
+}, {
+  "pool_address": "0x8f413Ad1F9517D82F9Eb3A18b2A1F5EE1a68e5a0",
+  "frequency": 4
+}, {
+  "pool_address": "0xe13Cf2d5d235Aa25B489F55E4a940F8715d8d5AE",
+  "frequency": 4
+}, {
+  "pool_address": "0x3eb8224923774F668d6e722cdBF8b0F4E46DaE38",
+  "frequency": 4
+}, {
+  "pool_address": "0x219EEC61fD51e2A3F1171D458Ada742d5ae4FFdA",
+  "frequency": 4
+}, {
+  "pool_address": "0x3E8fb8f5507D09476671814515aFee5c0AA70212",
+  "frequency": 4
+}, {
+  "pool_address": "0xd40A6AdD2833fFF233Db70BaC5E7387e40108ad5",
+  "frequency": 4
+}, {
+  "pool_address": "0x2B795211D9c2073C36b3CD63FE33eAC52683Ee20",
+  "frequency": 4
+}, {
+  "pool_address": "0x4E57F830B0b4A82321071ead6FfD1Df1575a16e2",
+  "frequency": 4
+}, {
+  "pool_address": "0x758bb094f4C66005d982e5aaB02C2D2ce4f13a29",
+  "frequency": 4
+}, {
+  "pool_address": "0x318FBEE0a0D60e5DE7009864632CedA8d77489b8",
+  "frequency": 4
+}, {
+  "pool_address": "0x053dA4662Ab98F78254437580105B37Aa999749c",
+  "frequency": 4
+}, {
+  "pool_address": "0x5d811a9d059dDAB0C18B385ad3b752f734f011cB",
+  "frequency": 4
+}, {
+  "pool_address": "0xe5FEe9F12c35b5EB26350126BaC2a006A192a992",
+  "frequency": 4
+}, {
+  "pool_address": "0x25778382A9574a388456716D2F4D2B6d224CdCb9",
+  "frequency": 4
+}, {
+  "pool_address": "0x0ef625418Eb5ef7dA8Caf57f9E68a9fB49Fec900",
+  "frequency": 4
+}, {
+  "pool_address": "0x8AA8C67d14090Fe7f6153a80D42d3B36C3A6F320",
+  "frequency": 4
+}, {
+  "pool_address": "0x06Bc2d8df617c0Ff35f3a2C856dbeC51703cE0f9",
+  "frequency": 4
+}, {
+  "pool_address": "0x842293fA6Ee0642BF61eBF8310E7E546039ba7f4",
+  "frequency": 4
+}, {
+  "pool_address": "0x283E2E83b7f3e297C4B7c02114Ab0196B001a109",
+  "frequency": 4
+}, {
+  "pool_address": "0x9ac681F68a589cc3763Bad9CE43Be3380696B136",
+  "frequency": 4
+}, {
+  "pool_address": "0x3e5Fc63E53aEF85BBb1a85Fe7Af2F32eE8f26472",
+  "frequency": 4
+}, {
+  "pool_address": "0xB98740764d84Ff6a56ABF2d64803165F37759aC7",
+  "frequency": 4
+}, {
+  "pool_address": "0xf577068c05Fda48bA1729C9a190f78008c1f11A2",
+  "frequency": 4
+}, {
+  "pool_address": "0x49A48E6684b73904F8c7394eDAc5296E5e12A463",
+  "frequency": 4
+}, {
+  "pool_address": "0x7ECeE76Ce0C89CEBB85addCcbb4B39ed9B1A6370",
+  "frequency": 4
+}, {
+  "pool_address": "0x7618C038113503D15029A41857e352F43b4DcC6E",
+  "frequency": 4
+}, {
+  "pool_address": "0x0865350D78EF3FB7934385eFeE59e86e939E1f74",
+  "frequency": 4
+}, {
+  "pool_address": "0xE629f40752E4F77e6925FEBDcE24eFD2aF46516a",
+  "frequency": 4
+}, {
+  "pool_address": "0xE41552E6212Cb6F7fAa381C7bC9434c58bf28ce1",
+  "frequency": 4
+}, {
+  "pool_address": "0xA70E93C5eb55a88b191a732e14189AD3d2DF38F2",
+  "frequency": 4
+}, {
+  "pool_address": "0x1Cb63CA0f6BF03aCD85c2D1167Cb141AF074AF22",
+  "frequency": 4
+}, {
+  "pool_address": "0xb6d76d315F071731F595A6E4ae40adf3e4fE774F",
+  "frequency": 4
+}, {
+  "pool_address": "0x4471B6A08e35b9b9683bd7A5cf31B6f3031419C2",
+  "frequency": 4
+}, {
+  "pool_address": "0x229d1c1f72be9CBD0998D377B3327A72BdC071F4",
+  "frequency": 4
+}, {
+  "pool_address": "0xD572D276b699947A043C85f8d66Ce311CC85E357",
+  "frequency": 4
+}, {
+  "pool_address": "0x2b43Fe4F41D871fBc75aF6e0cE85BcE38fF1eDC7",
+  "frequency": 4
+}, {
+  "pool_address": "0x13dC0a39dc00F394E030B97b0B569dedBe634c0d",
+  "frequency": 4
+}, {
+  "pool_address": "0x6F41040B9e098C2AC4B88E27b50D4E9Ab486781b",
+  "frequency": 4
+}, {
+  "pool_address": "0xA790B808c1381C2eFc12B9d746C42EDA3A8ccD38",
+  "frequency": 4
+}, {
+  "pool_address": "0x975b2383190bBe232918bBC0DF75dfe884c3b370",
+  "frequency": 4
+}, {
+  "pool_address": "0x85e23eA64ea953F4A952Ec259aFa8D584A9d3770",
+  "frequency": 4
+}, {
+  "pool_address": "0x840FABa6f38e28e1494f186990f0F17cb2C7BcAC",
+  "frequency": 4
+}, {
+  "pool_address": "0x44ad0dC86c402cFb289F8E3D4E74bc7fed370D5A",
+  "frequency": 4
+}, {
+  "pool_address": "0x0A16F1830D04197710E25E899D326528e85Cd1A6",
+  "frequency": 4
+}, {
+  "pool_address": "0x03682bdE1122258dDCC3a32872646cb000bd70B0",
+  "frequency": 4
+}, {
+  "pool_address": "0x1161DF269017676e1bd036aed70b5E65B6eF1796",
+  "frequency": 4
+}, {
+  "pool_address": "0xe4Ae2C0DDdF1710aC4DC779cFa242E171d489C8B",
+  "frequency": 4
+}, {
+  "pool_address": "0xbC9B75563E8DF1dc761589444103342EC582CC29",
+  "frequency": 4
+}, {
+  "pool_address": "0x30D7C134a9e7477daC13dEd746C23C6e666f22b4",
+  "frequency": 4
+}, {
+  "pool_address": "0xe62C13fB10b9f60615aDaE4aCE7f36BaC6d993E0",
+  "frequency": 4
+}, {
+  "pool_address": "0x4E6BD25822A157FAd3611C09abBb7D06f722B427",
+  "frequency": 4
+}, {
+  "pool_address": "0xa9C6B614fa5503Bd12e037d96fa292E4E15BB123",
+  "frequency": 4
+}, {
+  "pool_address": "0xF46DAD9ebd66200dCCa3b49a4CB0088A2306CF45",
+  "frequency": 4
+}, {
+  "pool_address": "0x9b8E29dF8c186e58192d35319B3fc0B9D438Ce04",
+  "frequency": 4
+}, {
+  "pool_address": "0xeD6d181D867eC196912EC86caE207F2837c9a09d",
+  "frequency": 4
+}, {
+  "pool_address": "0x13037344d67AB4c1082443DD03579a890f9cfa1b",
+  "frequency": 4
+}, {
+  "pool_address": "0x776956dCF77d8e8f96E8E3156FbcE41379395453",
+  "frequency": 4
+}, {
+  "pool_address": "0xE404602F8bf42Fc4AEDb98E712B492c5688dE636",
+  "frequency": 4
+}, {
+  "pool_address": "0x8f9A5DbCD942d9ab4f1cE751C9177879E5366366",
+  "frequency": 4
+}, {
+  "pool_address": "0x32121E0d11EcC79035045bC7466eDE30816C5674",
+  "frequency": 4
+}, {
+  "pool_address": "0xc0Ad881b949c7782f9D36235E2D583a3898c73e9",
+  "frequency": 4
+}, {
+  "pool_address": "0x9cE6EBE7a383165e4492dE1Cace17103f79dD76f",
+  "frequency": 4
+}, {
+  "pool_address": "0xCa79739d0e353770a7Fa832D59F245C3F8774d7f",
+  "frequency": 4
+}, {
+  "pool_address": "0x04DD76803F247b611d4F470fC6cd206a9D02f869",
+  "frequency": 4
+}, {
+  "pool_address": "0xb738b0e34e244E6f9613AbAddd252E3176E9698c",
+  "frequency": 4
+}, {
+  "pool_address": "0xC2008B83e8570156C6ED3Fa1B1aF91223a8e80aC",
+  "frequency": 4
+}, {
+  "pool_address": "0xFF93f43806C1387F5899F996222A82eF684683a2",
+  "frequency": 4
+}, {
+  "pool_address": "0x3F339Efa8B5aA2A1d1f2988F06B7ef3d3e5a9962",
+  "frequency": 4
+}, {
+  "pool_address": "0x99D8CA4A8c4138e31944a4DD867fa3503bD7968d",
+  "frequency": 4
+}, {
+  "pool_address": "0x694886528668F2bCBaFf8270419ab2f4bd7099f0",
+  "frequency": 3
+}, {
+  "pool_address": "0x4416056ccF79fFD3abd99e61ccF80eA13EA4311c",
+  "frequency": 3
+}, {
+  "pool_address": "0x766658180726600DC5e723CF85BBF2Dcd470B2Ad",
+  "frequency": 3
+}, {
+  "pool_address": "0xAD9eF19e289dcbC9AB27b83D2dF53CDEFF60f02D",
+  "frequency": 3
+}, {
+  "pool_address": "0xb9bcAc97A65dc753fe6137772Ece77015358Cfd1",
+  "frequency": 3
+}, {
+  "pool_address": "0xD43b29AaF8aD938CfF4F478A0756defFfb329D07",
+  "frequency": 3
+}, {
+  "pool_address": "0x04597B33CD8FCF2928f0dd8511C6E3A95378A0d6",
+  "frequency": 3
+}, {
+  "pool_address": "0x86E69D1AE728c9Cd229F07bBf34E01bF27258354",
+  "frequency": 3
+}, {
+  "pool_address": "0x51C2841333fbBAb53B7c2c442CC265BF16430d6D",
+  "frequency": 3
+}, {
+  "pool_address": "0x2e0386C6a42E1Fa01caCfCA54BFA12A50a90eE3D",
+  "frequency": 3
+}, {
+  "pool_address": "0xC04D960757B1444bFca6deA218864d1322A33cF7",
+  "frequency": 3
+}, {
+  "pool_address": "0x4DD6a783394DDdBA2Ff46F77c903e48Da04f073E",
+  "frequency": 3
+}, {
+  "pool_address": "0x52d235EaB5a7A0b8b41b53B96873314AB084D0c1",
+  "frequency": 3
+}, {
+  "pool_address": "0x96039fA4d049F8A234485524546dB44489B12d24",
+  "frequency": 3
+}, {
+  "pool_address": "0x5dcC0e2fbe98f79Eb0536C23Dd8dd3E9AA6Dea34",
+  "frequency": 3
+}, {
+  "pool_address": "0x34da451E8F5B02dc177247c2bA45bc9d3b5c9394",
+  "frequency": 3
+}, {
+  "pool_address": "0x757a197B3b17b207d6dE3840De09bCf2dfB75b72",
+  "frequency": 3
+}, {
+  "pool_address": "0x1D437AC0a77d9d0Ab6A512A6b054930Aa582A5B7",
+  "frequency": 3
+}, {
+  "pool_address": "0x6Fff9EA017c6474DA89e893FcF50d37E1b8EFB1a",
+  "frequency": 3
+}, {
+  "pool_address": "0xaa35559c15A0a82c86dbcFfd24ef5d5A5e6965d7",
+  "frequency": 3
+}, {
+  "pool_address": "0x3eE301ED8F42D106dEf4f9d9730Ea3367880b771",
+  "frequency": 3
+}, {
+  "pool_address": "0x24dbeDb4699eb996a8CEB2bAEF4a4aE057cF0294",
+  "frequency": 3
+}, {
+  "pool_address": "0xF1Dd3569B7c82E93340D502E0F34a78fcB8e1597",
+  "frequency": 3
+}, {
+  "pool_address": "0xdD0d92d479794180869569e6E341B379b7bcEDB7",
+  "frequency": 3
+}, {
+  "pool_address": "0x8BE9C75cD10531737E1E3a36B53296F164447d45",
+  "frequency": 3
+}, {
+  "pool_address": "0x701B319AFF36311F720f0a1ebD6636Dd84Bb3E8B",
+  "frequency": 3
+}, {
+  "pool_address": "0xe81940eCdEFc9464082B51ACE7ADeD83a1dC1EFc",
+  "frequency": 3
+}, {
+  "pool_address": "0xd73979ee20b4897c26E4AbAF680430D19a436F1C",
+  "frequency": 3
+}, {
+  "pool_address": "0x769DB46F39C42ee7AD5f71F4167c47EdD281E767",
+  "frequency": 3
+}, {
+  "pool_address": "0x0b7c19f3ae19Ce29dE3178f77694819a796ab447",
+  "frequency": 3
+}, {
+  "pool_address": "0x034E070fB681572e2d458FD6AF097F95E393a2Bb",
+  "frequency": 3
+}, {
+  "pool_address": "0x25B3216928Bf89588c72e578a38A549B73088FdB",
+  "frequency": 3
+}, {
+  "pool_address": "0xDC993D2ac5e1A4d985D86859c86A593850866bA9",
+  "frequency": 3
+}, {
+  "pool_address": "0x76aE18E841F8519D9bb8218F3315FBFFd7a1752e",
+  "frequency": 3
+}, {
+  "pool_address": "0xa9405016F8158d87f5659b63df170c03B8396450",
+  "frequency": 3
+}, {
+  "pool_address": "0x495864cAD6Cf60E97EFcd3F14FF8B1F167956ba2",
+  "frequency": 3
+}, {
+  "pool_address": "0x980e6b4378318895EFc44b911DBD8Fd97dC12f38",
+  "frequency": 3
+}, {
+  "pool_address": "0xFE45750A137d769Dd3d633694925927BdB5EF899",
+  "frequency": 3
+}, {
+  "pool_address": "0x2E8dAf55F212BE91D3fA882ccEAb193A08fddeB2",
+  "frequency": 3
+}, {
+  "pool_address": "0x35644Fb61aFBc458bf92B15AdD6ABc1996Be5014",
+  "frequency": 3
+}, {
+  "pool_address": "0xC05bdD0c4b0d37B84207522bCC998EEdc9DEECeE",
+  "frequency": 3
+}, {
+  "pool_address": "0x93B012EE7363f60a0AC19044EDA8c94E41970c56",
+  "frequency": 3
+}, {
+  "pool_address": "0x6c0c4972ED8c7226fe96f9ec592C6694f6704518",
+  "frequency": 3
+}, {
+  "pool_address": "0x0275bC3237A295Ad331588D98a6a2FCAD686342D",
+  "frequency": 3
+}, {
+  "pool_address": "0x08B8cebfcA0f49A9303bab1cC4e2C25D280f2c00",
+  "frequency": 3
+}, {
+  "pool_address": "0x99710B2f2F8A26999C4C18CAbc3c0BfFC33B3482",
+  "frequency": 3
+}, {
+  "pool_address": "0x22531Fc38d6AfE2ccB97c144Ad40EbD2E51DFD1E",
+  "frequency": 3
+}, {
+  "pool_address": "0x47dd3Ecfb6Fb77E588B28919d2E9de296eE1616C",
+  "frequency": 3
+}, {
+  "pool_address": "0xAF18aB3df1477065DAC11Da9E65fc0d432E27881",
+  "frequency": 3
+}, {
+  "pool_address": "0x5271B186Dd6Ece249B7a07F815070D6F250F7FAf",
+  "frequency": 3
+}, {
+  "pool_address": "0xd3B4F5b4CF06498E4fBdD71c9da4F5bEFE01A0ed",
+  "frequency": 3
+}, {
+  "pool_address": "0x2D031B02708882E7947454DE2B1B690E19085149",
+  "frequency": 3
+}, {
+  "pool_address": "0xe0f37b1E5406E624bce1d6749D24d1ED48120d82",
+  "frequency": 3
+}, {
+  "pool_address": "0x5cD0aD98bA6288eD7819246A1EBC0386C32C314b",
+  "frequency": 3
+}, {
+  "pool_address": "0x3415D5AA8Aa05549c1Bb7566aaC6bF13de82beAf",
+  "frequency": 3
+}, {
+  "pool_address": "0x2120de613149C9dC9452dd2314c8f30A6c04c6b5",
+  "frequency": 3
+}, {
+  "pool_address": "0x698a78387044dB131764d3C2C990C95BFF1580f2",
+  "frequency": 3
+}, {
+  "pool_address": "0xCd5B850A5718d2A3506f1dC485030CdA5A795EE8",
+  "frequency": 3
+}, {
+  "pool_address": "0x8A44E0bf8Ae224488Fe3770238F8E5026080BE10",
+  "frequency": 3
+}, {
+  "pool_address": "0x666ed8c2151f00E7e58B4D941F65A9df68D2245B",
+  "frequency": 3
+}, {
+  "pool_address": "0x3BaC5698df02ECAD4709E70F2bf15fBb12Ae821C",
+  "frequency": 3
+}, {
+  "pool_address": "0x1474c1fA8078EDeeEb9753d76526c142158f3236",
+  "frequency": 3
+}, {
+  "pool_address": "0xaB21798D88EE0854F99F1D148c1e59f238E561Fe",
+  "frequency": 3
+}, {
+  "pool_address": "0xBD4F34cbF8A162d364E53Cc16E183D4c5C9527cB",
+  "frequency": 3
+}, {
+  "pool_address": "0xC6846C3fa16910248D649D65A6Ea3CeFFBFcec1D",
+  "frequency": 3
+}, {
+  "pool_address": "0xD98f06D109cd28a76EEd17839fa6473DfBf62ECE",
+  "frequency": 3
+}, {
+  "pool_address": "0xC2AF470999d111687D2839Ec40AB9CbF82FC9F3C",
+  "frequency": 3
+}, {
+  "pool_address": "0xa7859ECedb79E5C4c85Bb44592064327b29BC560",
+  "frequency": 3
+}, {
+  "pool_address": "0xa7f54bde73619BAe4Ae290C45fdCfA545Efbc6F4",
+  "frequency": 3
+}, {
+  "pool_address": "0xC923B3D24D9c831c3064a8AecC03b390dB6b5EAb",
+  "frequency": 3
+}, {
+  "pool_address": "0xE055a21802e11D729315D4B63db8D889D54Cb214",
+  "frequency": 3
+}, {
+  "pool_address": "0x9386018d9852f3D61694509De8589b02517a64dB",
+  "frequency": 3
+}, {
+  "pool_address": "0x78Eaf3D59988661e42eec5031cfc8a77527B2cC8",
+  "frequency": 3
+}, {
+  "pool_address": "0x0254b2e7a29bf64c9a4Afb172d2692541a15c40B",
+  "frequency": 3
+}, {
+  "pool_address": "0xc8fF1B04014b1F1A76c72c6124eDaDf28C933dD6",
+  "frequency": 3
+}, {
+  "pool_address": "0x12eF0F1F057C6F2253b23a48384634A345c0700e",
+  "frequency": 3
+}, {
+  "pool_address": "0x35fa1AC87b9BC3BaF1Ca6f0cE5F8Aa560c63336B",
+  "frequency": 3
+}, {
+  "pool_address": "0xEE78277B40fABA38b4A512FAeD45d6ab9FEB7a46",
+  "frequency": 3
+}, {
+  "pool_address": "0xCF1acCC8fd1Bd769025347aBF1DdAC7DE559A753",
+  "frequency": 3
+}, {
+  "pool_address": "0xBF9760b95639f23202425B9feEdE894224A5a7Ed",
+  "frequency": 3
+}, {
+  "pool_address": "0x7685cD3ddD862b8745B1082A6aCB19E14EAA74F3",
+  "frequency": 3
+}, {
+  "pool_address": "0xe97b41c49Efb3849Cd6A8Fa8A85D050a449173Db",
+  "frequency": 3
+}, {
+  "pool_address": "0x3c02f250E93F8a3eA4490F5240f303CF53e205DA",
+  "frequency": 3
+}, {
+  "pool_address": "0xcA63EC177afbB7b0610880940E91cd02Cc0c5A70",
+  "frequency": 3
+}, {
+  "pool_address": "0x3b02961ec26773f707c1A478107b83F33B28895F",
+  "frequency": 3
+}, {
+  "pool_address": "0xf38e0B26C9CCF7c6f3FB0c480B0f678dB2749b1C",
+  "frequency": 3
+}, {
+  "pool_address": "0x69Ff382906d431CD74BfC3861512328bb0326512",
+  "frequency": 3
+}, {
+  "pool_address": "0x299653c37A77b3FBb0e87e044E3Bde33F64de20f",
+  "frequency": 3
+}, {
+  "pool_address": "0x7c5DE2976d566B3f2293Db7837F43BB5E6b7f99d",
+  "frequency": 3
+}, {
+  "pool_address": "0xBC8f04Afe88525c0288B278246802B9C43bb037B",
+  "frequency": 3
+}, {
+  "pool_address": "0xF1345142AcecE27172Be2Fd220DC5E61138b09EE",
+  "frequency": 3
+}, {
+  "pool_address": "0x2cA27D88Afe459778992dd445e21B5752bAc94F3",
+  "frequency": 3
+}, {
+  "pool_address": "0xd18349DcD0fD3137a92D9C79A8b2025C1929A53D",
+  "frequency": 3
+}, {
+  "pool_address": "0x82692547ad1B5c59Cae726C7DCEaaA6e2CB6E35b",
+  "frequency": 3
+}, {
+  "pool_address": "0xD0a505fEc22729a300923FC5d18CAF7a0BE18483",
+  "frequency": 3
+}, {
+  "pool_address": "0x1ac1A8FEaAEa1900C4166dEeed0C11cC10669D36",
+  "frequency": 3
+}, {
+  "pool_address": "0xB8248ad955C5420a84Fc70a462a97D88168830ed",
+  "frequency": 3
+}, {
+  "pool_address": "0xf21dDc6800d93f978e8C2bA5dF9c9a4b31572498",
+  "frequency": 3
+}, {
+  "pool_address": "0x4d6E37F331e8dB59BAf4A4BB03aC9DA2eeB02A50",
+  "frequency": 3
+}, {
+  "pool_address": "0x299f604e095E95E5FAcf5F9c05AB827FF649B00f",
+  "frequency": 3
+}, {
+  "pool_address": "0xa1edb6A0fC05d8e9a94723d315b58B548B543e45",
+  "frequency": 3
+}, {
+  "pool_address": "0x4caAb4397e8CD14bf28BB83FF77e554F3fD82744",
+  "frequency": 3
+}, {
+  "pool_address": "0xF00fB2e6361271aD0bc54338eD99f79bFfD90c1C",
+  "frequency": 3
+}, {
+  "pool_address": "0x6cC7AaE9947bf7A8F5520cBC5344186855C36FC0",
+  "frequency": 3
+}, {
+  "pool_address": "0x40251989bedad02C4646b0c91B6b36656d4E7fB3",
+  "frequency": 3
+}, {
+  "pool_address": "0x52955505BE22E352E79f5bE6c26fd4b24B6dC2A6",
+  "frequency": 3
+}, {
+  "pool_address": "0xDE0400E9311a874D53F3922bd6c02e327A5DfF09",
+  "frequency": 2
+}, {
+  "pool_address": "0x3F0E69b74a8467af6920c52d4B97D8c9217fCaD2",
+  "frequency": 2
+}, {
+  "pool_address": "0x02B9E949ba711523EE0F10470D09B47c64d7A46d",
+  "frequency": 2
+}, {
+  "pool_address": "0x93499Bb60A22dEBF1D5b66392723197B7A6718c6",
+  "frequency": 2
+}, {
+  "pool_address": "0x57Ad41Eb3Ec6F2d0676b2fd85BF82b7e93DccE19",
+  "frequency": 2
+}, {
+  "pool_address": "0xB28Ddf1Ee8EE014eAfBecD8De979AC8D297931C7",
+  "frequency": 2
+}, {
+  "pool_address": "0xA2aFB0d48b51d5b2a5f3F56705873D415F1baCa8",
+  "frequency": 2
+}, {
+  "pool_address": "0x9c9B943C90450f601Cb389d3851795db1a395710",
+  "frequency": 2
+}, {
+  "pool_address": "0xCA7B6A594700cD5a48D85c865050003eCF47C056",
+  "frequency": 2
+}, {
+  "pool_address": "0x8a5BF90e3b1260815519A3299D31c1D26B5e3c13",
+  "frequency": 2
+}, {
+  "pool_address": "0xDa09c49E24AC571058FeA2E25F5825910960F266",
+  "frequency": 2
+}, {
+  "pool_address": "0xB5801E3DFf45F6d378e37342ABAbC32d2F03B3CF",
+  "frequency": 2
+}, {
+  "pool_address": "0xAe3dfc1170993310f2D84F4fB4D1AaD05DacA703",
+  "frequency": 2
+}, {
+  "pool_address": "0x47643fB482db2BF3F617e886c1ED7eAa1FdBA4EF",
+  "frequency": 2
+}, {
+  "pool_address": "0xEE7337AafC70A0AF093a6745F0235A1e72967470",
+  "frequency": 2
+}, {
+  "pool_address": "0xb2db69D6986FBF38de781ba606923F8aE8D7f437",
+  "frequency": 2
+}, {
+  "pool_address": "0x28e810D4B33aE24Fe6f721a21e42230bcB019Da1",
+  "frequency": 2
+}, {
+  "pool_address": "0x80464c5024253974506E8dD36B8ee49791C1F1ea",
+  "frequency": 2
+}, {
+  "pool_address": "0xb573D1708161B82b5F7A77C1035FA724725B42c7",
+  "frequency": 2
+}, {
+  "pool_address": "0xdc0783bAC6cf726891542EfC158aA04f4877c68C",
+  "frequency": 2
+}, {
+  "pool_address": "0x1b134c709D780e11778F331BB5d0550f868d8516",
+  "frequency": 2
+}, {
+  "pool_address": "0x5d752F322beFB038991579972e912B02F61A3DDA",
+  "frequency": 2
+}, {
+  "pool_address": "0x3733493eC5D2C181Dcd7C54ed100641c0f07BB0e",
+  "frequency": 2
+}, {
+  "pool_address": "0xc1cd3D0913f4633b43FcdDBCd7342bC9b71C676f",
+  "frequency": 2
+}, {
+  "pool_address": "0x14F6aD9d241B2F4dF1d83471d54fB06E64a61f61",
+  "frequency": 2
+}, {
+  "pool_address": "0x543804b7648605B5e7ce4AD7F111F77F01Ca904e",
+  "frequency": 2
+}, {
+  "pool_address": "0xbDfe8EC6eEE6e88e1089031a152F9C7046A722D8",
+  "frequency": 2
+}, {
+  "pool_address": "0x8287c431f547b313D5BFDAF2Fc8b738cFf65358F",
+  "frequency": 2
+}, {
+  "pool_address": "0xbE6A94F7dB00Bb309A7BD16b084b45115b070510",
+  "frequency": 2
+}, {
+  "pool_address": "0x4495FE3e57F5C7B46E5527162efD15A7606F35D8",
+  "frequency": 2
+}, {
+  "pool_address": "0x1dd86410f15924601c49cD8a43a53B3430ebc53E",
+  "frequency": 2
+}, {
+  "pool_address": "0x33b8213dE159884531957097F1722a12436014CC",
+  "frequency": 2
+}, {
+  "pool_address": "0xE6d1e0f7553D7E5fa1c93DCc6AC3347b9e8528DA",
+  "frequency": 2
+}, {
+  "pool_address": "0x5D0E02C29C6271692c25EE3C2c43A8979BddcEf8",
+  "frequency": 2
+}, {
+  "pool_address": "0xFe4ec8F377be9e1e95A49d4e0D20F52D07b1ff0D",
+  "frequency": 2
+}, {
+  "pool_address": "0x5C128d25A21f681e678cB050E551A895c9309945",
+  "frequency": 2
+}, {
+  "pool_address": "0x5412BE87C36d671358353dffC839eF79cdf79530",
+  "frequency": 2
+}, {
+  "pool_address": "0xccC42CF5D6A2F3ED8f948541455950ed6ce14707",
+  "frequency": 2
+}, {
+  "pool_address": "0x51d1ac117aAdd99e7Fc56E802C86A7464cb6AB9d",
+  "frequency": 2
+}, {
+  "pool_address": "0x912909C375205cE1B56E5d4cB54c666241F30828",
+  "frequency": 2
+}, {
+  "pool_address": "0xB38Cc8c5f6EEbC03a38515E2AAD580e0B80D67EA",
+  "frequency": 2
+}, {
+  "pool_address": "0xDeFDAC77A9A767a2c4eEd826E1AEaD2dAcE53e1C",
+  "frequency": 2
+}, {
+  "pool_address": "0x0c464A072992119f2fC7395005d2E304075352bA",
+  "frequency": 2
+}, {
+  "pool_address": "0x1AaeDB2dC55121203326831B2D05Ff9763106839",
+  "frequency": 2
+}, {
+  "pool_address": "0xaB8dc1953D5FD154c672B173bEc51b1f410d1333",
+  "frequency": 2
+}, {
+  "pool_address": "0x4448CAE136D22cceE8E19782dCD323d95A00e110",
+  "frequency": 2
+}, {
+  "pool_address": "0x3aB72a32810Cf72bdE4Aa0191Dd7702f50dE0F64",
+  "frequency": 2
+}, {
+  "pool_address": "0x9172a1AbB81021Ef1FE0Ea6D60D25e8a9F77e190",
+  "frequency": 2
+}, {
+  "pool_address": "0x04916039B1f59D9745Bf6E0a21f191D1e0A84287",
+  "frequency": 2
+}, {
+  "pool_address": "0x3cB75142Bdae2bEf3Eb119AffB288aeb0599dC4f",
+  "frequency": 2
+}, {
+  "pool_address": "0x52DB713D60249e52024Dfb54a5B4c32FE0893f54",
+  "frequency": 2
+}, {
+  "pool_address": "0x1d74Fc7aF3817f0367260d998E42e510790F247e",
+  "frequency": 2
+}, {
+  "pool_address": "0xC311fAEBe8802f9cFC91284016d1DE9537Ec66b7",
+  "frequency": 2
+}, {
+  "pool_address": "0x3829Aa6600EaA5168040465202C3dCa98895364b",
+  "frequency": 2
+}, {
+  "pool_address": "0x691C9c0B050C2C3D46DAD37B1B4c3666F13ECfcE",
+  "frequency": 2
+}, {
+  "pool_address": "0x458AeFC59c74c4CdB73a2c043600DD0a272dc53D",
+  "frequency": 2
+}, {
+  "pool_address": "0xd0078d1d600C096174CD0FD697E4e4a7262De419",
+  "frequency": 2
+}, {
+  "pool_address": "0x32eCD439B57fb881eA1f5df2F8581b6fdAc0ACAc",
+  "frequency": 2
+}, {
+  "pool_address": "0x82c427AdFDf2d245Ec51D8046b41c4ee87F0d29C",
+  "frequency": 2
+}, {
+  "pool_address": "0x564139985aB6a10CF80ddDcE6e1102ada0C6b9e0",
+  "frequency": 2
+}, {
+  "pool_address": "0x6a94F744D53deBC9BB8Da8d049Dc0034cb9BCD87",
+  "frequency": 2
+}, {
+  "pool_address": "0xaF43c1D9269892d574651894fD6aa581598290F8",
+  "frequency": 2
+}, {
+  "pool_address": "0xF5381D47148ee3606448df3764f39Da0e7b25985",
+  "frequency": 2
+}, {
+  "pool_address": "0x6D250659cdBf477f64193Db6eB5Bb15391a1aF55",
+  "frequency": 2
+}, {
+  "pool_address": "0x166B5fD1D06c65689f0867807962e0059598DB9f",
+  "frequency": 2
+}, {
+  "pool_address": "0xf4e04d00379E4bCE685bB17b8909eEE4AEa2F2c2",
+  "frequency": 2
+}, {
+  "pool_address": "0x80d21876cc9e11f1d000b4DEe9C73aA1bAC31919",
+  "frequency": 2
+}, {
+  "pool_address": "0xda703Fd3617535948d651C3c45b4624C2b5F6d5C",
+  "frequency": 2
+}, {
+  "pool_address": "0xA5F43B0EBaEfbEd5B1f1bFc809AF15254EA1e9c4",
+  "frequency": 2
+}, {
+  "pool_address": "0x34EC8f472F0c97186EaB9B1E5FdF73C090d4C0e4",
+  "frequency": 2
+}, {
+  "pool_address": "0xb71FAd1A16C5e6943F9Ba5b5B6f97A9C9AB79A3A",
+  "frequency": 2
+}, {
+  "pool_address": "0xbeDf43FE5DF23E163e5A844c3f6fBbE4D77E5113",
+  "frequency": 2
+}, {
+  "pool_address": "0x286431024acFaB509d5d6beb64066C52E205f460",
+  "frequency": 2
+}, {
+  "pool_address": "0x779DFffB81550BF503C19d52b1e91e9251234fAA",
+  "frequency": 2
+}, {
+  "pool_address": "0x72b236b8EB61B15833e514750b65b94a73D74A01",
+  "frequency": 2
+}, {
+  "pool_address": "0xE84EcC7B105f15864a2d53240F8D5ac7BdA92D0E",
+  "frequency": 2
+}, {
+  "pool_address": "0x9663f2CA0454acCad3e094448Ea6f77443880454",
+  "frequency": 2
+}, {
+  "pool_address": "0x79471D2B9D07492574e3e009a620bbA9abF54AEF",
+  "frequency": 2
+}, {
+  "pool_address": "0x0D783c7644E369cd0fbC3E510F9311de825A8D87",
+  "frequency": 2
+}, {
+  "pool_address": "0x25b96761e765b9AC20db18fA57Fa91e3b617Ec6F",
+  "frequency": 2
+}, {
+  "pool_address": "0x4c83A7f819A5c37D64B4c5A2f8238Ea082fA1f4e",
+  "frequency": 2
+}, {
+  "pool_address": "0x788aAF401692271E55f7A9ff4Bfa482b56679759",
+  "frequency": 2
+}, {
+  "pool_address": "0x02AaDfCe566Bfd71BAC2060E28b8b8B2Fa10c2F6",
+  "frequency": 2
+}, {
+  "pool_address": "0x19c10E1F20df3a8c2AC93a62d7FBA719fa777026",
+  "frequency": 2
+}, {
+  "pool_address": "0x2Dd35B4Da6534230Ff53048f7477f17F7f4E7a70",
+  "frequency": 2
+}, {
+  "pool_address": "0x1bC8F4F5c1627F7DaD5EAB297fec94F5f20C014d",
+  "frequency": 2
+}, {
+  "pool_address": "0xA11C29E8b7b0eaBFFD72b2096b531e8456bAD46C",
+  "frequency": 2
+}, {
+  "pool_address": "0x36Fe014ABD6f9Fd2A922f944411bE187BD961447",
+  "frequency": 2
+}, {
+  "pool_address": "0xBe5b92E9c3979128fe0ad941D944E72b4bA5A986",
+  "frequency": 2
+}, {
+  "pool_address": "0xe1d92f1De49CAEC73514f696FEa2a7d5441498E5",
+  "frequency": 2
+}, {
+  "pool_address": "0xF938596B738E058F2c70E93F9a0436f1B20aC495",
+  "frequency": 2
+}, {
+  "pool_address": "0x411B2b59e5E672115C4B697961c23Ad49F6101fe",
+  "frequency": 2
+}, {
+  "pool_address": "0xe3baA96aD46457d9e6cDD4e32ABC11e2C124eC49",
+  "frequency": 2
+}, {
+  "pool_address": "0xBFBa6254831605A6bFA1D6Df1e4B85A22C5061A9",
+  "frequency": 2
+}, {
+  "pool_address": "0xf00d213e2447935c865FC376Dd9ecCA7809F4383",
+  "frequency": 2
+}, {
+  "pool_address": "0x51E5cB2Cf307D7221a562aA929eDB85E9c862FaB",
+  "frequency": 2
+}, {
+  "pool_address": "0x78AB16803d92F6Db77ef6D4E92fe139AFfAB78cf",
+  "frequency": 2
+}, {
+  "pool_address": "0xf68B54426a98E6AEA6938A2B7d6a04F112ecdFE9",
+  "frequency": 2
+}, {
+  "pool_address": "0x45955C01294b9748e7c197Bc70fd500B385f12E8",
+  "frequency": 2
+}, {
+  "pool_address": "0x1863399c284EC1F4D4A4e9a436453E8931b290D3",
+  "frequency": 2
+}, {
+  "pool_address": "0xDa183566bF68dF09354679C8b50B7f1bab164F3F",
+  "frequency": 2
+}, {
+  "pool_address": "0xE7b726eFBe9824790cdbb7A805160bb711a79074",
+  "frequency": 2
+}, {
+  "pool_address": "0x9Da842622b0b0fbD4702373c08b591266defBcfF",
+  "frequency": 2
+}, {
+  "pool_address": "0x2454f72225718ccC7314D3aE4Ec4Dc855A99dA24",
+  "frequency": 2
+}, {
+  "pool_address": "0x310707554a0543aEDf23998aA8Cbbb1FA3706620",
+  "frequency": 2
+}, {
+  "pool_address": "0x98459d59D59056bc7bDB9e954e8be6A8346C15A4",
+  "frequency": 2
+}, {
+  "pool_address": "0x4a7b483bDbfee8Dd6850D46fAFAe9598B8FdF88E",
+  "frequency": 2
+}, {
+  "pool_address": "0x8646047a7Ea7fef0836a81e797FFAb816c308C72",
+  "frequency": 2
+}, {
+  "pool_address": "0xaBaebcc9EEe363CeA2150eE03ac96db110F0e745",
+  "frequency": 2
+}, {
+  "pool_address": "0x9E8810286Fe2f78A6EeAA37FC682181A6dD31AEA",
+  "frequency": 2
+}, {
+  "pool_address": "0xB29148f6eA9F2d78BA9B2d6b30AF37AfDcC31a9E",
+  "frequency": 2
+}, {
+  "pool_address": "0x4Ec7d47cFD3f35e47B86F9eAa31cb9d3eE1e801a",
+  "frequency": 2
+}, {
+  "pool_address": "0x1dFd47d8609E98b930f82e9e734d3fC6067Bc643",
+  "frequency": 2
+}, {
+  "pool_address": "0x8cEbD80E872c20131C6e045CBB8394940D18aaE1",
+  "frequency": 2
+}, {
+  "pool_address": "0x87C7056BBE6084f03304196Be51c6B90B6d85Aa2",
+  "frequency": 2
+}, {
+  "pool_address": "0x04eb5b4C9D8Becfc1F10a7e7C541B1169DC3aDc9",
+  "frequency": 2
+}, {
+  "pool_address": "0xd2B7B796869ED629393D280Ea00170CFa55A09b6",
+  "frequency": 2
+}, {
+  "pool_address": "0xBEB3fD6315F43922367F93D1721cd3f67B0b2707",
+  "frequency": 2
+}, {
+  "pool_address": "0x82Cc735b39a3992be7b47bEb9AE7519aC92ed562",
+  "frequency": 2
+}, {
+  "pool_address": "0xb2cBfC875d9B78A779C229bb16B880d91178BE7C",
+  "frequency": 2
+}, {
+  "pool_address": "0xD5BA8b1b921d1E42F8065853629777e5316d5576",
+  "frequency": 2
+}, {
+  "pool_address": "0xb6bb292187d257e6Ba69DC137294Abe06b969e13",
+  "frequency": 2
+}, {
+  "pool_address": "0x0477E2CfaFF1664239355Ba5Cb3c145b42f67969",
+  "frequency": 2
+}, {
+  "pool_address": "0x000ea4a83ACefdd62b1b43e9cCc281f442651520",
+  "frequency": 2
+}, {
+  "pool_address": "0xB5B40Ae5a6d243AA6Efd81814869Ed5354629c4E",
+  "frequency": 2
+}, {
+  "pool_address": "0xff3F0c40B0c3639c15633946778887c4dB797F51",
+  "frequency": 2
+}, {
+  "pool_address": "0x78d4704C65Dfd869f7F44d78c3fBBBDb5B412C71",
+  "frequency": 2
+}, {
+  "pool_address": "0x1249C7d6203bF9316173D12aF7CB9F9208c9C4c1",
+  "frequency": 2
+}, {
+  "pool_address": "0x6a7298D2c65cC54Ceb8ec2C994DccAcBbc90cF5F",
+  "frequency": 2
+}, {
+  "pool_address": "0x937D916A12dE773043139E79E58da8a4B93623Ed",
+  "frequency": 2
+}, {
+  "pool_address": "0xF519Fd0C6ddB274b6fe9cDD0423FD72D209a561B",
+  "frequency": 2
+}, {
+  "pool_address": "0x919a3a999bEc048a36e63eA2C97c868097ab68cC",
+  "frequency": 2
+}, {
+  "pool_address": "0xafCf371240DB12466cF9A36754607f64Df1bBa59",
+  "frequency": 2
+}, {
+  "pool_address": "0xdaeF650CB6bdC02Fb4A59c620323a7a0FD3b6337",
+  "frequency": 2
+}, {
+  "pool_address": "0x9b22eFB9d2bF068F939384738ea6667ee315C5A7",
+  "frequency": 2
+}, {
+  "pool_address": "0x61CF8Cc5d61D1a86A6bA3aF773C1263620AAC9B6",
+  "frequency": 2
+}, {
+  "pool_address": "0xe5894378156B9c657B09b316083C0218927eD6c9",
+  "frequency": 2
+}, {
+  "pool_address": "0x0F42DfA71316251D5dB8168BA02a38B0BBC48028",
+  "frequency": 2
+}, {
+  "pool_address": "0x0e18b86A6D3cea2Ab858dDE54dDda40054b03D52",
+  "frequency": 2
+}, {
+  "pool_address": "0x7CDa6e3dFA4aD88198A38B4Bc9Fcbcc45BD46000",
+  "frequency": 2
+}, {
+  "pool_address": "0x3Cb2862653A2C3e2d248d313227f4B5A0e09E74A",
+  "frequency": 2
+}, {
+  "pool_address": "0x3e6E23198679419cD73bB6376518dCc5168c8260",
+  "frequency": 2
+}, {
+  "pool_address": "0xf03744a09b37Ee59C0d1A38B1F358F77cad53357",
+  "frequency": 2
+}, {
+  "pool_address": "0x1944F7c25066daF2F2550888AFd650540814D2B9",
+  "frequency": 2
+}, {
+  "pool_address": "0x24de9A3B564865715761B52d3312aD1a6389414C",
+  "frequency": 2
+}, {
+  "pool_address": "0x8fa8Eb8a257967e6105E2db4FEc6474A62A2922d",
+  "frequency": 2
+}, {
+  "pool_address": "0x3Cc01DB5D1f99b262BCE9965ff6d5D7F9F9DBC68",
+  "frequency": 2
+}, {
+  "pool_address": "0x9a3356A11cd8d14BE2cb56FF59A0b2A3D8B4e21b",
+  "frequency": 2
+}, {
+  "pool_address": "0xB442a660450aEB6Bd852438Ed32Ee7a519C0da4f",
+  "frequency": 2
+}, {
+  "pool_address": "0x2068b8e693bD4081588Ea28C06879fB9f908e0A7",
+  "frequency": 2
+}, {
+  "pool_address": "0x7EeCEB0aB43602989A27E8d42090D57e9aF7C845",
+  "frequency": 2
+}, {
+  "pool_address": "0xb89260aD0Fe47276Aea852492704fe1A78De9E3e",
+  "frequency": 2
+}, {
+  "pool_address": "0x0eeB1dCcfDb649b3eF82a42d4ea13d35eB72C44c",
+  "frequency": 2
+}, {
+  "pool_address": "0x80D71A3C8763d0B5AA8b692f1fb28b7Dd02C2dF8",
+  "frequency": 2
+}, {
+  "pool_address": "0x434797197530211B021a8eB355E081225F1f4eea",
+  "frequency": 2
+}, {
+  "pool_address": "0x41B6c84E3620a70A874c143220C26e0B9E351f79",
+  "frequency": 2
+}, {
+  "pool_address": "0x998f67995b996D7c47b965566c1db4E2Fe710053",
+  "frequency": 2
+}, {
+  "pool_address": "0xd4761D5F1963be5C7E73bf05c983674318171591",
+  "frequency": 2
+}, {
+  "pool_address": "0xf5B8304dC18579c4247CAAd705dF01928248bc71",
+  "frequency": 2
+}, {
+  "pool_address": "0xa3bc069Ce794103e68974B5dc38074Fb112EEa71",
+  "frequency": 2
+}, {
+  "pool_address": "0xca8B0a9D4fC52352a9C024699Eb5008dF9193f7F",
+  "frequency": 2
+}, {
+  "pool_address": "0xF1a8f0d86659c67780E3396bd6AEe05af3566c6A",
+  "frequency": 2
+}, {
+  "pool_address": "0x3a52C3aDa045E183FA6117800518c1Cf2186eee7",
+  "frequency": 2
+}, {
+  "pool_address": "0x27a9ff745cf1Dd366d94267Cb4aDE2350588a187",
+  "frequency": 2
+}, {
+  "pool_address": "0xBdbc82263b92559296AEA3C0268BCfa69Ba69A20",
+  "frequency": 2
+}, {
+  "pool_address": "0x71EA5c558bDac68A00b11e3331B31b55B04208B6",
+  "frequency": 2
+}, {
+  "pool_address": "0x03Fa3F32D86F748756e47c71eE365aBfdc11765c",
+  "frequency": 1
+}, {
+  "pool_address": "0x8970E2edaE151Fd594514D41a2FDB4CFc16d2666",
+  "frequency": 1
+}, {
+  "pool_address": "0xF369A7278e164dCB766C10137DdedCd151Dc4fA0",
+  "frequency": 1
+}, {
+  "pool_address": "0x13f08a970b4636d0C07029d4b8d7B614F8762fE1",
+  "frequency": 1
+}, {
+  "pool_address": "0x6f4B3Ae4870Ae800D8574c02D247E0c59fa46bcE",
+  "frequency": 1
+}, {
+  "pool_address": "0x43767b9505cE0a73F3d3172122D35fAA5Ac3BDCd",
+  "frequency": 1
+}, {
+  "pool_address": "0x857d48ca17f733460fa5EC2Cd8CDC97c0eBf26D4",
+  "frequency": 1
+}, {
+  "pool_address": "0xCDc1fd4a31685D0f1640AC522E2B9f74Ecb9b7F9",
+  "frequency": 1
+}, {
+  "pool_address": "0x3f8cfFa681E5ce845af2400689427371B6e9F9E8",
+  "frequency": 1
+}, {
+  "pool_address": "0x05e383B4Af1A44608EE4995A4E5B31630b3E446c",
+  "frequency": 1
+}, {
+  "pool_address": "0xa9427D630294A890514a36e33464FEbff3b2B0B8",
+  "frequency": 1
+}, {
+  "pool_address": "0xe4372fa8456D71b0f698ACA81C4aDAebA46a0d72",
+  "frequency": 1
+}, {
+  "pool_address": "0x217616eA25a8b91389E806A4a0Fa99b805f1B2e7",
+  "frequency": 1
+}, {
+  "pool_address": "0xAED9261caa6A795178a4ab4D3Be62f2D01b2c214",
+  "frequency": 1
+}, {
+  "pool_address": "0xfD4084f7584f10F893E8b01FFCdD06046BaAF91E",
+  "frequency": 1
+}, {
+  "pool_address": "0xE75f221C9f1653C52D50bFdeA84264DFb0e34BA1",
+  "frequency": 1
+}, {
+  "pool_address": "0xefe4A010Ad0fAD70154116cb0c43cf47A1062B3B",
+  "frequency": 1
+}, {
+  "pool_address": "0x00fFeeD50Dd3adC636fA2F955Ce76135215A0218",
+  "frequency": 1
+}, {
+  "pool_address": "0x253C06B22D4B67b675eA7D2FD48422E62C394D7e",
+  "frequency": 1
+}, {
+  "pool_address": "0x84FdbaDffB027a3318e9a7eFD11e04433E9fBd5A",
+  "frequency": 1
+}, {
+  "pool_address": "0x94DD312F6Cb52C870aACfEEb8bf5E4e28F6952ff",
+  "frequency": 1
+}, {
+  "pool_address": "0xb5aCa3949A45Bf4FF7B8B70172Ea514d83e0e6f1",
+  "frequency": 1
+}, {
+  "pool_address": "0xA9dd0f6E7F311071F0AE5F4def02521E2E445AA9",
+  "frequency": 1
+}, {
+  "pool_address": "0x80D8cDE1cdde2174f8af7fFc70E5752e1Fab6cfC",
+  "frequency": 1
+}, {
+  "pool_address": "0xae790e2a4785298cB18150F3dC4A60BD81fcd274",
+  "frequency": 1
+}, {
+  "pool_address": "0xfa307D5171C6B6342A3556D419a7493B01A3f523",
+  "frequency": 1
+}, {
+  "pool_address": "0xA96C549FA361181a94c081597171e17D27459Dbb",
+  "frequency": 1
+}, {
+  "pool_address": "0x700F4dC28170f9903faa6Da32d6663ff1aC94f27",
+  "frequency": 1
+}, {
+  "pool_address": "0xc8fA85920a4cB22d8c6d15E0125F5c76F27a3a73",
+  "frequency": 1
+}, {
+  "pool_address": "0xB75269F7D29B3812b7506405c765552503f37DbD",
+  "frequency": 1
+}, {
+  "pool_address": "0xaFF587846a44aa086A6555Ff69055D3380fD379a",
+  "frequency": 1
+}, {
+  "pool_address": "0xB9d9BF49E1d61E8F9687706482df66eC42dDF361",
+  "frequency": 1
+}, {
+  "pool_address": "0xcf8F699D325A87D0f68A29493c0275160691CF2e",
+  "frequency": 1
+}, {
+  "pool_address": "0xecc819b5860578Cd68B52B945B5036160Abb74C2",
+  "frequency": 1
+}, {
+  "pool_address": "0x92fFbf968a1fBD766F94DcB495f2b39CC2BCA7e3",
+  "frequency": 1
+}, {
+  "pool_address": "0x238CeA79270590aFF83dD27D506A6a8b445eE8eb",
+  "frequency": 1
+}, {
+  "pool_address": "0xcEb3D2CA1EDf8F780070A540E4f62317a32e634d",
+  "frequency": 1
+}, {
+  "pool_address": "0xF5039D2e2cFf8024De619ADc78419D9d05EF64c4",
+  "frequency": 1
+}, {
+  "pool_address": "0x50fE1432A9127b25D81Ba12D739B744f84111134",
+  "frequency": 1
+}, {
+  "pool_address": "0x720CA75772F717081Fb56E785a39c7035D406d97",
+  "frequency": 1
+}, {
+  "pool_address": "0x58D7E1d45e9eD962d3279b3834dC8f6Bb4aA12B3",
+  "frequency": 1
+}, {
+  "pool_address": "0xD6EA97125b9AeE8e72F52F790929B1F0824B775B",
+  "frequency": 1
+}, {
+  "pool_address": "0x5691CAA4e3B4Daf74D360FAee8552492883BeD4D",
+  "frequency": 1
+}, {
+  "pool_address": "0x643ea0885875A77bF8dC3e0f3EaD866A125276b1",
+  "frequency": 1
+}, {
+  "pool_address": "0xa06DBf95Cf20166BDdF6dA5879Cb266A51F8cEE0",
+  "frequency": 1
+}, {
+  "pool_address": "0x9b1956A09c486ed2D8A4C771c221e7A94FFd7755",
+  "frequency": 1
+}, {
+  "pool_address": "0x4905A8c9f020732c1BE2Cd138cdcB407122081D5",
+  "frequency": 1
+}, {
+  "pool_address": "0x5576b47a029a6182b1FA233f3E5a0025cB4B94B6",
+  "frequency": 1
+}, {
+  "pool_address": "0x03EE825ea54021617d1866b0148920b2Ac0da121",
+  "frequency": 1
+}, {
+  "pool_address": "0xD1b3Ac7929C642d2235799c55764b7bC39cd9809",
+  "frequency": 1
+}, {
+  "pool_address": "0x248115681AEe9c3995F4F9c49eebE934EdA73c70",
+  "frequency": 1
+}, {
+  "pool_address": "0xCC261a7313F4Ae1111C76a7578aA115986151d5d",
+  "frequency": 1
+}, {
+  "pool_address": "0x3adf646C3aB4A8a2499FB22A65F121bE6acc79a9",
+  "frequency": 1
+}, {
+  "pool_address": "0xf5dE7dc21138e4BB9F2E3fD6e8F4cd76a7fF016B",
+  "frequency": 1
+}, {
+  "pool_address": "0xfA01CE5Bd8500D037C13ec7901d1f4B1F2174884",
+  "frequency": 1
+}, {
+  "pool_address": "0x53FCd1c2e6E1760828A85E28C043BfbA454c9909",
+  "frequency": 1
+}, {
+  "pool_address": "0x096F4a8BB619B2B6290A6831054aa5999Cf70631",
+  "frequency": 1
+}, {
+  "pool_address": "0x3f71349068992e95ff5fF323c3C861e6FFC32a7b",
+  "frequency": 1
+}, {
+  "pool_address": "0x325365ED8275f6a74cac98917b7f6FaCe8da533b",
+  "frequency": 1
+}, {
+  "pool_address": "0xc6634b3b3cEd026A8ac67401Dc8f0B3DC714707A",
+  "frequency": 1
+}, {
+  "pool_address": "0x775D15be06b9a14aCa87F06Ae3550CD7131E5C22",
+  "frequency": 1
+}, {
+  "pool_address": "0xE574DDb560D3507Ba34b0Db531B831b7918c62B1",
+  "frequency": 1
+}, {
+  "pool_address": "0x35140d0d3B1B2BB626839A83d6A4e39E05AC1187",
+  "frequency": 1
+}, {
+  "pool_address": "0x4c9AC0b9f183B19b51e2a2D8b3c259D4642B18bc",
+  "frequency": 1
+}, {
+  "pool_address": "0x31EF159FF9D05d570823c1c1DFfe0d27796abffe",
+  "frequency": 1
+}, {
+  "pool_address": "0x59cCE01E0d7f25D48dfe6c5Ee931F07F71462eD7",
+  "frequency": 1
+}, {
+  "pool_address": "0xffC75Fdb3fa24344950b710BC5F120b477a68a48",
+  "frequency": 1
+}, {
+  "pool_address": "0x865B30CE95AA04EE0D2bACe665219Aba1e0cfbac",
+  "frequency": 1
+}, {
+  "pool_address": "0x6e9459449030526eE10Cef9c69C028cD90000Ba2",
+  "frequency": 1
+}, {
+  "pool_address": "0xED49728E65246D81Fa65f832Fd5197467ABBBC40",
+  "frequency": 1
+}, {
+  "pool_address": "0xd9b0B49a87e0267995A6c17cb904f256EE6F344e",
+  "frequency": 1
+}, {
+  "pool_address": "0x6500b3d2dfBCE4F2931677A298a392f39f4FC11b",
+  "frequency": 1
+}, {
+  "pool_address": "0xA9166690c35d900a57D2ec132C58291bC0678944",
+  "frequency": 1
+}, {
+  "pool_address": "0xF570dEEa21bc9C61A70a8866708c2Eb907BD7669",
+  "frequency": 1
+}, {
+  "pool_address": "0x1fa6Ac8E69BCa4afC24842733C7572D77458dB71",
+  "frequency": 1
+}, {
+  "pool_address": "0x83c779BD0BE355092d37F9E8201A096fFe0789F3",
+  "frequency": 1
+}, {
+  "pool_address": "0x5f769e92D0c9adC888380a3Faa4681Bb63fD1F72",
+  "frequency": 1
+}, {
+  "pool_address": "0xe5eEC7C76033A6fc9546B799e7dc93f071b45FC6",
+  "frequency": 1
+}, {
+  "pool_address": "0xaA36dBf3fD5bFCF1350Cb8d830708F28De37Ae53",
+  "frequency": 1
+}, {
+  "pool_address": "0x1D702a07379b1A585eFF05cD5c8A2e64494672DB",
+  "frequency": 1
+}, {
+  "pool_address": "0x5e1aa95f07F413B16A30ecFd66935E49eb08a7fd",
+  "frequency": 1
+}, {
+  "pool_address": "0x6DF3eda963d3Be1948701C22Ed217d17A0B73A83",
+  "frequency": 1
+}, {
+  "pool_address": "0xc3F9bd494F15850a672Cd8f12e0276256EBED9F4",
+  "frequency": 1
+}, {
+  "pool_address": "0xeEFC41a6494e718452489222534D9201B146Bc84",
+  "frequency": 1
+}, {
+  "pool_address": "0x58Cf91C080F7052f6dA209BF605D6Cf1cefD65F3",
+  "frequency": 1
+}, {
+  "pool_address": "0xf6B4456e98572386f0F071Ad452f5235905d2a77",
+  "frequency": 1
+}, {
+  "pool_address": "0x0a35142342ac2Cb0587f5585b6CF55421163cA70",
+  "frequency": 1
+}, {
+  "pool_address": "0xfA97B8C6683F2Da5fAACaB0e410ACF0190E70Ebd",
+  "frequency": 1
+}, {
+  "pool_address": "0x79db69ab1eD51261a9fdC3bF0E6dB3FA48B8cC52",
+  "frequency": 1
+}, {
+  "pool_address": "0x854A38760EF85dC1617a6f5559424a3cfC0B59Ec",
+  "frequency": 1
+}, {
+  "pool_address": "0x4ba950bED410a12C1294DF28eD672f50C24297de",
+  "frequency": 1
+}, {
+  "pool_address": "0x4EeDAa90b62e91326b03EC2411E65aFEE3A2b374",
+  "frequency": 1
+}, {
+  "pool_address": "0x63C883F64F61EC2f30fd1aD7E07A6b72EA5df99a",
+  "frequency": 1
+}, {
+  "pool_address": "0x982152A6C7f732Ec7C9EA998dDD9Ebde00Dfa16e",
+  "frequency": 1
+}, {
+  "pool_address": "0xEE6fcB1414C615F678ab51c0A4338ad2C0F56a1D",
+  "frequency": 1
+}, {
+  "pool_address": "0x2c94C2418455B7A79B2819FF7322f4e3F76C176D",
+  "frequency": 1
+}, {
+  "pool_address": "0x35D1D199fACd6fFAb3893e31142544b78410cEd9",
+  "frequency": 1
+}, {
+  "pool_address": "0x63681cDBfC27f5059543A8354412D283442b5a74",
+  "frequency": 1
+}, {
+  "pool_address": "0x79eE2A6A6D7Fb97E903b788C56829Ef0382dd007",
+  "frequency": 1
+}, {
+  "pool_address": "0x46B1E0aFd1AEC501E6E290Ac0D30cA32Cf354dc1",
+  "frequency": 1
+}, {
+  "pool_address": "0x7Ef34E6FCe29b1d2f82551c32132747513F24e51",
+  "frequency": 1
+}, {
+  "pool_address": "0xC2A3e321bc99B2dFd948394F24371b3ed54c80A8",
+  "frequency": 1
+}, {
+  "pool_address": "0x84d261840A90AdC62fBbF7b69842F29C8464857A",
+  "frequency": 1
+}, {
+  "pool_address": "0xe21876Afd4C632b22870DF250E5Df1754C1875E8",
+  "frequency": 1
+}, {
+  "pool_address": "0xd4ACb4b634990F95A794Cc123Fa86176408f3Dd2",
+  "frequency": 1
+}, {
+  "pool_address": "0x0bfd2d1AcD2b5D1b341bF9dDD248f30433FaA8e7",
+  "frequency": 1
+}, {
+  "pool_address": "0xc8fb9dD78bE6e0D7fC23F233f2564f1C131B9862",
+  "frequency": 1
+}, {
+  "pool_address": "0xBF32Df1A5e4D10613EAa3A1bE138DB98E6196772",
+  "frequency": 1
+}, {
+  "pool_address": "0x54eB9B9b4Ae5febAEA277d93d11fC1B93eb503df",
+  "frequency": 1
+}, {
+  "pool_address": "0xa501a9f0F6F1eaCf372dda86DA686726416F9F65",
+  "frequency": 1
+}, {
+  "pool_address": "0xA83752031b1E7Ddf2197ae4580F83e7aDbe25303",
+  "frequency": 1
+}, {
+  "pool_address": "0x22f35961e45e4B668194375174775E208E8023c8",
+  "frequency": 1
+}, {
+  "pool_address": "0x03494856e127663AF7A5226855EC3841D0d0b57e",
+  "frequency": 1
+}, {
+  "pool_address": "0x67eaf9fAB1F7Dcf23b5422e71F14a5Fc8449ee65",
+  "frequency": 1
+}, {
+  "pool_address": "0x11184bf5937BeB9085b4f070E7B410Be052e37A6",
+  "frequency": 1
+}, {
+  "pool_address": "0xb9C4a5522a2f8bA9E2fF7063Df8C02ed443337A3",
+  "frequency": 1
+}, {
+  "pool_address": "0xfab26CFa923360fFC8ffc40827faeE5500988E9C",
+  "frequency": 1
+}, {
+  "pool_address": "0x6eb83d80362cA2EFCd4C10c1216166f0e25E1555",
+  "frequency": 1
+}, {
+  "pool_address": "0x18727C1118d002FDD351Ff6f0bAdE718D8D017fA",
+  "frequency": 1
+}, {
+  "pool_address": "0xA2FF3d4FfAf8c67cfC71a19ea437BcC2A9893d16",
+  "frequency": 1
+}, {
+  "pool_address": "0xf4aD61dB72f114Be877E87d62DC5e7bd52DF4d9B",
+  "frequency": 1
+}, {
+  "pool_address": "0x103A061a439cc7fE943E705B54AA25004FeAe741",
+  "frequency": 1
+}, {
+  "pool_address": "0x6a588A951dA00276565c45b02B816804977e7501",
+  "frequency": 1
+}, {
+  "pool_address": "0xd6Da07aaA661b98368ccbC550dC64D32E397Cda9",
+  "frequency": 1
+}, {
+  "pool_address": "0x54B425150BA057d57dcA5dfD8E48fDd2E7914957",
+  "frequency": 1
+}, {
+  "pool_address": "0xb0AbC0aCA567f802405F80024913b657f28329Fa",
+  "frequency": 1
+}, {
+  "pool_address": "0x04ED15a29adDaD1E8189026d17879403997050a3",
+  "frequency": 1
+}, {
+  "pool_address": "0x0B29E71F373CDDF2CfFF3Ab1AC4394F22b93F27e",
+  "frequency": 1
+}, {
+  "pool_address": "0x4B58e2Ad72ec053c804157fA6f0E41E07A6f1047",
+  "frequency": 1
+}, {
+  "pool_address": "0x3267c1D295932aF657e343473998Ff572e3C3d57",
+  "frequency": 1
+}, {
+  "pool_address": "0xA424817985051Ccda51eFF2dc7998B5d68079215",
+  "frequency": 1
+}, {
+  "pool_address": "0xd4d014842Aa5b0C888824D68124FD4345293FcE7",
+  "frequency": 1
+}, {
+  "pool_address": "0x052CeA5C8bC91e204Bf1e686BB91f25F66D831b1",
+  "frequency": 1
+}, {
+  "pool_address": "0x58FCD403610e772d68726b55183Eb958A7581731",
+  "frequency": 1
+}, {
+  "pool_address": "0x69ce21b6BaeD1c45E1Fa20AB735fEF0baa6bFBaD",
+  "frequency": 1
+}, {
+  "pool_address": "0xD94FdB60194FefA7Ef8B416f8bA99278Ab3E00dC",
+  "frequency": 1
+}, {
+  "pool_address": "0xEeE1b38286D23B0c22A475542AA18F2Ef7caDe82",
+  "frequency": 1
+}, {
+  "pool_address": "0x634cc319a3e28C47F77d146539135D26f589a590",
+  "frequency": 1
+}, {
+  "pool_address": "0x06B1655b9D560de112759b4F0Bf57d6F005e72Fe",
+  "frequency": 1
+}, {
+  "pool_address": "0x751680323dbc5a18e332f6a352C1c95d29e8571d",
+  "frequency": 1
+}, {
+  "pool_address": "0x677f26e74bb2a45a159d092964C3D4d0506B850C",
+  "frequency": 1
+}, {
+  "pool_address": "0xa6d781140BeA7b6E7c741B2524ae92874C03b620",
+  "frequency": 1
+}, {
+  "pool_address": "0xCCCA78058e4614b7e2b37253Eba07dA747856b50",
+  "frequency": 1
+}, {
+  "pool_address": "0xBb4Efb22592590D61463E1f6c8c7a2764a3fa2Ce",
+  "frequency": 1
+}, {
+  "pool_address": "0x19A573b228468f3bf917389f4E2D4f2997610F71",
+  "frequency": 1
+}, {
+  "pool_address": "0x6D66D518D78e55E5Fc0f53B10C066b0d500d93Ab",
+  "frequency": 1
+}, {
+  "pool_address": "0xd443a1fB7A871E5e2746887d1e73F0188eA0de37",
+  "frequency": 1
+}, {
+  "pool_address": "0x4B08AFE971E106e4cD44aDf6e98419D7F3D08e03",
+  "frequency": 1
+}, {
+  "pool_address": "0xDb9580b93E4c6F126F74Db3A59166a39DDA532CD",
+  "frequency": 1
+}, {
+  "pool_address": "0xf3d15274772F40f65673fd35C665dcF7d6c27E8f",
+  "frequency": 1
+}, {
+  "pool_address": "0xC14b0f9e5F6feE222a8F3Acd700fFd1302f76933",
+  "frequency": 1
+}, {
+  "pool_address": "0xfAa5373414c5Fe1dEa30746816cb4d950484b0Bc",
+  "frequency": 1
+}, {
+  "pool_address": "0x8bBC743e24712311574BE2D8A7a0c1EFFe1BfEac",
+  "frequency": 1
+}, {
+  "pool_address": "0xc1c18bd6f3b4D601a8d9c882ceC1Dc310572a6DB",
+  "frequency": 1
+}, {
+  "pool_address": "0x704160CBD110Bcc2B4Bf5D71830e590BC5685d3a",
+  "frequency": 1
+}, {
+  "pool_address": "0x95Ad5d38aD6BB17500E9a57BFeb6569B36A94EA5",
+  "frequency": 1
+}, {
+  "pool_address": "0x45Db7eEbFB4Fa55F8c1e0f2c4c3f67B6aEa73Ff5",
+  "frequency": 1
+}, {
+  "pool_address": "0xDcEb026BdbEaBeF09b823de8Cb76AACB899cf576",
+  "frequency": 1
+}, {
+  "pool_address": "0xc4472dcD0e42FFCCC1dbB0b9B3855688C22f3a0F",
+  "frequency": 1
+}, {
+  "pool_address": "0x91cC8585fD0e7243Bd21037014Ab9cB8BE11f1cC",
+  "frequency": 1
+}, {
+  "pool_address": "0xD249Dc65769764A93Eb90A641468f0E258340414",
+  "frequency": 1
+}, {
+  "pool_address": "0x40515518aDE5a9218B1013E2B1F6387e9E40270D",
+  "frequency": 1
+}, {
+  "pool_address": "0xc2D80b4753f163A11d0C3baFDd25686F19f8940a",
+  "frequency": 1
+}, {
+  "pool_address": "0x0F2E5e488dAA815361ada55ef816b47679918897",
+  "frequency": 1
+}, {
+  "pool_address": "0x018012dE2a9585D34Ac89E69B34678498A34B2A5",
+  "frequency": 1
+}, {
+  "pool_address": "0x79E4e7663f9AF971908A9A83cb12b8bE41A82e3d",
+  "frequency": 1
+}, {
+  "pool_address": "0x66AD25B5Aa3543CB7f4566851fE26DA6abab205E",
+  "frequency": 1
+}, {
+  "pool_address": "0xf322D3c7c1C346254CD4452Eb2FBCe46F14B7931",
+  "frequency": 1
+}, {
+  "pool_address": "0xa4e0faA58465A2D369aa21B3e42d43374c6F9613",
+  "frequency": 1
+}, {
+  "pool_address": "0x34E28E18B2890e92dA0a5aEAB0becBBc4C7CCD27",
+  "frequency": 1
+}, {
+  "pool_address": "0xB76726B4befE761a1859C1c02E7d157142E077c0",
+  "frequency": 1
+}, {
+  "pool_address": "0xc259320CE9EFd18187ba6cD39d1FB44bBfef7E2d",
+  "frequency": 1
+}, {
+  "pool_address": "0xd850e08f9B2B8E0663E1aEe103273051c54c0b71",
+  "frequency": 1
+}, {
+  "pool_address": "0xA00bd576377EC328272fF60d2E0B37e5eC978efC",
+  "frequency": 1
+}, {
+  "pool_address": "0xAB7b43183D2ed9DE4Ced6Abd040b1B362601888a",
+  "frequency": 1
+}, {
+  "pool_address": "0xe0f5bE962B6b116cc4a1fB4FAfF4f4CFEDF7f3B5",
+  "frequency": 1
+}, {
+  "pool_address": "0x06CC5DB8417Be58e1E06D413B025D6BE0a98377b",
+  "frequency": 1
+}, {
+  "pool_address": "0xbfBf2Be8e6b5d63CCb012c3991a16369203D1Ccb",
+  "frequency": 1
+}, {
+  "pool_address": "0x816ed78D38b6fF9BF7A02bAc70bBA4eA9e850f06",
+  "frequency": 1
+}, {
+  "pool_address": "0x698ac4C529b2955513F264015d08B5B18FC95100",
+  "frequency": 1
+}, {
+  "pool_address": "0xDA6E0D2359e6865B3EC130CDbbd18ED6407651Bf",
+  "frequency": 1
+}, {
+  "pool_address": "0x45220A5cB9fCc2f1eAe4fC66c78F1C62E10D78f9",
+  "frequency": 1
+}, {
+  "pool_address": "0x629DeA27Dc29a7B121a56c4406a6DFcB240EF00f",
+  "frequency": 1
+}, {
+  "pool_address": "0x1EC218540c15D097042e5A1436C2F0e7aa8776A7",
+  "frequency": 1
+}, {
+  "pool_address": "0x191f632A679988243895DCa08bc41Cc8499e1bf4",
+  "frequency": 1
+}, {
+  "pool_address": "0xAAC4F2193011aA80c4549e92FeB68aAf647E82CC",
+  "frequency": 1
+}, {
+  "pool_address": "0x8d3313f50C6d3Dc1EE6F3893a0555bA36D519927",
+  "frequency": 1
+}, {
+  "pool_address": "0x0dD9c5db1959964D911293d193514a6DB56B468E",
+  "frequency": 1
+}, {
+  "pool_address": "0xcF1CEB625ae9C61dbfD7F02F06a9820be3A078B2",
+  "frequency": 1
+}, {
+  "pool_address": "0xb74F8D53bfDaB53ce1Af3ba7072eD717B1B90EA8",
+  "frequency": 1
+}, {
+  "pool_address": "0xF1B5272b3044DFAAc5B4b0AA5F3FE9f4769Ef115",
+  "frequency": 1
+}, {
+  "pool_address": "0xaE3b8987E3507328d37a224215FB2154ff858f7c",
+  "frequency": 1
+}, {
+  "pool_address": "0xC7688A680726DdE8ba467E784Bb4ce8533cCAD24",
+  "frequency": 1
+}, {
+  "pool_address": "0xe64fFf649d95bDb197BEA006f9D7be6F8D416ad2",
+  "frequency": 1
+}, {
+  "pool_address": "0x951e692FC798B57fc02d051b6912c226907008B5",
+  "frequency": 1
+}, {
+  "pool_address": "0xe822aDE6FeD6bCBEd90AcD13419C5ac4cEF9bB7a",
+  "frequency": 1
+}, {
+  "pool_address": "0x7e6785ecFf06aa260f3B4532844C0aB74d8fb147",
+  "frequency": 1
+}, {
+  "pool_address": "0x94CeE1CA0770c2E66a5D4FC5c5E4f9ABa1532CE6",
+  "frequency": 1
+}, {
+  "pool_address": "0xd77382bDab34E6b629Be1CF3A96547326b7280Ed",
+  "frequency": 1
+}, {
+  "pool_address": "0xc49A1C5c856766f74C6c01affEa592d11258BC7c",
+  "frequency": 1
+}, {
+  "pool_address": "0xef3fFFc32208a4F5D3322be6DA8E03fd48911fdB",
+  "frequency": 1
+}, {
+  "pool_address": "0x902CB56D48C987574Ac7E7572d108780d45ffab9",
+  "frequency": 1
+}, {
+  "pool_address": "0xd7A8325d55eF5Ba459769087aCAab8740C93a7a6",
+  "frequency": 1
+}, {
+  "pool_address": "0x41683e822152649D33ffB37c83f8A38A4CF345B3",
+  "frequency": 1
+}, {
+  "pool_address": "0xB5e66C8AF2C09aedfd370BbDF6389C5A299A901F",
+  "frequency": 1
+}, {
+  "pool_address": "0x067D6d3bAA95d819ee3a15817ae32a2F99E2eBf5",
+  "frequency": 1
+}, {
+  "pool_address": "0x38481866CD4cff1E8EDba15FD8B1e0F9D21C26F7",
+  "frequency": 1
+}, {
+  "pool_address": "0xE4cdD1483348718fe8f57D03c314117Dd881532E",
+  "frequency": 1
+}, {
+  "pool_address": "0xfFa858Ec5ad86fC86fD057EfF22A60c76282406F",
+  "frequency": 1
+}, {
+  "pool_address": "0xB4D85Ad314Dd635A872cd6cBe5eF5aecC3B5040E",
+  "frequency": 1
+}, {
+  "pool_address": "0xD9B120F13b2CD0b5E2fF414BBC36B5908D994155",
+  "frequency": 1
+}, {
+  "pool_address": "0x24D3B93C1e4C8451E2011BA69eb4B430f98b7f2d",
+  "frequency": 1
+}, {
+  "pool_address": "0x3528cA73AC1404B461B33014D4Cc0E02217FC695",
+  "frequency": 1
+}, {
+  "pool_address": "0x3B5Fe77A72449466fE0D80c73C20acAF65Db6b53",
+  "frequency": 1
+}, {
+  "pool_address": "0xB426Dd9EF9AC41A64eDa7A56dD84942Aa070d8dE",
+  "frequency": 1
+}, {
+  "pool_address": "0x8eC47b7706a537AB1C404DD3425Eabf8c1d2881e",
+  "frequency": 1
+}, {
+  "pool_address": "0x3f4Dca6Da6B6635E4Db73d4c23a11eD21798D7Bc",
+  "frequency": 1
+}, {
+  "pool_address": "0x9cd56c4cE09CE2422007173FF345b011A1278491",
+  "frequency": 1
+}, {
+  "pool_address": "0xe950877d5E89417e6083f6C973dBf4682EAe8F2a",
+  "frequency": 1
+}, {
+  "pool_address": "0x7591327FFbC9e68ce3A9D8bC811f148C67D6e2D1",
+  "frequency": 1
+}, {
+  "pool_address": "0xa2c4585377f0e4e342ED2EdDf300cfe37f0309B0",
+  "frequency": 1
+}, {
+  "pool_address": "0x84bAab39Ae4E48A21841b061D2A57Da434C9F447",
+  "frequency": 1
+}, {
+  "pool_address": "0x66bA59cBD09E75B209D1D7E8Cf97f4Ab34DA413B",
+  "frequency": 1
+}, {
+  "pool_address": "0x90fED54925A16E8366643ea53A91D229904E3cf4",
+  "frequency": 1
+}, {
+  "pool_address": "0x80C7770B4399AE22149db17e97F9FC8a10ca5100",
+  "frequency": 1
+}, {
+  "pool_address": "0x162ceC59dFac80086D7370F11dcD8705a45C9333",
+  "frequency": 1
+}, {
+  "pool_address": "0xBCaa74f7401Ff4a2702e4F0dBA83B546815299f3",
+  "frequency": 1
+}, {
+  "pool_address": "0x4B9d963A6549Dfd816a492D312A976924051c782",
+  "frequency": 1
+}, {
+  "pool_address": "0x5B02adAc06a5D8D688c63E7B7B54965fF9247Fd3",
+  "frequency": 1
+}, {
+  "pool_address": "0x9Ef95A54ED744c78f5230C00CEdAd9175d43c9D5",
+  "frequency": 1
+}, {
+  "pool_address": "0x8a67D1303801cDF72468aADB5a095742A1292e44",
+  "frequency": 1
+}, {
+  "pool_address": "0x702E1c036f6Aa1cA0b104C4156920b2463d4b867",
+  "frequency": 1
+}, {
+  "pool_address": "0x64A6bC2656c4ce5F3Ee27ef74dAe6E5bdD30e0c4",
+  "frequency": 1
+}, {
+  "pool_address": "0xECf678Bf1850ac206f42C9e959F72a0ab0e86F77",
+  "frequency": 1
+}, {
+  "pool_address": "0x11396ebF0521a33f84248a7E73950b0fce311Af3",
+  "frequency": 1
+}, {
+  "pool_address": "0xB388F880Ed2b4Ee377Da6d5a6aF4f33161787526",
+  "frequency": 1
+}, {
+  "pool_address": "0x3638303aee4020EA1cf3f2cE855ACA0D5b7fcd12",
+  "frequency": 1
+}, {
+  "pool_address": "0x479e82b60f5885A3569d618d027Ef1Ac2020Ee82",
+  "frequency": 1
+}, {
+  "pool_address": "0xb56C1c0d9c7A692fcfda8385b9DA5384782493Aa",
+  "frequency": 1
+}, {
+  "pool_address": "0xE935fAC6b950539F37450f80C76325a6B2232725",
+  "frequency": 1
+}, {
+  "pool_address": "0x7c0D6cbe332Dac916944C61956B291A4045F9Bfa",
+  "frequency": 1
+}, {
+  "pool_address": "0x04EcD3C4563ef7491919E6C7aa330eb89e0c8284",
+  "frequency": 1
+}, {
+  "pool_address": "0x671f8bAAE356739Eb1A277cE934a17AA03F6a5f7",
+  "frequency": 1
+}, {
+  "pool_address": "0x119f33C3266DD5eD81A9Db08d5033d4052E1e145",
+  "frequency": 1
+}, {
+  "pool_address": "0xafc9efC44e227Ab144A22AEBDf001ECda48B0549",
+  "frequency": 1
+}, {
+  "pool_address": "0xEcC23Ee6D7Fde5bC09a9fD69d9cCA9B00091A432",
+  "frequency": 1
+}, {
+  "pool_address": "0x2520994FD94dDCC252b4598038cb05B7A0391ba9",
+  "frequency": 1
+}, {
+  "pool_address": "0x4cd48a9d93538fCb1D0A393c9b6cEb2D05403490",
+  "frequency": 1
+}, {
+  "pool_address": "0x9B6f2B0BdD2c17a9CA01D8A8901aB2254ED22906",
+  "frequency": 1
+}, {
+  "pool_address": "0xb4a6D05fda80C8F5ad291DD4f4fAE78B9980dC15",
+  "frequency": 1
+}, {
+  "pool_address": "0xfDd29ACa90c1f7350beBc291ad309F3cE53E7634",
+  "frequency": 1
+}, {
+  "pool_address": "0xb80946cd2B4b68beDd769A21CA2F096EAD6E0EE8",
+  "frequency": 1
+}, {
+  "pool_address": "0x4bEc87CB126dE6c1f8B410e32d1F4AE472fdD83b",
+  "frequency": 1
+}, {
+  "pool_address": "0x3dc88f01054ED696D9a68a24dCf12e712255009E",
+  "frequency": 1
+}, {
+  "pool_address": "0x6A6Ee7ef41c85F9dE2fBE207AC3b5fB99Fe6c800",
+  "frequency": 1
+}, {
+  "pool_address": "0x0892bc544f13756CfA5952b036B470eE47f911F5",
+  "frequency": 1
+}, {
+  "pool_address": "0x76A26FEd4622dA09740A409bC0E03955d34d2D50",
+  "frequency": 1
+}, {
+  "pool_address": "0x1DE43182992FE252674B5Aac9B5C884ca48D2812",
+  "frequency": 1
+}, {
+  "pool_address": "0xd2C6df15Ab5bAe5Ef6aaE4184318034009441Bf9",
+  "frequency": 1
+}, {
+  "pool_address": "0x71068a200abfde044D1AFa4154ef276180eA1c3b",
+  "frequency": 1
+}, {
+  "pool_address": "0x2Cf4195ad44630edf68dC890a69Ac91afB24cbC9",
+  "frequency": 1
+}, {
+  "pool_address": "0xa0Bd05fDC773d87A49d790E82274d1f18301b0A4",
+  "frequency": 1
+}, {
+  "pool_address": "0xf4e7CaD3dbb171E5fd7B646955b561bF68020EDB",
+  "frequency": 1
+}, {
+  "pool_address": "0x890396B378c4f03015037a9a44708a7CEb9f90D5",
+  "frequency": 1
+}, {
+  "pool_address": "0x747E839A12E13f3fae477f5EfEf2c16a75e46F87",
+  "frequency": 1
+}, {
+  "pool_address": "0xd5105B2420d37B2CCE4e79a48eDcbfc5f1F166f4",
+  "frequency": 1
+}, {
+  "pool_address": "0x70BB8E6844DFB681810FD557DD741bCaF027bF94",
+  "frequency": 1
+}, {
+  "pool_address": "0x3C8e1997D9f93c989D4D7660B6Ca52C451AD7554",
+  "frequency": 1
+}, {
+  "pool_address": "0x8B2AFA05A13B6EFA9022FF53d8E6E70D2929A884",
+  "frequency": 1
+}, {
+  "pool_address": "0xE7013bFcA412678C4EB0d7D73917913B2Efec407",
+  "frequency": 1
+}, {
+  "pool_address": "0xC2526ca6599F9A2f98c2A47Cc1092Fd12aA3863f",
+  "frequency": 1
+}, {
+  "pool_address": "0x68F679A5A8EeAe3708cd0842b7ED0A06B84102D9",
+  "frequency": 1
+}, {
+  "pool_address": "0x5208f67c7c298939F62BDC79E1A3F5ec6080b414",
+  "frequency": 1
+}, {
+  "pool_address": "0x873670F588B43eb8f81D4755513a9369dFc4E005",
+  "frequency": 1
+}, {
+  "pool_address": "0xf56D08221B5942C428Acc5De8f78489A97fC5599",
+  "frequency": 1
+}, {
+  "pool_address": "0x0d14D6C998B29f93D95796098D19289C8028f11D",
+  "frequency": 1
+}, {
+  "pool_address": "0xdC39CED42340c6AE817bb1d4817D902894Be5c6D",
+  "frequency": 1
+}, {
+  "pool_address": "0xfdE90A4Cfc33834fD77061F037E4Fb5e828CFaE7",
+  "frequency": 1
+}, {
+  "pool_address": "0x43A940896d4926b87f9ee3fE9094Db2E1b6fD040",
+  "frequency": 1
+}, {
+  "pool_address": "0x24602CB90c5262d51d33fe8E3360Ff37477d80B6",
+  "frequency": 1
+}, {
+  "pool_address": "0x1314AE4CF2A9440303fEf6Ae0FDc9ea5aD7a2A37",
+  "frequency": 1
+}, {
+  "pool_address": "0xeC64a72F36445621e040a99bC15a7500fB36ef8a",
+  "frequency": 1
+}, {
+  "pool_address": "0x1294ADf166a19Bb30D40C8F2D8d7d3517b005972",
+  "frequency": 1
+}, {
+  "pool_address": "0x540aB7bA2Fa8C6378C27908433eDc50d977587A1",
+  "frequency": 1
+}, {
+  "pool_address": "0x97bDe121a739046a3f4FF88e4e4D4176Af5e8C2d",
+  "frequency": 1
+}, {
+  "pool_address": "0xc9656a211E343E7639f0aFAF7C074034d1bEE95b",
+  "frequency": 1
+}, {
+  "pool_address": "0x74092c7c0024feeb3839bED5ab6189eeD86ae856",
+  "frequency": 1
+}, {
+  "pool_address": "0x9410cF01DCDCcDB9B56e285b39cea375e5E90883",
+  "frequency": 1
+}, {
+  "pool_address": "0x833998f17fB8d6B99Ed79f44A010aC3Cd4aE047F",
+  "frequency": 1
+}, {
+  "pool_address": "0xcFdF8bE68A55bcf80C6D1a17d7D750c7e2F3320c",
+  "frequency": 1
+}, {
+  "pool_address": "0x5104846dC1C3c7697B856dC69E350AE4dCc47E24",
+  "frequency": 1
+}, {
+  "pool_address": "0x9eb7EE451623D4eBf951254eDb2958774dfB7446",
+  "frequency": 1
+}, {
+  "pool_address": "0xd7A29E0B4d5D4a38c6a0D8B4aBfC9bF14e8D1000",
+  "frequency": 1
+}, {
+  "pool_address": "0xc6B13ACaDa6120e5C6CAaEea11aE145DbE73f1F1",
+  "frequency": 1
+}, {
+  "pool_address": "0xcDB4e35b235845AE8d0c27f77Cd8176ddFc26965",
+  "frequency": 1
+}, {
+  "pool_address": "0x0297D7f599C99Abc818725922DaB86cF81c3CC95",
+  "frequency": 1
+}, {
+  "pool_address": "0xd330236c40712D9003768ba70c70AF2fC0739451",
+  "frequency": 1
+}, {
+  "pool_address": "0xa87De12EA019B7b55772BbFFc0d9a844F7327Ef9",
+  "frequency": 1
+}, {
+  "pool_address": "0xfaA318479b7755b2dBfDD34dC306cb28B420Ad12",
+  "frequency": 1
+}, {
+  "pool_address": "0xD31b4ABb9c71d709Daa0b58A6EfCD32f20476182",
+  "frequency": 1
+}, {
+  "pool_address": "0x3CdA1f103F4B43d0D3951b88658cC8610C8596eC",
+  "frequency": 1
+}, {
+  "pool_address": "0xd73Bf1d9Eeb150Bc83B3a0F1C054dcD42575FE13",
+  "frequency": 1
+}, {
+  "pool_address": "0x0A0A7A1395934351E977C5C2bB4e837a472b3205",
+  "frequency": 1
+}, {
+  "pool_address": "0xc1729eFA9E0F9285957C4565BbB3a8EBD967BBce",
+  "frequency": 1
+}, {
+  "pool_address": "0x7D88b48f250830FC5a5f336caC03Bae03091ebB5",
+  "frequency": 1
+}, {
+  "pool_address": "0x4D35d4D2e958F40351816E5AdF3571bc79220E83",
+  "frequency": 1
+}, {
+  "pool_address": "0x8bD818551e4ddd5fBB88ef89b22b108c37090788",
+  "frequency": 1
+}, {
+  "pool_address": "0x9cF151817474BcAbf850bAa202Fa4d3bb9919856",
+  "frequency": 1
+}, {
+  "pool_address": "0xf3e53D80c29e3cc5FbCDEde2a41Cc6a19A6D1118",
+  "frequency": 1
+}, {
+  "pool_address": "0x3505Dd7e5c8028F340EA1635EA5f0Edb22c08C2F",
+  "frequency": 1
+}, {
+  "pool_address": "0x07AA6584385cCA15C2c6e13A5599fFc2D177E33b",
+  "frequency": 1
+}]
