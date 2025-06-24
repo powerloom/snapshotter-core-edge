@@ -374,6 +374,7 @@ class Cacher(multiprocessing.Process):
         Only maintaining 24h cache for active pools.
         """
         self._logger.debug(f'ActivePoolsEvent caught with message {msg_obj}')
+        time_interval = 86400
 
         # check if we are already processing this message
         if await self._redis_conn.get(f"active_pool_data:{time_interval}:processing"):
@@ -384,7 +385,6 @@ class Cacher(multiprocessing.Process):
         await self._redis_conn.set(f"active_pool_data:{time_interval}:processing", "true", ex=600)
 
         # check last indexed epoch
-        time_interval = 86400
         last_indexed_epoch = await self._redis_conn.get(f"active_pool_data:{time_interval}:latest:epoch")
         if last_indexed_epoch:
             last_indexed_epoch = int(last_indexed_epoch)
@@ -446,6 +446,8 @@ class Cacher(multiprocessing.Process):
         """
         self._logger.info(f'ActiveTokensEvent caught with message {msg_obj}')
 
+        time_interval = 86400
+
         # check if we are already processing this message
         if await self._redis_conn.get(f"active_token_data:{msg_obj.projectId}:{time_interval}:processing"):
             self._logger.info(f"Already processing active tokens for project {msg_obj.projectId} for time interval {time_interval}")
@@ -455,7 +457,6 @@ class Cacher(multiprocessing.Process):
         await self._redis_conn.set(f"active_token_data:{msg_obj.projectId}:{time_interval}:processing", "true", ex=600)
 
         # check last indexed epoch
-        time_interval = 86400
         last_indexed_epoch = await self._redis_conn.get(f"active_token_data:{time_interval}:latest:epoch")
         if last_indexed_epoch:
             last_indexed_epoch = int(last_indexed_epoch)
