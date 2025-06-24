@@ -290,7 +290,7 @@ async def get_project_finalized_cids_bulk(
         if project_config.keep_previous_snapshot_data:
             logger.info(f'Fetching CIDs for {len(missing_epochs)} epochs for project {project_id}')
             missing_cids_with_epochs = await w3_get_and_cache_finalized_cid_bulk_using_previous_snapshots(
-                redis_conn, state_contract_obj, rpc_helper, ipfs_reader, missing_epochs, project_id,
+                redis_conn, state_contract_obj, rpc_helper, ipfs_reader, missing_epochs, cid_data_with_epochs, project_id,
             )
         else:
             # Batch fetch CIDs from the blockchain
@@ -438,6 +438,40 @@ async def w3_get_and_cache_finalized_cid(
         return null_cid, epoch_id
 
 
+def find_closest_larger_epoch_with_data(epoch_id: int, cid_data_with_epochs: List[Tuple[str, int]]) -> Optional[int]:
+    """
+    Finds the closest larger epoch with data for a given epoch using binary search.
+    
+    Args:
+        epoch_id (int): The reference epoch ID to find the closest larger epoch for
+        epochs_with_data (List[int]): List of epochs that have data (unsorted)
+        
+    Returns:
+        Optional[int]: The closest larger epoch with data, or None if no larger epoch exists
+    """
+    sorted_cid_data_with_epochs = sorted(cid_data_with_epochs, key=lambda x: x[1])
+    sorted_epochs = [epoch_id for _, epoch_id in sorted_cid_data_with_epochs]
+
+    if not sorted_epochs:
+        return None
+    
+    # Use binary search to find the first epoch greater than epoch_id
+    left, right = 0, len(sorted_epochs)
+    
+    while left < right:
+        mid = (left + right) // 2
+        if sorted_epochs[mid] <= epoch_id:
+            left = mid + 1
+        else:
+            right = mid
+    
+    # If we found a valid index, return the epoch at that position
+    if left < len(sorted_epochs):
+        return sorted_cid_data_with_epochs[left]
+    
+    return None
+
+
 @retry(
     reraise=True,
     retry=retry_if_exception_type(Exception),
@@ -450,6 +484,7 @@ async def w3_get_and_cache_finalized_cid_bulk_using_previous_snapshots(
     rpc_helper: RpcHelper,
     ipfs_reader,
     epoch_ids: List[int],
+    known_cid_data_with_epochs: List[Tuple[str, int]],
     project_id: str,
 ):
     """
@@ -496,13 +531,20 @@ async def w3_get_and_cache_finalized_cid_bulk_using_previous_snapshots(
                 break
             sorted_missing_epochs = sorted(list(missing_epochs))
             epoch_to_fetch = sorted_missing_epochs[-1]
+
+            closest_epoch_with_data = find_closest_larger_epoch_with_data(epoch_to_fetch, known_cid_data_with_epochs)
+            if closest_epoch_with_data:
+                closest_epoch_cid = closest_epoch_with_data[0]
+                logger.info(f"Processing closest epoch with data {closest_epoch_with_data[1]} for project {project_id}")
+                # process but don't recurse
+                processed_closest_epoch = await process_snapshot_cid(redis_conn, ipfs_reader, project_id, closest_epoch_cid, closest_epoch_with_data[1], closest_epoch_with_data[1], rec_depth=MAX_RECURSION_DEPTH + 1)
             
             cid, epoch_id = await w3_get_and_cache_finalized_cid(
                 redis_conn, state_contract_obj, rpc_helper, ipfs_reader, epoch_to_fetch, project_id
             )
             cid_data_with_epochs.append((cid, epoch_id))
             missing_epochs.remove(epoch_to_fetch)
-            if cid and "null" not in cid:
+            if (cid and "null" not in cid) or processed_closest_epoch:
                 if not missing_epochs:
                     break
                 missing_epoch_list = sorted(list(missing_epochs))
@@ -1503,11 +1545,15 @@ async def process_snapshot_cid(redis_conn: aioredis.Redis, ipfs_reader: AsyncIPF
                 return False
             await redis_conn.set(f"project_processing:{project_id}", "true", ex=600)
 
+        if 'null' in snapshot_cid:
+            logger.info(f"Snapshot cid is null for project {project_id} at epoch {epoch_id} (original epoch {original_epoch_id}), rec_depth {rec_depth}")
+            return False
+
         logger.info(f"Processing snapshot cid: {snapshot_cid} for project {project_id} at epoch {epoch_id} (original epoch {original_epoch_id}), rec_depth {rec_depth}")
 
         project_config = get_project_config(project_id)
         if not project_config.keep_previous_snapshot_data:
-            return
+            return False
         snapshot_data = await get_submission_data(snapshot_cid, ipfs_reader, False)
         pipeline = redis_conn.pipeline()
         expiry_keys = []
@@ -1518,47 +1564,43 @@ async def process_snapshot_cid(redis_conn: aioredis.Redis, ipfs_reader: AsyncIPF
         if snapshot_data:
             if "previousSnapshots" in snapshot_data and len(snapshot_data["previousSnapshots"]) > 0:
                 # last snapshot
-                last_snapshot_epoch_id = snapshot_data["previousSnapshots"][-1][0]
-                # check if last snapshot exists
-                last_snapshot_exists = await redis_conn.hexists(project_hmap_key, last_snapshot_epoch_id)
-                if not last_snapshot_exists:
-                    data_to_cache = {}
-                    all_previous_snapshot_keys = set(range(snapshot_data["previousSnapshots"][0][0], epoch_id))
-                    all_previous_snapshot_cids = set()
-                    # Process each previous snapshot
-                    for (epoch_id, snapshot_cid) in snapshot_data["previousSnapshots"][::-1]:
-                        epoch_id = int(epoch_id)
-                        data_to_cache[epoch_id] = json.dumps({
-                            "snapshot_cid": snapshot_cid,
-                            "status": SnapshotStatus.SUBMITTED.value
-                        })
-                        all_previous_snapshot_cids.add(snapshot_cid)
-                        all_previous_snapshot_keys.discard(epoch_id)
-                        expiry_keys.append(f"{project_id}|{epoch_id}")
+                data_to_cache = {}
+                all_previous_snapshot_keys = set(range(snapshot_data["previousSnapshots"][0][0], epoch_id))
+                all_previous_snapshot_cids = set()
+                # Process each previous snapshot
+                for (epoch_id, snapshot_cid) in snapshot_data["previousSnapshots"][::-1]:
+                    epoch_id = int(epoch_id)
+                    data_to_cache[epoch_id] = json.dumps({
+                        "snapshot_cid": snapshot_cid,
+                        "status": SnapshotStatus.SUBMITTED.value
+                    })
+                    all_previous_snapshot_cids.add(snapshot_cid)
+                    all_previous_snapshot_keys.discard(epoch_id)
+                    expiry_keys.append(f"{project_id}|{epoch_id}")
 
-                    # Add to pipeline if we have data to cache
-                    if data_to_cache:
-                        pipeline.hset(
-                            project_hmap_key,
-                            mapping=data_to_cache,
-                        )
-                    if all_previous_snapshot_cids and project_config.cache_cids:
-                        pipeline.sadd(cids_to_cache_set(), *all_previous_snapshot_cids)
-                    
-                    blank_epochs_bitmap_key = blank_epochs_bitmap(project_id)
+                # Add to pipeline if we have data to cache
+                if data_to_cache:
+                    pipeline.hset(
+                        project_hmap_key,
+                        mapping=data_to_cache,
+                    )
+                if all_previous_snapshot_cids and project_config.cache_cids:
+                    pipeline.sadd(cids_to_cache_set(), *all_previous_snapshot_cids)
 
-                    epochs_to_set = sorted(list(all_previous_snapshot_keys))
-                    await redis_bitmap.set_bits_in_range(redis_conn, blank_epochs_bitmap_key, epochs_to_set)
+                blank_epochs_bitmap_key = blank_epochs_bitmap(project_id)
 
-                    if len(snapshot_data["previousSnapshots"]) > 0:
-                        epoch_id = snapshot_data["previousSnapshots"][0][0]
-                        epoch_cid = snapshot_data["previousSnapshots"][0][1]
-                        # recursively process previous snapshots
-                        within_recursion_depth = rec_depth < MAX_RECURSION_DEPTH
-                        already_processed = await redis_conn.hexists(project_hmap_key, epoch_id)
-                        # check if epoch_id is present in project_hmap_key and blank_epochs_set_key
-                        if within_recursion_depth and not already_processed:
-                            await process_snapshot_cid(redis_conn, ipfs_reader, project_id, epoch_cid, epoch_id, original_epoch_id, rec_depth=rec_depth + 1)
+                epochs_to_set = sorted(list(all_previous_snapshot_keys))
+                await redis_bitmap.set_bits_in_range(redis_conn, blank_epochs_bitmap_key, epochs_to_set)
+
+                if len(snapshot_data["previousSnapshots"]) > 0:
+                    epoch_id = snapshot_data["previousSnapshots"][0][0]
+                    epoch_cid = snapshot_data["previousSnapshots"][0][1]
+                    # recursively process previous snapshots
+                    within_recursion_depth = rec_depth < MAX_RECURSION_DEPTH
+                    already_processed = await redis_conn.hexists(project_hmap_key, epoch_id)
+                    # check if epoch_id is present in project_hmap_key and blank_epochs_set_key
+                    if within_recursion_depth and not already_processed:
+                        await process_snapshot_cid(redis_conn, ipfs_reader, project_id, epoch_cid, epoch_id, original_epoch_id, rec_depth=rec_depth + 1)
 
             if project_config.cache_cids:
                 snapshot_data["previousSnapshots"] = []
@@ -1582,6 +1624,7 @@ async def process_snapshot_cid(redis_conn: aioredis.Redis, ipfs_reader: AsyncIPF
             await redis_conn.delete(f"project_processing:{project_id}")
 
         await pipeline.execute()
+        return True
     except Exception as e:
         logger.error(f'Error processing snapshot cid: {e}')
         logger.error(f'Detailed traceback:\n{traceback.format_exc()}')
