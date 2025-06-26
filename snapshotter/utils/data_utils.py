@@ -40,6 +40,7 @@ from snapshotter.settings.config import projects_config
 from snapshotter.settings.config import aggregator_config
 from snapshotter.utils.models.data_models import SnapshotStatus
 import traceback
+from snapshotter.utils.redis.redis_keys import cids_to_cache_set
 
 logger = default_logger.bind(module='data_helper')
 PROJECT_DATA_ENTRY_EXPIRY = 60 * 60 * 24 * 7  # 7 days in seconds
@@ -131,7 +132,9 @@ async def get_project_finalized_cid(
             cid = f'null_{epoch_id}'
         else:
             # If not in cache, fetch from blockchain and cache it
-            cid, _ = await w3_get_and_cache_finalized_cid(redis_conn, state_contract_obj, rpc_helper, ipfs_reader, epoch_id, project_id)
+            cid, _ = await w3_get_and_cache_finalized_cid(
+                redis_conn, state_contract_obj, rpc_helper, ipfs_reader, epoch_id, project_id
+            )
 
     # Return None if CID is None (consensus not yet available) or contains 'null'
     if cid is None or 'null' in cid:
@@ -202,6 +205,7 @@ async def get_project_finalized_cids_bulk(
     project_first_epoch = await get_project_first_epoch(
         redis_conn, state_contract_obj, rpc_helper, project_id,
     )
+    logger.info(f'Project first epoch: {project_first_epoch}')
 
     last_submitted_snapshot_data = await get_last_submitted_snapshot_data(redis_conn, project_id)
     if last_submitted_snapshot_data:
@@ -214,13 +218,17 @@ async def get_project_finalized_cids_bulk(
             project_id=project_id,
         )
 
-    empty_epochs_with_cids = []
-    if max_epoch_with_data < epoch_id_max:
-        logger.info(f'Max epoch with data {max_epoch_with_data} is less than epoch_id_max {epoch_id_max}. Adjusting epoch_id_max to {max_epoch_with_data}')
-        empty_epochs_with_cids = [(f'null_{epoch_id}', epoch_id) for epoch_id in range(max_epoch_with_data + 1, epoch_id_max + 1)]
-        epoch_id_max = max(epoch_id_min, max_epoch_with_data)
+    cid_data_with_epochs = []
 
-    logger.info(f'Project first epoch: {project_first_epoch}')
+    if max_epoch_with_data < epoch_id_max:
+        logger.info(
+            f'Max epoch with data {max_epoch_with_data} is less than epoch_id_max {epoch_id_max}. '
+            f'Adjusting epoch_id_max to {max_epoch_with_data}'
+        )
+        cid_data_with_epochs.extend([
+            (f'null_{epoch_id}', epoch_id) 
+            for epoch_id in range(max_epoch_with_data + 1, epoch_id_max + 1)
+        ])
 
     if epoch_id_min < project_first_epoch:
         logger.warning(
@@ -229,19 +237,20 @@ async def get_project_finalized_cids_bulk(
         )
         epoch_id_min = project_first_epoch
         
-        # If the adjusted min is greater than max, return empty list
-        if epoch_id_min > epoch_id_max:
-            logger.warning(
-                f'Adjusted min epoch {epoch_id_min} is greater than max epoch {epoch_id_max}.',
-                'Returning empty list.',
-            )
-            return [], project_first_epoch
+    # If the adjusted min is greater than max, return empty list
+    if epoch_id_min > max_epoch_with_data:
+        logger.warning(
+            f'Adjusted min epoch {epoch_id_min} is greater than max epoch {max_epoch_with_data}.',
+            'Returning empty list.',
+        )
+        return [], project_first_epoch
 
-    epoch_ids_set = set(range(epoch_id_min, epoch_id_max + 1))
+    epoch_ids_set = set(range(epoch_id_min, min(epoch_id_max, max_epoch_with_data) + 1))
 
     # Check Redis cache for existing CIDs
-    epoch_ids_to_fetch = list(range(epoch_id_min, epoch_id_max + 1))
+    epoch_ids_to_fetch = list(epoch_ids_set)
     logger.info(f'Fetching CIDs for {len(epoch_ids_to_fetch)} epochs for project {project_id}')
+
     if not epoch_ids_to_fetch:
         return [], project_first_epoch
  
@@ -256,7 +265,6 @@ async def get_project_finalized_cids_bulk(
         else:
             data.append(dict())
 
-    cid_data_with_epochs = []
     for data, epoch_id in zip(data, epoch_ids_to_fetch):
         if "snapshot_cid" in data:
             cid_data_with_epochs.append((data["snapshot_cid"], epoch_id))
@@ -282,7 +290,7 @@ async def get_project_finalized_cids_bulk(
         if project_config.keep_previous_snapshot_data:
             logger.info(f'Fetching CIDs for {len(missing_epochs)} epochs for project {project_id}')
             missing_cids_with_epochs = await w3_get_and_cache_finalized_cid_bulk_using_previous_snapshots(
-                redis_conn, state_contract_obj, rpc_helper, ipfs_reader, missing_epochs, project_id,
+                redis_conn, state_contract_obj, rpc_helper, ipfs_reader, missing_epochs, cid_data_with_epochs, project_id,
             )
         else:
             # Batch fetch CIDs from the blockchain
@@ -295,10 +303,10 @@ async def get_project_finalized_cids_bulk(
             )
 
         # Merge existing and missing CIDs
-        all_cids_with_epochs = cid_data_with_epochs + missing_cids_with_epochs + empty_epochs_with_cids
+        all_cids_with_epochs = cid_data_with_epochs + missing_cids_with_epochs
         all_cids_with_epochs.sort(key=lambda x: x[1])
     else:
-        all_cids_with_epochs = cid_data_with_epochs + empty_epochs_with_cids
+        all_cids_with_epochs = cid_data_with_epochs
         all_cids_with_epochs.sort(key=lambda x: x[1])
     return [cid for cid, _ in all_cids_with_epochs], project_first_epoch
 
@@ -430,6 +438,40 @@ async def w3_get_and_cache_finalized_cid(
         return null_cid, epoch_id
 
 
+def find_closest_larger_epoch_with_data(epoch_id: int, cid_data_with_epochs: List[Tuple[str, int]]) -> Optional[int]:
+    """
+    Finds the closest larger epoch with data for a given epoch using binary search.
+    
+    Args:
+        epoch_id (int): The reference epoch ID to find the closest larger epoch for
+        epochs_with_data (List[int]): List of epochs that have data (unsorted)
+        
+    Returns:
+        Optional[int]: The closest larger epoch with data, or None if no larger epoch exists
+    """
+    sorted_cid_data_with_epochs = sorted(cid_data_with_epochs, key=lambda x: x[1])
+    sorted_epochs = [epoch_id for _, epoch_id in sorted_cid_data_with_epochs]
+
+    if not sorted_epochs:
+        return None
+    
+    # Use binary search to find the first epoch greater than epoch_id
+    left, right = 0, len(sorted_epochs)
+    
+    while left < right:
+        mid = (left + right) // 2
+        if sorted_epochs[mid] <= epoch_id:
+            left = mid + 1
+        else:
+            right = mid
+    
+    # If we found a valid index, return the epoch at that position
+    if left < len(sorted_epochs):
+        return sorted_cid_data_with_epochs[left]
+    
+    return None
+
+
 @retry(
     reraise=True,
     retry=retry_if_exception_type(Exception),
@@ -442,6 +484,7 @@ async def w3_get_and_cache_finalized_cid_bulk_using_previous_snapshots(
     rpc_helper: RpcHelper,
     ipfs_reader,
     epoch_ids: List[int],
+    known_cid_data_with_epochs: List[Tuple[str, int]],
     project_id: str,
 ):
     """
@@ -465,6 +508,7 @@ async def w3_get_and_cache_finalized_cid_bulk_using_previous_snapshots(
         blank_epochs_bitmap_key = blank_epochs_bitmap(project_id)
         missing_epochs = []
         cid_data_with_epochs = []
+        processed_snapshot_cids = []
 
         blank_epochs = await redis_bitmap.get_bits_in_range(
             redis_conn,
@@ -488,11 +532,22 @@ async def w3_get_and_cache_finalized_cid_bulk_using_previous_snapshots(
                 break
             sorted_missing_epochs = sorted(list(missing_epochs))
             epoch_to_fetch = sorted_missing_epochs[-1]
-            
-            cid, epoch_id = await w3_get_and_cache_finalized_cid(redis_conn, state_contract_obj, rpc_helper, ipfs_reader, epoch_to_fetch, project_id)
+
+            closest_epoch_with_data = find_closest_larger_epoch_with_data(epoch_to_fetch, known_cid_data_with_epochs)
+            if closest_epoch_with_data:
+                closest_epoch_cid = closest_epoch_with_data[0]
+                if closest_epoch_cid not in processed_snapshot_cids:
+                    logger.info(f"Processing closest epoch with data {closest_epoch_with_data[1]} for project {project_id}")
+                    # process but don't recurse
+                    processed_closest_epoch = await process_snapshot_cid(redis_conn, ipfs_reader, project_id, closest_epoch_cid, closest_epoch_with_data[1], closest_epoch_with_data[1], rec_depth=MAX_RECURSION_DEPTH + 1)
+                    processed_snapshot_cids.append(closest_epoch_cid)
+                
+            cid, epoch_id = await w3_get_and_cache_finalized_cid(
+                redis_conn, state_contract_obj, rpc_helper, ipfs_reader, epoch_to_fetch, project_id
+            )
             cid_data_with_epochs.append((cid, epoch_id))
             missing_epochs.remove(epoch_to_fetch)
-            if cid and "null" not in cid:
+            if (cid and "null" not in cid) or processed_closest_epoch:
                 if not missing_epochs:
                     break
                 missing_epoch_list = sorted(list(missing_epochs))
@@ -1483,7 +1538,6 @@ async def get_block_number_closest_to_timestamp(
         return None
 
 
-    
 async def process_snapshot_cid(redis_conn: aioredis.Redis, ipfs_reader: AsyncIPFSClient, project_id: str, snapshot_cid: str, epoch_id: int, original_epoch_id: int, rec_depth: int = 0):
     try:
         if rec_depth == 0:
@@ -1492,13 +1546,17 @@ async def process_snapshot_cid(redis_conn: aioredis.Redis, ipfs_reader: AsyncIPF
             if await redis_conn.exists(f"project_processing:{project_id}"):
                 logger.info(f"Project {project_id} is already being processed. Skipping.")
                 return False
-            await redis_conn.set(f"project_processing:{project_id}", "true", ex=300)
+            await redis_conn.set(f"project_processing:{project_id}", "true", ex=600)
+
+        if 'null' in snapshot_cid:
+            logger.info(f"Snapshot cid is null for project {project_id} at epoch {epoch_id} (original epoch {original_epoch_id}), rec_depth {rec_depth}")
+            return False
 
         logger.info(f"Processing snapshot cid: {snapshot_cid} for project {project_id} at epoch {epoch_id} (original epoch {original_epoch_id}), rec_depth {rec_depth}")
 
         project_config = get_project_config(project_id)
         if not project_config.keep_previous_snapshot_data:
-            return
+            return False
         snapshot_data = await get_submission_data(snapshot_cid, ipfs_reader, False)
         pipeline = redis_conn.pipeline()
         expiry_keys = []
@@ -1507,9 +1565,11 @@ async def process_snapshot_cid(redis_conn: aioredis.Redis, ipfs_reader: AsyncIPF
         expiry_time = int(time.time()) + PROJECT_DATA_ENTRY_EXPIRY
 
         if snapshot_data:
-            if "previousSnapshots" in snapshot_data and len(snapshot_data["previousSnapshots"]) > 0:    
+            if "previousSnapshots" in snapshot_data and len(snapshot_data["previousSnapshots"]) > 0:
+                # last snapshot
                 data_to_cache = {}
                 all_previous_snapshot_keys = set(range(snapshot_data["previousSnapshots"][0][0], epoch_id))
+                all_previous_snapshot_cids = set()
                 # Process each previous snapshot
                 for (epoch_id, snapshot_cid) in snapshot_data["previousSnapshots"][::-1]:
                     epoch_id = int(epoch_id)
@@ -1517,6 +1577,7 @@ async def process_snapshot_cid(redis_conn: aioredis.Redis, ipfs_reader: AsyncIPF
                         "snapshot_cid": snapshot_cid,
                         "status": SnapshotStatus.SUBMITTED.value
                     })
+                    all_previous_snapshot_cids.add(snapshot_cid)
                     all_previous_snapshot_keys.discard(epoch_id)
                     expiry_keys.append(f"{project_id}|{epoch_id}")
 
@@ -1526,7 +1587,9 @@ async def process_snapshot_cid(redis_conn: aioredis.Redis, ipfs_reader: AsyncIPF
                         project_hmap_key,
                         mapping=data_to_cache,
                     )
-                
+                if all_previous_snapshot_cids and project_config.cache_cids:
+                    pipeline.sadd(cids_to_cache_set(), *all_previous_snapshot_cids)
+
                 blank_epochs_bitmap_key = blank_epochs_bitmap(project_id)
 
                 epochs_to_set = sorted(list(all_previous_snapshot_keys))
@@ -1564,6 +1627,7 @@ async def process_snapshot_cid(redis_conn: aioredis.Redis, ipfs_reader: AsyncIPF
             await redis_conn.delete(f"project_processing:{project_id}")
 
         await pipeline.execute()
+        return True
     except Exception as e:
         logger.error(f'Error processing snapshot cid: {e}')
         logger.error(f'Detailed traceback:\n{traceback.format_exc()}')

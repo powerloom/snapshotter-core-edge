@@ -113,6 +113,7 @@ services:
       - MAX_CONCURRENT_WRITES=${MAX_CONCURRENT_WRITES:-10}
       - STREAM_POOL_HEALTH_CHECK_INTERVAL=${STREAM_POOL_HEALTH_CHECK_INTERVAL:-60000}
       - DATA_MARKET_IN_REQUEST=${DATA_MARKET_IN_REQUEST:-false}
+      - CONNECTION_REFRESH_INTERVAL_SEC=${CONNECTION_REFRESH_INTERVAL_SEC:-300}
     restart: on-failure:10
     # Increase file descriptors limit for better performance
     ulimits:
@@ -138,6 +139,11 @@ services:
   cacher:
     <<: *snapshotter-base
     command: bash -c "bash init_processes.sh cacher"
+    depends_on:
+      - processor-distributor
+  cid-cacher:
+    <<: *snapshotter-base
+    command: bash -c "bash init_processes.sh cid_cacher"
     depends_on:
       - processor-distributor
   aggregation-worker:

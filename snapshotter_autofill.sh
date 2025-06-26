@@ -55,6 +55,10 @@ if [ "$TELEGRAM_CHAT_ID" ]; then
     echo "Found TELEGRAM_CHAT_ID ${TELEGRAM_CHAT_ID}";
 fi
 
+if [ "$CONNECTION_REFRESH_INTERVAL_SEC" ]; then
+    echo "Found CONNECTION_REFRESH_INTERVAL_SEC ${CONNECTION_REFRESH_INTERVAL_SEC}";
+fi
+
 
 if [ "$NAMESPACE" ]; then
     echo "Found NAMESPACE ${NAMESPACE}";

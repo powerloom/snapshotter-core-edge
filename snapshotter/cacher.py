@@ -374,13 +374,17 @@ class Cacher(multiprocessing.Process):
         Only maintaining 24h cache for active pools.
         """
         self._logger.debug(f'ActivePoolsEvent caught with message {msg_obj}')
+        time_interval = 86400
 
-        # # only do this every 10 epochs
-        if msg_obj.epochId % 10 != 0:
+        # check if we are already processing this message
+        if await self._redis_conn.get(f"active_pool_data:{time_interval}:processing"):
+            self._logger.info(f"Already processing active pools for time interval {time_interval}")
             return
 
+        # set key in redis to indicate that we are processing this message for 10 minutes
+        await self._redis_conn.set(f"active_pool_data:{time_interval}:processing", "true", ex=600)
+
         # check last indexed epoch
-        time_interval = 86400
         last_indexed_epoch = await self._redis_conn.get(f"active_pool_data:{time_interval}:latest:epoch")
         if last_indexed_epoch:
             last_indexed_epoch = int(last_indexed_epoch)
@@ -424,10 +428,14 @@ class Cacher(multiprocessing.Process):
                             if pool_address in active_pools:
                                 active_pools[pool_address] -= frequency
                 # set data in redis
-                await self._redis_conn.set(f"active_pool_data:{time_interval}:{msg_obj.epochId}:{settings.namespace}", json.dumps(active_pools))
-                await self._redis_conn.set(f"active_pool_data:{time_interval}:latest:epoch", msg_obj.epochId)
+                pipeline = self._redis_conn.pipeline()
+                pipeline.set(f"active_pool_data:{time_interval}:{msg_obj.epochId}:{settings.namespace}", json.dumps(active_pools))
+                pipeline.set(f"active_pool_data:{time_interval}:latest:epoch", msg_obj.epochId)
                 # remove old data
-                await self._redis_conn.delete(f"active_pool_data:{time_interval}:{last_indexed_epoch}:{settings.namespace}")
+                if last_indexed_epoch > 0:
+                    pipeline.delete(f"active_pool_data:{time_interval}:{last_indexed_epoch}:{settings.namespace}")
+                pipeline.delete(f"active_pool_data:{time_interval}:processing")
+                await pipeline.execute()
 
     async def _process_active_tokens_message(self, msg_obj: SnapshotSubmittedMessage):
         """
@@ -438,12 +446,17 @@ class Cacher(multiprocessing.Process):
         """
         self._logger.info(f'ActiveTokensEvent caught with message {msg_obj}')
 
-        # only do this every 10 epochs
-        if msg_obj.epochId % 10 != 0:
+        time_interval = 86400
+
+        # check if we are already processing this message
+        if await self._redis_conn.get(f"active_token_data:{msg_obj.projectId}:{time_interval}:processing"):
+            self._logger.info(f"Already processing active tokens for project {msg_obj.projectId} for time interval {time_interval}")
             return
 
+        # set key in redis to indicate that we are processing this message for 10 minutes
+        await self._redis_conn.set(f"active_token_data:{msg_obj.projectId}:{time_interval}:processing", "true", ex=600)
+
         # check last indexed epoch
-        time_interval = 86400
         last_indexed_epoch = await self._redis_conn.get(f"active_token_data:{time_interval}:latest:epoch")
         if last_indexed_epoch:
             last_indexed_epoch = int(last_indexed_epoch)
@@ -487,10 +500,14 @@ class Cacher(multiprocessing.Process):
                             if token_address in active_tokens:
                                 active_tokens[token_address] -= frequency
                 # set data in redis
-                await self._redis_conn.set(f"active_token_data:{time_interval}:{msg_obj.epochId}:{settings.namespace}", json.dumps(active_tokens))
-                await self._redis_conn.set(f"active_token_data:{time_interval}:latest:epoch", msg_obj.epochId)
+                pipeline = self._redis_conn.pipeline()
+                pipeline.set(f"active_token_data:{time_interval}:{msg_obj.epochId}:{settings.namespace}", json.dumps(active_tokens))
+                pipeline.set(f"active_token_data:{time_interval}:latest:epoch", msg_obj.epochId)
                 # remove old data
-                await self._redis_conn.delete(f"active_token_data:{time_interval}:{last_indexed_epoch}:{settings.namespace}")
+                if last_indexed_epoch > 0:
+                    pipeline.delete(f"active_token_data:{time_interval}:{last_indexed_epoch}:{settings.namespace}")
+                pipeline.delete(f"active_token_data:{msg_obj.projectId}:{time_interval}:processing")
+                await pipeline.execute()
 
     async def _process_trade_volume_from_base_snapshot_message(self, msg_obj: SnapshotSubmittedMessage, time_interval: int):
         """
@@ -501,9 +518,13 @@ class Cacher(multiprocessing.Process):
         """
         self._logger.info(f'TradeVolumeFromBaseSnapshotEvent caught with message {msg_obj}')
 
-        # only do this every 10 epochs
-        if msg_obj.epochId % 10 != 0:
+        # check if we are already processing this message
+        if await self._redis_conn.get(f"trade_volume_data:{msg_obj.projectId}:{time_interval}:processing"):
+            self._logger.info(f"Already processing trade volume for project {msg_obj.projectId} for time interval {time_interval}")
             return
+
+        # set key in redis to indicate that we are processing this message for 10 minutes
+        await self._redis_conn.set(f"trade_volume_data:{msg_obj.projectId}:{time_interval}:processing", "true", ex=600)
 
         # Check last indexed epoch
         last_indexed_epoch = await self._redis_conn.get(
@@ -609,19 +630,22 @@ class Cacher(multiprocessing.Process):
                         total_trade_volume += volume
 
         # Set data in redis (same pattern as active pools/tokens)
-        await self._redis_conn.set(
+        pipeline = self._redis_conn.pipeline()
+        pipeline.set(
             f"trade_volume_data:{msg_obj.projectId}:{time_interval}:{msg_obj.epochId}:{settings.namespace}", 
             str(total_trade_volume)
         )
-        await self._redis_conn.set(
+        pipeline.set(
             f"trade_volume_data:{msg_obj.projectId}:{time_interval}:latest:epoch", msg_obj.epochId
         )
         # Remove old data
         if last_indexed_epoch > 0:
-            await self._redis_conn.delete(
+            pipeline.delete(
                 f"trade_volume_data:{msg_obj.projectId}:{time_interval}:{last_indexed_epoch}:"
                 f"{settings.namespace}"
             )
+        pipeline.delete(f"trade_volume_data:{msg_obj.projectId}:{time_interval}:processing")
+        await pipeline.execute()
 
     async def _process_snapshot_submitted_message(self, event_data):
         """
