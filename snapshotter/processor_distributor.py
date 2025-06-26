@@ -14,7 +14,7 @@ from signal import signal
 from signal import SIGQUIT
 from signal import SIGTERM
 from socket import gethostname
-from typing import Awaitable
+from typing import Awaitable, Tuple
 from typing import Dict
 from typing import List
 from typing import Set
@@ -53,8 +53,8 @@ from snapshotter.utils.models.data_models import SnapshotterStateUpdate
 from snapshotter.utils.models.data_models import TelegramEpochProcessingReportMessage
 from snapshotter.utils.models.message_models import EpochBase
 from snapshotter.utils.models.message_models import SnapshotProcessMessage
-from snapshotter.utils.models.message_models import SnapshotSubmittedMessage
-from snapshotter.utils.models.settings_model import AggregateOn
+from snapshotter.utils.models.message_models import ProcessingCompleteMessage
+from snapshotter.utils.models.message_models import CalculateAggregateMessage
 from snapshotter.utils.redis.redis_conn import RedisPoolCache
 from snapshotter.utils.redis.redis_keys import epoch_id_project_to_state_mapping
 from snapshotter.utils.dramatiq_queues import (
@@ -66,7 +66,7 @@ from snapshotter.utils.dramatiq_queues import (
 )
 
 # Configure Redis broker with no middleware
-redis_broker = RedisBroker(host=settings.redis.host, port=settings.redis.port)
+redis_broker = RedisBroker(host=settings.redis.host, port=settings.redis.port, db=settings.redis.db)
 redis_broker.add_middleware(AsyncIO())
 
 # Remove Prometheus middleware to avoid errors
@@ -152,14 +152,14 @@ class ProcessorDistributor(multiprocessing.Process):
 
         self._aggregator_config_mapping = dict()
         for agg_config in aggregator_config:
-            self._aggregator_config_mapping[agg_config.project_type] = agg_config
+            self._aggregator_config_mapping[agg_config.project_name] = agg_config
 
         self._logger.debug('All preload tasks by string ID during init: {}', self._all_preload_tasks)
         self._last_epoch_processing_health_check = 0
         self._preloader_compute_mapping = dict()
         self._snapshot_build_awaited_project_ids = dict()
         # Task tracking
-        self._active_tasks: Set[asyncio.Task] = set()
+        self._active_tasks: Set[Tuple[float, asyncio.Task]] = set()
         self._task_timeout = settings.async_task_config.task_timeout
         self._task_cleanup_interval = settings.async_task_config.task_cleanup_interval
 
@@ -272,16 +272,25 @@ class ProcessorDistributor(multiprocessing.Process):
             self._logger.debug('Set epoch size to {}', self._epoch_size)
         self._epochs_in_a_day = 86400 // (self._epoch_size * self._source_chain_block_time)
         self._logger.debug('Set epochs in a day to {}', self._epochs_in_a_day)
-        self._source_chain_epoch_size = await get_source_chain_epoch_size(
+        try:
+            self._source_chain_epoch_size = await get_source_chain_epoch_size(
             redis_conn=self._redis_conn,
-            state_contract_obj=self._protocol_state_contract,
-            rpc_helper=self._anchor_rpc_helper,
-        )
-        self._source_chain_id = await get_source_chain_id(
-            redis_conn=self._redis_conn,
-            rpc_helper=self._anchor_rpc_helper,
-            state_contract_obj=self._protocol_state_contract,
-        )
+                state_contract_obj=self._protocol_state_contract,
+                rpc_helper=self._anchor_rpc_helper,
+            )
+        except Exception as e:
+            self._logger.error(f'Error fetching source chain epoch size in processor distributor _init_protocol_meta: {e}')
+            sys.exit(1)
+
+        try:
+            self._source_chain_id = await get_source_chain_id(
+                redis_conn=self._redis_conn,
+                rpc_helper=self._anchor_rpc_helper,
+                state_contract_obj=self._protocol_state_contract,
+            )
+        except Exception as e:
+            self._logger.error(f'Error fetching source chain id in processor distributor _init_protocol_meta: {e}')
+            sys.exit(1)
 
     async def init_worker(self):
         """
@@ -517,25 +526,32 @@ class ProcessorDistributor(multiprocessing.Process):
 
         :param message: IncomingMessage object containing the message to be processed.
         """
-        process_unit: SnapshotSubmittedMessage = (
-            SnapshotSubmittedMessage.model_validate_json(event_data)
+        self._logger.debug('Distributing callbacks for aggregation: {}', event_data)
+        process_unit: ProcessingCompleteMessage = (
+            ProcessingCompleteMessage.model_validate_json(event_data)
         )
 
         self._logger.trace(f'Aggregation Task Distribution time - {int(time.time())}')
         # go through aggregator config, if it matches then send appropriate message
         if len(aggregator_types) > 0:
             for config in aggregator_config:
-                task_type = config.project_type
-                if config.aggregate_on == AggregateOn.single_project:
-                    if config.base_project_type not in process_unit.projectId:
-                        self._logger.trace(f'projectId mismatch {process_unit.projectId} {config.base_project_type}')
-                        continue
-
+                task_type = config.project_name
+                if config.depends_on not in process_unit.task_type:
+                    self._logger.trace(f'projectId mismatch {process_unit.task_type} {config.project_name}')
+                    continue
+                else:
+                    calculate_aggregate_message = CalculateAggregateMessage(
+                        epochId=process_unit.epochId,
+                        begin=process_unit.begin,
+                        end=process_unit.end,
+                        task_type=task_type,
+                        processed_message=process_unit,
+                    )
                     dramatiq.broker.get_broker().enqueue(
                         dramatiq.Message(
                             queue_name=AGGREGATION_QUEUE_NAME,
                             actor_name='handleEvent',  # Match actor name with event_receiver.py
-                            args=(task_type, process_unit.model_dump_json()),
+                            args=(task_type, calculate_aggregate_message.model_dump_json()),
                             kwargs={},
                             options={},
                         ),
@@ -597,6 +613,7 @@ class ProcessorDistributor(multiprocessing.Process):
                     options={},
                 ),
             )
+        elif event_type == 'ProcessingComplete':
             await self._distribute_callbacks_aggregate(
                 event_data,
             )
@@ -814,7 +831,7 @@ class ProcessorDistributor(multiprocessing.Process):
         worker.start()
 
         health_reporter_task = ev_loop.create_task(
-             run_periodic_broker_health_check(
+            run_periodic_broker_health_check(
                 logger=self._logger,
                 redis_conn=self._redis_conn,
                 hostname=self._hostname,

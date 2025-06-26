@@ -201,8 +201,11 @@ class GenericProcessorSnapshot(ABC):
     async def compute(
         self,
         epoch: SnapshotProcessMessage,
-        redis: aioredis.Redis,
+        redis_conn: aioredis.Redis,
         rpc_helper: RpcHelper,
+        anchor_rpc_helper: RpcHelper,
+        ipfs_reader: AsyncIPFSClient,
+        protocol_state_contract,
         task_type: str = None,
     ):
         """
@@ -269,19 +272,19 @@ class GenericProcessorAggregate(ABC):
     @abstractmethod
     async def compute(
         self,
-        msg_obj: Union[SnapshotSubmittedMessage, CalculateAggregateMessage],
-        redis: aioredis.Redis,
+        msg_obj: CalculateAggregateMessage,
+        redis_conn: aioredis.Redis,
         rpc_helper: RpcHelper,
         anchor_rpc_helper: RpcHelper,
         ipfs_reader: AsyncIPFSClient,
         protocol_state_contract,
-        project_id: str,
+        task_type: str,
     ):
         """
         Abstract method to compute aggregate processing.
 
         Args:
-            msg_obj (Union[SnapshotSubmittedMessage, CalculateAggregateMessage]): The message object.
+            msg_obj (CalculateAggregateMessage): The message object.
             redis (aioredis.Redis): Redis connection.
             rpc_helper (RpcHelper): RPC helper instance.
             anchor_rpc_helper (RpcHelper): Anchor RPC helper instance.

@@ -1,4 +1,4 @@
-from typing import List
+from typing import List, Tuple
 from typing import Optional
 
 from pydantic import BaseModel
@@ -45,8 +45,6 @@ class EpochBase(BaseModel):
 
 class SnapshotProcessMessage(EpochBase):
     """Model for snapshot process messages."""
-    data_source: Optional[str] = None
-    primary_data_source: Optional[str] = None
 
 
 class SnapshotFinalizedMessage(BaseModel):
@@ -74,11 +72,16 @@ class SnapshotSubmittedMessage(BaseModel):
     timestamp: int
 
 
-class CalculateAggregateMessage(BaseModel):
+class ProcessingCompleteMessage(EpochBase):
+    """Model for processing complete messages."""
+    task_type: str
+    payload: List[Tuple[str, str]]
+
+
+class CalculateAggregateMessage(EpochBase):
     """Model for calculate aggregate messages."""
-    messages: List[SnapshotSubmittedMessage]
-    epochId: int
-    timestamp: int
+    task_type: str
+    processed_message: ProcessingCompleteMessage
 
 
 class AggregateBase(BaseModel):

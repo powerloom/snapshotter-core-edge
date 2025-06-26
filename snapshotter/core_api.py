@@ -10,9 +10,11 @@ from fastapi import Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi_pagination import add_pagination
 from fastapi_pagination import Page
+from fastapi_pagination.customization import CustomizedPage, UseParamsFields
 from ipfs_client.main import AsyncIPFSClientSingleton
 from pydantic import Field
 from rpc_helper.rpc import RpcHelper
+from typing import TypeVar
 from web3 import Web3
 
 from snapshotter.settings.config import settings
@@ -23,6 +25,7 @@ from snapshotter.utils.default_logger import default_logger
 from snapshotter.utils.file_utils import read_json_file
 from snapshotter.utils.models.data_models import TaskStatusRequest
 from snapshotter.utils.redis.redis_conn import RedisPoolCache
+from computes.api.router import router as compute_router
 
 
 rest_logger = default_logger.bind(module='CoreAPI')
@@ -40,9 +43,11 @@ origins = ['*']
 app = FastAPI()
 
 # Configure pagination for epoch processing status reports
-Page = Page.with_custom_options(
-    size=Field(10, ge=1, le=30),
-)
+T = TypeVar("T")
+Page = CustomizedPage[
+    Page[T],
+    UseParamsFields(size=Field(10, ge=1, le=30)),
+]
 add_pagination(app)
 
 # Add CORS middleware
@@ -54,6 +59,9 @@ app.add_middleware(
     allow_headers=['*'],
 )
 
+# Include the Uniswap V3 API router
+app.include_router(compute_router)
+
 
 @app.on_event('startup')
 async def startup_boilerplate():
@@ -63,6 +71,9 @@ async def startup_boilerplate():
     """
     app.state.core_settings = settings
     app.state.local_user_cache = dict()
+    # Initialize both anchor and main RPC helpers
+    app.state.rpc_helper = RpcHelper(rpc_settings=settings.rpc)
+    await app.state.rpc_helper.init()
     app.state.anchor_rpc_helper = RpcHelper(rpc_settings=settings.anchor_chain_rpc)
     await app.state.anchor_rpc_helper.init()
     app.state.protocol_state_contract = app.state.anchor_rpc_helper.get_current_node()['web3_client'].eth.contract(

@@ -185,13 +185,29 @@ def callback_last_sent_by_issue(issue_type):
 
 
 def service_health_timestamps_key():
+    """
+    Generate Redis key for the service health timestamps hash.
+
+    This key points to a Redis hash that stores the last reported health timestamp
+    for each service instance (e.g., worker, API). The field is the service's
+    hostname, and the value is the Unix timestamp of the last health ping.
+
+    Returns:
+        str: Redis key for the service health timestamps hash.
+    """
     return f'{settings.namespace}:service_health_timestamps'
 
-### Uniswap V3 related keys ###
 
-active_pools_key_prefix = f"active_pools:{settings.namespace}"
+def cids_to_cache_set():
+    """
+    Generate Redis key for the set of CIDs to be cached.
 
-def active_pools_key(block_number):
-    return f"{active_pools_key_prefix}:{block_number}"
+    This key points to a Redis set that acts as a queue for snapshot CIDs
+    that need to be fetched from IPFS and cached in Redis. A worker process
+    (e.g., Cacher) monitors this set, processes the CIDs, and removes them
+    upon successful caching.
 
-
+    Returns:
+        str: Redis key for the CIDs to cache set.
+    """
+    return f'cidsToCache:{settings.namespace}'

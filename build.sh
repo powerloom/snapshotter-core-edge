@@ -65,6 +65,7 @@ echo "Found SIGNER ACCOUNT ADDRESS ${SIGNER_ACCOUNT_ADDRESS}"
 [ -n "$PROST_CHAIN_ID" ] && echo "Found PROST_CHAIN_ID ${PROST_CHAIN_ID}"
 [ -n "$IPFS_URL" ] && echo "Found IPFS_URL ${IPFS_URL}"
 [ -n "$PROTOCOL_STATE_CONTRACT" ] && echo "Found PROTOCOL_STATE_CONTRACT ${PROTOCOL_STATE_CONTRACT}" 
+[ -n "$WETH_ADDRESS" ] && echo "Found WETH_ADDRESS ${WETH_ADDRESS}"
 [ -n "$IPFS_S3_CONFIG_ENABLED" ] && echo "Found IPFS_S3_CONFIG_ENABLED ${IPFS_S3_CONFIG_ENABLED}"
 [ -n "$IPFS_S3_CONFIG_ENDPOINT_URL" ] && echo "Found IPFS_S3_CONFIG_ENDPOINT_URL ${IPFS_S3_CONFIG_ENDPOINT_URL}"
 [ -n "$IPFS_S3_CONFIG_BUCKET_NAME" ] && echo "Found IPFS_S3_CONFIG_BUCKET_NAME ${IPFS_S3_CONFIG_BUCKET_NAME}"
@@ -204,6 +205,7 @@ python scripts/generate_docker_compose.py
 PROFILES=""
 [ "$IPFS_URL" = "/dns/ipfs/tcp/5001" ] && PROFILES="$PROFILES --profile ipfs"
 [ "$ARG1" = "yes_collector" ] && PROFILES="$PROFILES --profile local-collector"
+[ "$REDIS_HOST" = "redis" ] && PROFILES="$PROFILES --profile redis"
 if [ "$USE_NEW_SETUP" = "true" ]; then
     PROFILES="$PROFILES --profile new"
 else
