@@ -6,41 +6,31 @@ import redis.exceptions as redis_exc
 from redis import asyncio as aioredis
 from redis.asyncio.connection import ConnectionPool
 
-from snapshotter.settings.config import settings as settings_conf
 from snapshotter.utils.default_logger import default_logger
 
 # Setup logging
 logger = default_logger.bind(module='RedisConn')
 
-# Redis connection configuration
-REDIS_CONN_CONF = {
-    'host': settings_conf.redis.host,
-    'port': settings_conf.redis.port,
-    'password': settings_conf.redis.password,
-    'db': settings_conf.redis.db,
-    'retry_on_error': [redis.exceptions.ReadOnlyError],
-}
 
-
-def construct_redis_url():
+def construct_redis_url(redis_conf: dict):
     """
     Constructs a Redis URL based on the REDIS_CONN_CONF dictionary.
 
     Returns:
         str: Redis URL constructed from REDIS_CONN_CONF dictionary.
     """
-    if REDIS_CONN_CONF['password']:
+    if redis_conf['password']:
         return (
-            f'redis://{REDIS_CONN_CONF["password"]}@{REDIS_CONN_CONF["host"]}:{REDIS_CONN_CONF["port"]}'
-            f'/{REDIS_CONN_CONF["db"]}'
+            f'redis://{redis_conf["password"]}@{redis_conf["host"]}:{redis_conf["port"]}'
+            f'/{redis_conf["db"]}'
         )
     else:
-        return f'redis://{REDIS_CONN_CONF["host"]}:{REDIS_CONN_CONF["port"]}/{REDIS_CONN_CONF["db"]}'
+        return f'redis://{redis_conf["host"]}:{redis_conf["port"]}/{redis_conf["db"]}'
 
 # Reference: https://github.com/redis/redis-py/issues/936
 
 
-async def get_aioredis_pool(pool_size=200):
+async def get_aioredis_pool(pool_size=200, redis_conf: dict = dict()):
     """
     Returns an aioredis Redis connection pool.
 
@@ -51,7 +41,7 @@ async def get_aioredis_pool(pool_size=200):
         aioredis.Redis: Redis connection pool.
     """
     pool = ConnectionPool.from_url(
-        url=construct_redis_url(),
+        url=construct_redis_url(redis_conf),
         retry_on_error=[redis.exceptions.ReadOnlyError],
         max_connections=pool_size,
     )
@@ -101,11 +91,19 @@ def provide_async_redis_conn_insta(fn):
             return await fn(*args, **kwargs)
         else:
             # Create a single connection using the high-level aioredis interface
+            from snapshotter.settings.config import settings as settings_conf
+            redis_conf = {
+                'host': settings_conf.redis.host,
+                'port': settings_conf.redis.port,
+                'password': settings_conf.redis.password,
+                'db': settings_conf.redis.db,
+            }
+
             connection = await aioredis.Redis(
-                host=REDIS_CONN_CONF['host'],
-                port=REDIS_CONN_CONF['port'],
-                db=REDIS_CONN_CONF['db'],
-                password=REDIS_CONN_CONF['password'],
+                host=redis_conf['host'],
+                port=redis_conf['port'],
+                db=redis_conf['db'],
+                password=redis_conf['password'],
                 retry_on_error=[redis.exceptions.ReadOnlyError],
             )
             kwargs[arg_conn] = connection
@@ -129,15 +127,23 @@ class RedisPoolCache:
     _aioredis_pool: aioredis.Redis
     _pool_size: int
 
-    def __init__(self, pool_size=2000):
+    def __init__(self, pool_size=2000, redis_conf: dict = dict()):
         """
         Initializes a Redis connection object with the specified connection pool size.
 
         Args:
             pool_size (int): The maximum number of connections to keep in the pool.
         """
-        self._aioredis_pool = None
         self._pool_size = pool_size
+        if not redis_conf:
+            from snapshotter.settings.config import settings as settings_conf
+            redis_conf = {
+                'host': settings_conf.redis.host,
+                'port': settings_conf.redis.port,
+                'password': settings_conf.redis.password,
+                'db': settings_conf.redis.db,
+            }
+        self._redis_conf = redis_conf
 
     async def populate(self):
         """
@@ -146,4 +152,11 @@ class RedisPoolCache:
         if not self._aioredis_pool:
             self._aioredis_pool = await get_aioredis_pool(
                 self._pool_size,
+                self._redis_conf,
             )
+
+    def get_redis_conn(self):
+        """
+        Returns a Redis connection object.
+        """
+        return self._aioredis_pool

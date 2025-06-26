@@ -26,6 +26,11 @@
   - [Core API](#core-api)
 - [Development setup and instructions](#development-setup-and-instructions)
   - [Configuration](#configuration)
+- [Testing Environment Setup](#testing-environment-setup)
+  - [Python Version and Virtual Environment](#python-version-and-virtual-environment)
+  - [Test-Specific Environment Variables](#test-specific-environment-variables)
+  - [Running the Configuration Loading Test](#running-the-configuration-loading-test)
+  - [Troubleshooting](#troubleshooting)
 - [Monitoring and Debugging](#monitoring-and-debugging)
   - [Internal Snapshotter APIs](#internal-snapshotter-apis)
     - [`GET /internal/snapshotter/epochProcessingStatus`](#get-internalsnapshotterepochprocessingstatus)
@@ -147,7 +152,7 @@ The size of an epoch is configurable. Let that be referred to as `size(E)`
 
 - Once the head of the chain has moved sufficiently ahead so that an epoch can be published, an epoch finalization service takes into account the following factors
     - chain reorganization reports where the reorganized limits are a subset of the epoch qualified to be published
-    - a configurable ‘offset’ from the bleeding edge of the chain
+    - a configurable 'offset' from the bleeding edge of the chain
 
  and then publishes an epoch `(h₁, h₂)` by sending a transaction to the protocol state smart contract deployed on the Prost Chain (anchor chain) so that `h₂ - h₁ + 1 == size(E)`. The next epoch, therefore, is tracked from `h₂ + 1`.
 
@@ -438,6 +443,98 @@ Pooler needs the following config files to be present
             - **`anchor_chain_rpc.full_nodes`**: This will correspond to RPC nodes for the anchor chain on which the protocol state smart contract lives (Prost Chain).
             - **`protocol_state.address`** : This will correspond to the address at which the protocol state smart contract is deployed on the anchor chain. **`protocol_state.abi`** is already filled in the example and already available at the static path specified [`pooler/static/abis/ProtocolContract.json`](pooler/static/abis/ProtocolContract.json)
 
+## Testing Environment Setup
+
+To ensure a consistent and correct testing environment, follow these steps to configure your virtual environment and verify the test configuration loading mechanism.
+
+### Python Version and Virtual Environment
+
+This project uses Poetry for dependency management and requires a Python 3.12 environment.
+
+*   **Python Version**: Ensure you have Python 3.12.x installed. Using a Python version manager like `pyenv` is highly recommended.
+    ```bash
+    # Example using pyenv to install a specific Python version
+    pyenv install 3.12.8 # Or your preferred 3.12 patch version
+    ```
+
+*   **Poetry Installation**: If you don't have Poetry installed, follow the [official Poetry installation guide](https://python-poetry.org/docs/#installation).
+
+*   **Setting up the Virtual Environment**:
+    You have flexibility in how you set up your virtual environment. Poetry will respect an already-activated virtual environment.
+
+    *   **Option A: Using a `pyenv`-managed virtual environment (Recommended if you use `pyenv`)**:
+        1.  Create a virtual environment with `pyenv` linked to your desired Python 3.12.x version:
+            ```bash
+            # Ensure you are in your project's root directory
+            pyenv virtualenv 3.12.8 snapshotter-core-venv  # Creates a venv named 'snapshotter-core-venv'
+            ```
+        2.  Set this virtual environment as the local environment for your project. This way, it activates automatically when you `cd` into the directory:
+            ```bash
+            pyenv local snapshotter-core-venv
+            ```
+            Alternatively, you can activate it manually each time: `pyenv activate snapshotter-core-venv`.
+        3.  Verify that the virtual environment is active. Your shell prompt should indicate it.
+
+    *   **Option B: Letting Poetry create and manage the virtual environment**:
+        1.  If you prefer Poetry to handle virtual environment creation directly, navigate to the project root.
+        2.  To have Poetry create the virtual environment within your project directory (e.g., as `.venv`), run:
+            ```bash
+            poetry config virtualenvs.in-project true --local
+            ```
+        3.  Poetry will then create/use this `.venv` when you run `poetry install`. Activate it with `source .venv/bin/activate` or by using `poetry shell`.
+
+*   **Install Dependencies**:
+    *   With your chosen virtual environment **activated**, navigate to the project root directory.
+    *   Install the project dependencies using:
+        ```bash
+        poetry install --no-root --with dev
+        ```
+        *   `--no-root`: This flag prevents Poetry from installing the current project (snapshotter-core-edge) as a package in the virtual environment. This is typically used for applications rather than libraries.
+        *   `--with dev`: This ensures that development dependencies, including `pytest` and other testing tools, are installed.
+
+*   **Using `poetry shell`**:
+    Regardless of how the virtual environment was initially created or activated, you can often use `poetry shell` from the project root. This command will activate the correct Poetry-managed virtual environment for you or use the already active compatible one.
+
+### Test-Specific Environment Variables
+
+Tests require specific environment variables to be set, which control aspects like RPC endpoints, contract addresses, and other test parameters. These are loaded from a `.env.test` file located in the project root.
+
+*   **Create `.env.test`**:
+    *   Copy the example file `env.test.example` to `.env.test` in the project root directory:
+        ```bash
+        cp env.test.example .env.test
+        ```
+    *   **Crucially, edit `.env.test`** and replace all placeholder values (like `your_actual_test_rpc_url`, `0xYourTestContractAddress...`) with valid data for your testing environment. The tests will not pass with placeholder values.
+
+### Running the Configuration Loading Test
+
+A dedicated test suite verifies that the test configuration mechanism (driven by `tests/shared_fixtures/conftest.py` and your `.env.test` file) works correctly. This test ensures that the application's main configuration files (e.g., `config/settings.json`) are correctly populated with test-specific values at runtime.
+
+*   **Run the Test**:
+    *   Ensure your virtual environment is activated.
+    *   From the project root directory, run the following Pytest command:
+        ```bash
+        poetry run pytest tests/shared_fixtures/test_config_loading.py -s
+        ```
+        The `-s` flag is optional but helpful as it shows `print` statements from your `conftest.py` and tests, which can aid in debugging if issues arise.
+*   **Expected Outcome**:
+    *   All tests within `test_config_loading.py` should pass.
+    *   You should see output from `conftest.py` indicating:
+        *   The project root being added to `sys.path`.
+        *   Loading of environment variables from `.env.test`.
+        *   Copying of `*.example.json` files to their active names (e.g., `settings.json`).
+        *   Population of `settings.json` and `auth_settings.json` with test data.
+        *   At the end of the session, restoration of original config files (or removal of test-generated ones if no originals existed).
+    *   If all tests pass, your environment is correctly set up for running the broader test suite, as the core mechanism for providing test-specific configurations to the application is working.
+
+### Troubleshooting
+*   **`FileNotFoundError: .env.test`**: Ensure `.env.test` exists in the project root.
+*   **Tests Failing with Placeholder Values**: Double-check that you've replaced all placeholder values in your `.env.test` with actual, valid data.
+*   **`ModuleNotFoundError`**:
+    *   Ensure your virtual environment is active (`source .venv/bin/activate` or `poetry shell`).
+    *   Confirm that `poetry install --with dev` completed successfully.
+    *   The `conftest.py` automatically adds the project root to `sys.path`. If module import issues persist, verify the `PROJECT_ROOT` definition in `tests/shared_fixtures/conftest.py` correctly points to your project's top-level directory.
+*   **Errors during config file population/restoration**: The print statements from `pytest_sessionstart` and `pytest_sessionfinish` in `conftest.py` should provide details on which file operations are failing. Check file permissions and paths.
 
 ## Monitoring and Debugging
 
