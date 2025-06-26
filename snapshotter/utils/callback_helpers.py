@@ -139,7 +139,7 @@ async def send_telegram_notification_async(
     f = asyncio.create_task(
         client.post(
             url=urljoin(settings.reporting.telegram_url, endpoint),
-            json=message.dict(),
+            json=message.model_dump(),
         ),
     )
     f.add_done_callback(misc_notification_callback_result_handler)
