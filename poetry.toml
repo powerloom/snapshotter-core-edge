@@ -1,4 +1,0 @@
-[virtualenvs]
-create = false
-prefer-active-python = true
-in-project = true
