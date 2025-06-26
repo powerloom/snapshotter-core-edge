@@ -135,6 +135,7 @@ class RedisPoolCache:
             pool_size (int): The maximum number of connections to keep in the pool.
         """
         self._pool_size = pool_size
+        self._aioredis_pool = None
         if not redis_conf:
             from snapshotter.settings.config import settings as settings_conf
             redis_conf = {
