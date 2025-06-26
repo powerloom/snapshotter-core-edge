@@ -490,12 +490,16 @@ async def test_get_submission_data_bulk_ensure_complete_true(
         redis_conn=mock_redis,
         cids=cids,
         ipfs_reader=ipfs_reader,
+        project_id=None,
         ensure_complete=True,
     )
 
+    # Assert - when ensure_complete=True and any fetch fails, should return empty list
     assert result == []
-    for cid in cids:
-        assert await mock_redis.get(cid_not_found_key(cid)) == b'true'
+    # Verify all CIDs were attempted to be fetched (with retry attempts)
+    # Each failing CID gets 3 retry attempts due to the @retry decorator
+    expected_calls = len(cids) * 3  # All CIDs fail, each gets 3 attempts
+    assert ipfs_reader.cat.call_count == expected_calls
 
     # clean slate
     await mock_redis.flushall()
@@ -528,14 +532,20 @@ async def test_get_submission_data_bulk_ensure_complete_false(
         redis_conn=mock_redis,
         cids=cids,
         ipfs_reader=ipfs_reader,
+        project_id=None,
         ensure_complete=False,
     )
 
+    # Assert - when ensure_complete=False, successful fetches return data, failed ones return empty dict
     expected_result = [{'key': 'value'} for _ in range(len(cids) - 1)]
     expected_result.append({})
     assert result == expected_result
-    # Only the invalid CID should be marked as not found
-    assert await mock_redis.get(cid_not_found_key(invalid_cid)) == b'true'
+    # Verify all CIDs were attempted to be fetched (with retry attempts)
+    # Successful CIDs get 1 attempt, failing CID gets 3 attempts due to @retry decorator
+    successful_calls = len(cids) - 1  # 9 successful CIDs, 1 call each
+    failed_calls = 3  # 1 failing CID, 3 retry attempts
+    expected_calls = successful_calls + failed_calls
+    assert ipfs_reader.cat.call_count == expected_calls
 
     # clean slate
     await mock_redis.flushall()
