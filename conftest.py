@@ -81,6 +81,9 @@ REPLACEMENTS_FOR_SETTINGS_JSON = [
     # Replacements requiring specific formatting (mimicking sed's behavior for JSON types)
     ('"redis-port"', "TEST_REDIS_PORT", "6379", lambda v: str(v)),
     ('"redis-password"', "TEST_REDIS_PASSWORD", "", lambda v: f'"{v}"' if v else "null"),
+    ('"core-api-port"', "TEST_CORE_API_PORT", "8002", lambda v: str(v)),
+    ('"redis-db"', "TEST_REDIS_DB", "0", lambda v: str(v)),
+    ('"block-shift-for-bitmap-index"', "TEST_BLOCK_SHIFT_FOR_BITMAP_INDEX", "22400000", lambda v: str(v)),
     ('"ipfs-s3-config-enabled"', "TEST_IPFS_S3_CONFIG_ENABLED", "false", lambda v: str(v).lower()),
     ('"ipfs-unpinning-enabled"', "TEST_IPFS_UNPINNING_ENABLED", "false", lambda v: str(v).lower()),
     ('"ipfs-unpin-after"', "TEST_IPFS_UNPINNING_AFTER", "720", lambda v: str(v)),
