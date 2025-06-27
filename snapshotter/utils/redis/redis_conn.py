@@ -150,7 +150,7 @@ class RedisPoolCache:
         """
         Populates the Redis connection pool with the specified number of connections.
         """
-        if not self._aioredis_pool:
+        if not hasattr(self, '_aioredis_pool') or not self._aioredis_pool:
             self._aioredis_pool = await get_aioredis_pool(
                 self._pool_size,
                 self._redis_conf,
