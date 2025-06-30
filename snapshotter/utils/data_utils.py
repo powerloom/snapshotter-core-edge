@@ -41,6 +41,7 @@ from snapshotter.settings.config import aggregator_config
 from snapshotter.utils.models.data_models import SnapshotStatus
 import traceback
 from snapshotter.utils.redis.redis_keys import cids_to_cache_set
+import copy
 
 logger = default_logger.bind(module='data_helper')
 PROJECT_DATA_ENTRY_EXPIRY = 60 * 60 * 24 * 7  # 7 days in seconds
@@ -208,15 +209,20 @@ async def get_project_finalized_cids_bulk(
     logger.info(f'Project first epoch: {project_first_epoch}')
 
     last_submitted_snapshot_data = await get_last_submitted_snapshot_data(redis_conn, project_id)
-    if last_submitted_snapshot_data:
-        max_epoch_with_data = last_submitted_snapshot_data['epochId']
+    if not last_submitted_snapshot_data:
+        last_submitted_snapshot_epoch = 0
     else:
-        max_epoch_with_data = await get_project_last_finalized_epoch(
-            redis_conn=redis_conn,
-            state_contract_obj=state_contract_obj,
-            rpc_helper=rpc_helper, 
-            project_id=project_id,
-        )
+        last_submitted_snapshot_epoch = last_submitted_snapshot_data['epochId']
+    
+    last_finalized_data = await get_project_last_finalized_epoch(
+        redis_conn=redis_conn,
+        state_contract_obj=state_contract_obj,
+        rpc_helper=rpc_helper, 
+        project_id=project_id,
+    )
+    if not last_finalized_data:
+        last_finalized_data = 0
+    max_epoch_with_data = max(last_submitted_snapshot_epoch, last_finalized_data)
 
     cid_data_with_epochs = []
 
@@ -270,6 +276,7 @@ async def get_project_finalized_cids_bulk(
             cid_data_with_epochs.append((data["snapshot_cid"], epoch_id))
         
     logger.info(f'Found {len(cid_data_with_epochs)} CIDs for project {project_id}')
+    logger.info(f'cid_data_with_epochs: {cid_data_with_epochs}')
 
     existing_epochs = set([epoch_id for _, epoch_id in cid_data_with_epochs])
     missing_epochs_with_blanks = sorted(list(epoch_ids_set.difference(existing_epochs)))
@@ -392,14 +399,14 @@ async def w3_get_and_cache_finalized_cid(
                 min_previous_snapshot_key = snapshot_data["previousSnapshots"][0][0]
                 all_previous_snapshot_keys = set(range(min_previous_snapshot_key, epoch_id + 1))
                 # Process each previous snapshot
-                for (epoch_id, snapshot_cid) in snapshot_data["previousSnapshots"]:
-                    epoch_id = int(epoch_id)
-                    data_to_cache[epoch_id] = json.dumps({
-                        "snapshot_cid": snapshot_cid,
+                for (prev_epoch_id, prev_snapshot_cid) in snapshot_data["previousSnapshots"]:
+                    prev_epoch_id = int(prev_epoch_id)
+                    data_to_cache[prev_epoch_id] = json.dumps({
+                        "snapshot_cid": prev_snapshot_cid,
                         "status": status + 1
                     })
-                    all_previous_snapshot_keys.discard(epoch_id)
-                    expiry_keys.append(f"{project_id}|{epoch_id}")
+                    all_previous_snapshot_keys.discard(prev_epoch_id)
+                    expiry_keys.append(f"{project_id}|{prev_epoch_id}")
 
                 # Add to pipeline if we have data to cache
                 if data_to_cache:
@@ -522,6 +529,7 @@ async def w3_get_and_cache_finalized_cid_bulk_using_previous_snapshots(
             else:
                 missing_epochs.append(epoch_id)
         logger.info(f'Found {len(cid_data_with_epochs)} CIDs for project {project_id}')
+        logger.info(f'cid_data_with_epochs: {cid_data_with_epochs}')
         logger.info(f'Found {len(missing_epochs)} missing epochs without blanks for project {project_id}')
         # Get the project hashmap key
         project_hmap_key = project_data_hmap(project_id=project_id)
@@ -1571,15 +1579,15 @@ async def process_snapshot_cid(redis_conn: aioredis.Redis, ipfs_reader: AsyncIPF
                 all_previous_snapshot_keys = set(range(snapshot_data["previousSnapshots"][0][0], epoch_id))
                 all_previous_snapshot_cids = set()
                 # Process each previous snapshot
-                for (epoch_id, snapshot_cid) in snapshot_data["previousSnapshots"][::-1]:
-                    epoch_id = int(epoch_id)
-                    data_to_cache[epoch_id] = json.dumps({
-                        "snapshot_cid": snapshot_cid,
+                for (prev_epoch_id, prev_snapshot_cid) in snapshot_data["previousSnapshots"][::-1]:
+                    prev_epoch_id = int(prev_epoch_id)
+                    data_to_cache[prev_epoch_id] = json.dumps({
+                        "snapshot_cid": prev_snapshot_cid,
                         "status": SnapshotStatus.SUBMITTED.value
                     })
-                    all_previous_snapshot_cids.add(snapshot_cid)
-                    all_previous_snapshot_keys.discard(epoch_id)
-                    expiry_keys.append(f"{project_id}|{epoch_id}")
+                    all_previous_snapshot_cids.add(prev_snapshot_cid)
+                    all_previous_snapshot_keys.discard(prev_epoch_id)
+                    expiry_keys.append(f"{project_id}|{prev_epoch_id}")
 
                 # Add to pipeline if we have data to cache
                 if data_to_cache:
@@ -1596,22 +1604,24 @@ async def process_snapshot_cid(redis_conn: aioredis.Redis, ipfs_reader: AsyncIPF
                 await redis_bitmap.set_bits_in_range(redis_conn, blank_epochs_bitmap_key, epochs_to_set)
 
                 if len(snapshot_data["previousSnapshots"]) > 0:
-                    epoch_id = snapshot_data["previousSnapshots"][0][0]
-                    epoch_cid = snapshot_data["previousSnapshots"][0][1]
+                    first_prev_epoch_id = snapshot_data["previousSnapshots"][0][0]
+                    first_prev_snapshot_cid = snapshot_data["previousSnapshots"][0][1]
                     # recursively process previous snapshots
                     within_recursion_depth = rec_depth < MAX_RECURSION_DEPTH
-                    already_processed = await redis_conn.hexists(project_hmap_key, epoch_id)
+                    already_processed = await redis_conn.hexists(project_hmap_key, first_prev_epoch_id)
                     # check if epoch_id is present in project_hmap_key and blank_epochs_set_key
                     if within_recursion_depth and not already_processed:
-                        await process_snapshot_cid(redis_conn, ipfs_reader, project_id, epoch_cid, epoch_id, original_epoch_id, rec_depth=rec_depth + 1)
+                        await process_snapshot_cid(redis_conn, ipfs_reader, project_id, first_prev_snapshot_cid, first_prev_epoch_id, original_epoch_id, rec_depth=rec_depth + 1)
 
             if project_config.cache_cids:
-                snapshot_data["previousSnapshots"] = []
+                # Create a copy for caching to avoid modifying the original data
+                snapshot_data_for_cache = copy.deepcopy(snapshot_data)
+                snapshot_data_for_cache["previousSnapshots"] = []
                 # cache lite snapshot in redis
                 cid_cache_key = cid_cache(snapshot_cid)
                 pipeline.set(
                     name=cid_cache_key,
-                    value=json.dumps(snapshot_data),
+                    value=json.dumps(snapshot_data_for_cache),
                     ex=PROJECT_DATA_ENTRY_EXPIRY,
                 )
 
