@@ -56,13 +56,21 @@ from snapshotter.utils.models.message_models import SnapshotProcessMessage
 from snapshotter.utils.models.message_models import ProcessingCompleteMessage
 from snapshotter.utils.models.message_models import CalculateAggregateMessage
 from snapshotter.utils.redis.redis_conn import RedisPoolCache
-from snapshotter.utils.redis.redis_keys import epoch_id_project_to_state_mapping
+from snapshotter.utils.redis.redis_keys import epoch_id_project_to_state_mapping, event_detector_last_processed_block
+from snapshotter.trade_volume_worker import trade_volume_aggregator
+from snapshotter.metadata_worker import metadata_fetcher
+from snapshotter.timeseries_worker import timeseries_aggregator
+from snapshotter.cross_project_worker import cross_project_aggregator
 from snapshotter.utils.dramatiq_queues import (
     EVENT_DETECTOR_QUEUE_NAME,
     DISTRIBUTOR_HEALTH_QUEUE_NAME,
     SNAPSHOT_QUEUE_NAME,
     AGGREGATION_QUEUE_NAME,
     CACHER_QUEUE_NAME,
+    TRADE_VOLUME_WORKER_QUEUE_NAME,
+    METADATA_WORKER_QUEUE_NAME,
+    TIMESERIES_WORKER_QUEUE_NAME,
+    CROSS_PROJECT_WORKER_QUEUE_NAME,
 )
 
 # Configure Redis broker with no middleware
@@ -520,26 +528,20 @@ class ProcessorDistributor(multiprocessing.Process):
             f' {project_name} : {process_unit}',
         )
 
-    async def _distribute_callbacks_aggregate(self, event_data):
+    async def _distribute_downstream_tasks(self, event_data):
         """
-        Distributes the callbacks for aggregation.
-
-        :param message: IncomingMessage object containing the message to be processed.
+        Distributes downstream tasks for aggregation and other post-processing.
         """
-        self._logger.debug('Distributing callbacks for aggregation: {}', event_data)
+        self._logger.debug('Distributing downstream tasks for: {}', event_data)
         process_unit: ProcessingCompleteMessage = (
             ProcessingCompleteMessage.model_validate_json(event_data)
         )
 
-        self._logger.trace(f'Aggregation Task Distribution time - {int(time.time())}')
-        # go through aggregator config, if it matches then send appropriate message
+        # Existing aggregation logic
         if len(aggregator_types) > 0:
             for config in aggregator_config:
                 task_type = config.project_name
-                if config.depends_on not in process_unit.task_type:
-                    self._logger.trace(f'projectId mismatch {process_unit.task_type} {config.project_name}')
-                    continue
-                else:
+                if config.depends_on in process_unit.task_type:
                     calculate_aggregate_message = CalculateAggregateMessage(
                         epochId=process_unit.epochId,
                         begin=process_unit.begin,
@@ -550,7 +552,7 @@ class ProcessorDistributor(multiprocessing.Process):
                     dramatiq.broker.get_broker().enqueue(
                         dramatiq.Message(
                             queue_name=AGGREGATION_QUEUE_NAME,
-                            actor_name='handleEvent',  # Match actor name with event_receiver.py
+                            actor_name='handleEvent',
                             args=(task_type, calculate_aggregate_message.model_dump_json()),
                             kwargs={},
                             options={},
@@ -558,6 +560,93 @@ class ProcessorDistributor(multiprocessing.Process):
                     )
         else:
             self._logger.debug('No aggregator types found, skipping aggregation distribution')
+
+        # New logic for trade volume aggregation
+        if 'baseSnapshot:uniswap-v3:trades' in process_unit.task_type:
+            self._logger.info(f"Enqueuing task for TradeVolumeWorker for {process_unit.task_type}")
+            dramatiq.broker.get_broker().enqueue(
+                dramatiq.Message(
+                    queue_name=TRADE_VOLUME_WORKER_QUEUE_NAME,
+                    actor_name='process_volume_aggregation_actor',
+                    args=(process_unit.model_dump(),
+                          self._rpc_helper.model_dump(),
+                          self._anchor_rpc_helper.model_dump(),
+                          self._ipfs_reader_client.model_dump(),
+                          self._protocol_state_contract.model_dump()),
+                    kwargs={},
+                    options={},
+                ),
+            )
+
+        # New logic for metadata fetching
+        if 'activePools' in process_unit.task_type:
+            self._logger.info(f"Enqueuing task for MetadataWorker for {process_unit.task_type}")
+            dramatiq.broker.get_broker().enqueue(
+                dramatiq.Message(
+                    queue_name=METADATA_WORKER_QUEUE_NAME,
+                    actor_name='process_metadata_fetching_actor',
+                    args=({'task_type': 'activePools', 'epochId': process_unit.epochId},
+                          self._rpc_helper.model_dump(),
+                          self._anchor_rpc_helper.model_dump(),
+                          self._ipfs_reader_client.model_dump(),
+                          self._protocol_state_contract.model_dump()),
+                    kwargs={},
+                    options={},
+                ),
+            )
+        
+        if 'activeTokens' in process_unit.task_type:
+            self._logger.info(f"Enqueuing task for MetadataWorker for {process_unit.task_type}")
+            dramatiq.broker.get_broker().enqueue(
+                dramatiq.Message(
+                    queue_name=METADATA_WORKER_QUEUE_NAME,
+                    actor_name='process_metadata_fetching_actor',
+                    args=({'task_type': 'activeTokens', 'epochId': process_unit.epochId},
+                          self._rpc_helper.model_dump(),
+                          self._anchor_rpc_helper.model_dump(),
+                          self._ipfs_reader_client.model_dump(),
+                          self._protocol_state_contract.model_dump()),
+                    kwargs={},
+                    options={},
+                ),
+            )
+
+        # New logic for time series aggregation
+        if process_unit.task_type.startswith('baseSnapshot:') or process_unit.task_type.startswith('tradesSnapshot:'):
+            self._logger.info(f"Enqueuing task for TimeSeriesWorker for {process_unit.task_type}")
+            dramatiq.broker.get_broker().enqueue(
+                dramatiq.Message(
+                    queue_name=TIMESERIES_WORKER_QUEUE_NAME,
+                    actor_name='process_timeseries_aggregation_actor',
+                    args=({'task_type': process_unit.task_type, 'epochId': process_unit.epochId, 'projectId': process_unit.projectId},
+                          self._rpc_helper.model_dump(),
+                          self._anchor_rpc_helper.model_dump(),
+                          self._ipfs_reader_client.model_dump(),
+                          self._protocol_state_contract.model_dump()),
+                    kwargs={},
+                    options={},
+                ),
+            )
+
+        # New logic for cross-project aggregation
+        if process_unit.task_type.startswith('baseSnapshot:') or \
+           process_unit.task_type.startswith('tradesSnapshot:') or \
+           process_unit.task_type.startswith('tokenPools:'):
+            self._logger.info(f"Enqueuing task for CrossProjectWorker for {process_unit.task_type}")
+            dramatiq.broker.get_broker().enqueue(
+                dramatiq.Message(
+                    queue_name=CROSS_PROJECT_WORKER_QUEUE_NAME,
+                    actor_name='process_cross_project_aggregation_actor',
+                    args=({'task_type': process_unit.task_type, 'epochId': process_unit.epochId, 'projectId': process_unit.projectId},
+                          self._rpc_helper.model_dump(),
+                          self._anchor_rpc_helper.model_dump(),
+                          self._ipfs_reader_client.model_dump(),
+                          self._protocol_state_contract.model_dump()),
+                    kwargs={},
+                    options={},
+                ),
+            )
+
 
     async def _cleanup_older_epoch_status(self, epoch_id: int):
         """
@@ -614,7 +703,7 @@ class ProcessorDistributor(multiprocessing.Process):
                 ),
             )
         elif event_type == 'ProcessingComplete':
-            await self._distribute_callbacks_aggregate(
+            await self._distribute_downstream_tasks(
                 event_data,
             )
 

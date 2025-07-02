@@ -158,6 +158,26 @@ services:
     command: bash -c "bash init_processes.sh utils.ipfs_unpinning_worker"
     depends_on:
       - processor-distributor
+  trade-volume-worker:
+    <<: *snapshotter-base
+    command: bash -c "bash init_processes.sh trade_volume_worker"
+    depends_on:
+      - processor-distributor
+  metadata-worker:
+    <<: *snapshotter-base
+    command: bash -c "bash init_processes.sh metadata_worker"
+    depends_on:
+      - processor-distributor
+  timeseries-worker:
+    <<: *snapshotter-base
+    command: bash -c "bash init_processes.sh timeseries_worker"
+    depends_on:
+      - processor-distributor
+  cross-project-worker:
+    <<: *snapshotter-base
+    command: bash -c "bash init_processes.sh cross_project_worker"
+    depends_on:
+      - processor-distributor
   # Core API Service
   core-api:
     <<: *snapshotter-base

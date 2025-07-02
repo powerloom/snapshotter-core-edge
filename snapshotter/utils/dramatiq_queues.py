@@ -15,3 +15,9 @@ DISTRIBUTOR_HEALTH_QUEUE_NAME = f'powerloom-distributor-health_{settings.namespa
 # Cacher Worker Queues
 CACHER_QUEUE_NAME = f'powerloom-cacher_{settings.namespace}_{settings.instance_id}'
 CACHER_HEALTH_QUEUE_NAME = f'powerloom-cacher-health_{settings.namespace}_{settings.instance_id}'
+
+# New Worker Queues
+TRADE_VOLUME_WORKER_QUEUE_NAME = f'powerloom-trade-volume-worker_{settings.namespace}_{settings.instance_id}'
+METADATA_WORKER_QUEUE_NAME = f'powerloom-metadata-worker_{settings.namespace}_{settings.instance_id}'
+TIMESERIES_WORKER_QUEUE_NAME = f'powerloom-timeseries-worker_{settings.namespace}_{settings.instance_id}'
+CROSS_PROJECT_WORKER_QUEUE_NAME = f'powerloom-cross-project-worker_{settings.namespace}_{settings.instance_id}'
