@@ -12,7 +12,7 @@ from tenacity import wait_random_exponential
 from typing import List, Optional, Tuple, Dict, Any
 from web3 import Web3
 from ipfs_client.main import AsyncIPFSClient
-
+from async_lru import alru_cache
 from snapshotter.utils.models.data_models import (
     EpochSnapshotResponse, 
     ExactEpochSnapshot, 
@@ -208,6 +208,9 @@ async def get_project_finalized_cids_bulk(
     )
     logger.info(f'Project first epoch: {project_first_epoch}')
 
+    if project_first_epoch == 0:
+        return [], 0
+
     last_submitted_snapshot_data = await get_last_submitted_snapshot_data(redis_conn, project_id)
     if not last_submitted_snapshot_data:
         last_submitted_snapshot_epoch = 0
@@ -226,6 +229,14 @@ async def get_project_finalized_cids_bulk(
 
     cid_data_with_epochs = []
 
+    # If the adjusted min is greater than max, return empty list
+    if epoch_id_min > max_epoch_with_data:
+        logger.warning(
+            f'Adjusted min epoch {epoch_id_min} is greater than max epoch {max_epoch_with_data}.',
+            'Returning empty list.',
+        )
+        return [], project_first_epoch
+
     if max_epoch_with_data < epoch_id_max:
         logger.info(
             f'Max epoch with data {max_epoch_with_data} is less than epoch_id_max {epoch_id_max}. '
@@ -241,15 +252,7 @@ async def get_project_finalized_cids_bulk(
             f'Min. Epoch ID: {epoch_id_min} is less than the project first epoch {project_first_epoch}.',
             f'Adjusting min epoch to {project_first_epoch}.',
         )
-        epoch_id_min = project_first_epoch
-        
-    # If the adjusted min is greater than max, return empty list
-    if epoch_id_min > max_epoch_with_data:
-        logger.warning(
-            f'Adjusted min epoch {epoch_id_min} is greater than max epoch {max_epoch_with_data}.',
-            'Returning empty list.',
-        )
-        return [], project_first_epoch
+        epoch_id_min = project_first_epoch        
 
     epoch_ids_set = set(range(epoch_id_min, min(epoch_id_max, max_epoch_with_data) + 1))
 
@@ -709,7 +712,7 @@ async def w3_get_and_cache_finalized_cid_bulk(
         logger.error(f'Error in w3_get_and_cache_finalized_cid_bulk: {str(e)}')
         raise
 
-
+@alru_cache(maxsize=10000)
 async def get_project_first_epoch(redis_conn: aioredis.Redis, state_contract_obj, rpc_helper: RpcHelper, project_id):
     """
     Get the first epoch for a given project ID.
