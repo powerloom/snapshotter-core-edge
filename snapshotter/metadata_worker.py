@@ -2,7 +2,11 @@ import asyncio
 import multiprocessing
 import time
 import traceback
-from typing import Dict
+from typing import Dict, Set, Tuple, Optional
+import threading
+import resource
+from redis import asyncio as aioredis
+import threading
 
 import dramatiq
 import uvloop
@@ -21,11 +25,28 @@ from snapshotter.utils.dramatiq_queues import METADATA_WORKER_QUEUE_NAME
 
 
 class MetadataWorker(multiprocessing.Process):
+    _aioredis_pool: RedisPoolCache
+    _redis_conn: aioredis.Redis
+    _event_loop = None
+    _active_tasks: Set[Tuple[float, asyncio.Task]]
+    _worker_thread: Optional[threading.Thread]
+
     def __init__(self, name, **kwargs):
         super(MetadataWorker, self).__init__(name=name, **kwargs)
         self._logger = default_logger.bind(module="MetadataWorker")
         self._shutdown_initiated = False
-        self.redis_pool = RedisPoolCache()
+        self._initialized = False
+        self._active_tasks: Set[asyncio.Task] = set()
+        self._task_timeout = settings.async_task_config.task_timeout
+        self._task_cleanup_interval = settings.async_task_config.task_cleanup_interval
+        self._worker_thread: Optional[threading.Thread] = None
+
+        # Register the handle_event method as a Dramatiq actor
+        self._handle_event_actor = dramatiq.actor(
+            queue_name=METADATA_WORKER_QUEUE_NAME,
+            actor_name='handleEvent',
+        )(self.handle_event)
+
         self.broker = RedisBroker(
             host=settings.redis.host,
             port=settings.redis.port,
@@ -34,29 +55,110 @@ class MetadataWorker(multiprocessing.Process):
         self.broker.add_middleware(AsyncIO())
         dramatiq.set_broker(self.broker)
 
+    async def _init_redis_pool(self):
+        self._aioredis_pool = RedisPoolCache()
+        await self._aioredis_pool.populate()
+        self._redis_conn = self._aioredis_pool._aioredis_pool
+
+    async def init_worker(self):
+        if not self._initialized:
+            await self._init_redis_pool()
+            self._logger.debug('Initialized Redis pool in MetadataWorker init_worker')
+            asyncio.create_task(self._cleanup_tasks())
+        self._initialized = True
+
     def _signal_handler(self, signum, frame):
         if signum in [SIGINT, SIGTERM, SIGQUIT]:
             self._shutdown_initiated = True
             self._logger.info('Shutdown initiated')
 
+    async def _create_tracked_task(self, task):
+        current_time = time.time()
+        new_task = asyncio.create_task(task)
+        self._active_tasks.add((current_time, new_task))
+        new_task.add_done_callback(lambda _: self._active_tasks.discard((current_time, new_task)))
+
+    async def _cleanup_tasks(self):
+        while True:
+            try:
+                await asyncio.sleep(self._task_cleanup_interval)
+                current_time = time.time()
+                tasks_to_check = list(self._active_tasks)
+                for task_start_time, task in tasks_to_check:
+                    try:
+                        if task.done():
+                            self._active_tasks.discard((task_start_time, task))
+                        elif current_time - task_start_time > self._task_timeout:
+                            self._logger.warning(
+                                f'Task {task} timed out. Cancelling..., '
+                                f'current_time: {current_time}, '
+                                f'start_time: {task_start_time}',
+                            )
+                            task.cancel()
+                            self._active_tasks.discard((task_start_time, task))
+                    except Exception as e:
+                        self._logger.error(f"Error cleaning up task {task}: {e}")
+                        self._active_tasks.discard((task_start_time, task))
+            except asyncio.CancelledError:
+                self._logger.info("Task cleanup loop cancelled")
+                break
+            except Exception as e:
+                self._logger.error(f"Error in task cleanup loop: {e}")
+                await asyncio.sleep(self._task_cleanup_interval)
+
     @dramatiq.actor(queue_name=METADATA_WORKER_QUEUE_NAME)
-    def process_metadata_fetching_actor(self, payload: Dict):
+    def handle_event(self, *args):
         try:
-            self._logger.info(f"Processing metadata fetching for: {payload}")
-            asyncio.run_coroutine_threadsafe(
-                self._process_metadata_fetching_async(payload),
+            self._logger.warning(f'Handling event: {args}')
+            event_type = args[0]
+            event_data = args[1]
+
+            # Run the async process_event in the event loop
+            future = asyncio.run_coroutine_threadsafe(
+                self.process_event(event_type, event_data),
                 self._event_loop,
-            ).result(timeout=60)
-            self._logger.info("Metadata fetching complete.")
+            )
+            # Wait for the result with timeout
+            future.result(timeout=60)
+
+            self._logger.debug(f'Event has been handled: {args}')
+
+            return None
         except Exception as e:
-            self._logger.error(f"Error in metadata fetching actor: {e}", exc_info=True)
+            # Capture the full traceback for better debugging
+            error_traceback = ''.join(
+                traceback.format_exception(type(e), e, e.__traceback__),
+            )
+            self._logger.error(f'Error processing event: {e}')
+            self._logger.error(f'Detailed traceback:\n{error_traceback}')
+            self._logger.error(f'Event data: {args}')
+
+    async def process_event(self, event_type, event_data):
+        self._logger.info(
+            (
+                'Got message to process and distribute: {}'
+            ),
+            event_data,
+        )
+
+        if event_type == 'MetadataFetch':
+            self._logger.info(f'MetadataFetch event caught with message {event_data}')
+            await self._create_tracked_task(self._process_metadata_fetching_async(event_data))
+        else:
+            self._logger.error(
+                (
+                    'Unknown message type: {}'
+                ),
+                event_type,
+            )
+
+        if self._redis_conn:
+            await self._redis_conn.close()
 
     async def _process_metadata_fetching_async(self, payload: Dict):
-        await self.redis_pool.populate()
-        redis_conn = self.redis_pool.get_client()
-        task_type = payload.get('task_type')
-        epoch_id = payload.get('epochId')
-        project_id = f"{task_type}:{settings.namespace}"
+        redis_conn = self._redis_conn
+        task_type = payload.get('task_type').split(':')[0]
+        
 
         snapshot = await get_project_latest_snapshot(
             redis_conn,
@@ -98,37 +200,50 @@ class MetadataWorker(multiprocessing.Process):
                 self._logger.error(f"Error fetching metadata for {asset_type} {address}: {e}", exc_info=True)
 
     def run(self) -> None:
-        for signame in [SIGINT, SIGTERM, SIGQUIT]:
-            signal(signame, self._signal_handler)
-        asyncio.set_event_loop_policy(uvloop.EventLoopPolicy())
-
-        ev_loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(ev_loop)
-        self._event_loop = ev_loop
-
-        for middleware in self.broker.middleware:
-            if isinstance(middleware, dramatiq.middleware.AsyncIO):
-                middleware.event_loop = ev_loop
-
-        worker = Worker(self.broker, queues=["metadata_worker_queue"])
-        self._logger.info("Starting MetadataWorker Dramatiq worker internal threads...")
-        worker.start()
-
         try:
-            self._logger.info("Running MetadataWorker main event loop...")
-            ev_loop.run_forever()
-        finally:
-            self._logger.info("MetadataWorker main event loop stopped. Shutting down...")
-            try:
-                self._logger.info("Stopping MetadataWorker Dramatiq worker internal threads...")
-                worker.stop()
-                self._logger.info("MetadataWorker Dramatiq worker stopped.")
-            except Exception as e:
-                self._logger.error(f"Error stopping MetadataWorker Dramatiq worker: {e}", exc_info=True)
+            # Set resource limits for file descriptors
+            soft, hard = resource.getrlimit(resource.RLIMIT_NOFILE)
+            resource.setrlimit(
+                resource.RLIMIT_NOFILE,
+                (settings.rlimit.file_descriptors, hard),
+            )
             
-            self._logger.info("Closing MetadataWorker event loop...")
-            ev_loop.close()
-            self._logger.info("MetadataWorker Event loop closed.")
+            # Register signal handlers for graceful shutdown
+            for signame in [SIGINT, SIGTERM, SIGQUIT]:
+                signal(signame, self._signal_handler)
+                
+            # Use uvloop for better performance
+            asyncio.set_event_loop_policy(uvloop.EventLoopPolicy())
+
+            ev_loop = asyncio.get_event_loop()
+            MetadataWorker._event_loop = ev_loop  # Store the event loop
+            # Update the middleware to use this event loop
+            for middleware in self.broker.middleware:
+                if isinstance(middleware, dramatiq.middleware.AsyncIO):
+                    middleware.event_loop = ev_loop
+
+            # Initialize the worker
+            ev_loop.run_until_complete(self.init_worker())
+
+            # Start a Dramatiq worker in a separate thread
+            worker = Worker(self.broker, queues=[METADATA_WORKER_QUEUE_NAME])
+            worker_thread = threading.Thread(target=worker.start, daemon=True)
+            self._worker_thread = worker_thread  # Store the thread object
+            worker_thread.start()
+
+            try:
+                # Run the event loop until shutdown is requested
+                ev_loop.run_forever()
+            finally:
+                # Close Redis connection
+                if hasattr(self, '_redis_conn') and self._redis_conn:
+                    ev_loop.run_until_complete(self._redis_conn.close())
+                
+                ev_loop.close()
+        except Exception as e:
+            self._logger.error(f"Fatal error in MetadataWorker process: {e}")
+            self._logger.error(traceback.format_exc())
+            raise
 
 
 if __name__ == '__main__':

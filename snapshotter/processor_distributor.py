@@ -57,10 +57,6 @@ from snapshotter.utils.models.message_models import ProcessingCompleteMessage
 from snapshotter.utils.models.message_models import CalculateAggregateMessage
 from snapshotter.utils.redis.redis_conn import RedisPoolCache
 from snapshotter.utils.redis.redis_keys import epoch_id_project_to_state_mapping, event_detector_last_processed_block
-from snapshotter.trade_volume_worker import trade_volume_aggregator
-from snapshotter.metadata_worker import metadata_fetcher
-from snapshotter.timeseries_worker import timeseries_aggregator
-from snapshotter.cross_project_worker import cross_project_aggregator
 from snapshotter.utils.dramatiq_queues import (
     EVENT_DETECTOR_QUEUE_NAME,
     DISTRIBUTOR_HEALTH_QUEUE_NAME,
@@ -567,12 +563,8 @@ class ProcessorDistributor(multiprocessing.Process):
             dramatiq.broker.get_broker().enqueue(
                 dramatiq.Message(
                     queue_name=TRADE_VOLUME_WORKER_QUEUE_NAME,
-                    actor_name='process_volume_aggregation_actor',
-                    args=(process_unit.model_dump(),
-                          self._rpc_helper.model_dump(),
-                          self._anchor_rpc_helper.model_dump(),
-                          self._ipfs_reader_client.model_dump(),
-                          self._protocol_state_contract.model_dump()),
+                    actor_name='handleEvent',
+                    args=(process_unit.model_dump(),),
                     kwargs={},
                     options={},
                 ),
@@ -584,12 +576,8 @@ class ProcessorDistributor(multiprocessing.Process):
             dramatiq.broker.get_broker().enqueue(
                 dramatiq.Message(
                     queue_name=METADATA_WORKER_QUEUE_NAME,
-                    actor_name='process_metadata_fetching_actor',
-                    args=({'task_type': 'activePools', 'epochId': process_unit.epochId},
-                          self._rpc_helper.model_dump(),
-                          self._anchor_rpc_helper.model_dump(),
-                          self._ipfs_reader_client.model_dump(),
-                          self._protocol_state_contract.model_dump()),
+                    actor_name='handleEvent',
+                    args=(process_unit.model_dump(),),
                     kwargs={},
                     options={},
                 ),
@@ -600,12 +588,8 @@ class ProcessorDistributor(multiprocessing.Process):
             dramatiq.broker.get_broker().enqueue(
                 dramatiq.Message(
                     queue_name=METADATA_WORKER_QUEUE_NAME,
-                    actor_name='process_metadata_fetching_actor',
-                    args=({'task_type': 'activeTokens', 'epochId': process_unit.epochId},
-                          self._rpc_helper.model_dump(),
-                          self._anchor_rpc_helper.model_dump(),
-                          self._ipfs_reader_client.model_dump(),
-                          self._protocol_state_contract.model_dump()),
+                    actor_name='handleEvent',
+                    args=(process_unit.model_dump(),),
                     kwargs={},
                     options={},
                 ),
@@ -617,12 +601,8 @@ class ProcessorDistributor(multiprocessing.Process):
             dramatiq.broker.get_broker().enqueue(
                 dramatiq.Message(
                     queue_name=TIMESERIES_WORKER_QUEUE_NAME,
-                    actor_name='process_timeseries_aggregation_actor',
-                    args=({'task_type': process_unit.task_type, 'epochId': process_unit.epochId, 'projectId': process_unit.projectId},
-                          self._rpc_helper.model_dump(),
-                          self._anchor_rpc_helper.model_dump(),
-                          self._ipfs_reader_client.model_dump(),
-                          self._protocol_state_contract.model_dump()),
+                    actor_name='handleEvent',
+                    args=(process_unit.model_dump(),),
                     kwargs={},
                     options={},
                 ),
@@ -636,12 +616,8 @@ class ProcessorDistributor(multiprocessing.Process):
             dramatiq.broker.get_broker().enqueue(
                 dramatiq.Message(
                     queue_name=CROSS_PROJECT_WORKER_QUEUE_NAME,
-                    actor_name='process_cross_project_aggregation_actor',
-                    args=({'task_type': process_unit.task_type, 'epochId': process_unit.epochId, 'projectId': process_unit.projectId},
-                          self._rpc_helper.model_dump(),
-                          self._anchor_rpc_helper.model_dump(),
-                          self._ipfs_reader_client.model_dump(),
-                          self._protocol_state_contract.model_dump()),
+                    actor_name='handleEvent',
+                    args=(process_unit.model_dump(),),
                     kwargs={},
                     options={},
                 ),

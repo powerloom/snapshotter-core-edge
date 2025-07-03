@@ -296,6 +296,11 @@ def agg_volume_pool_key(project_id: str, time_interval: int) -> str:
     """
     return f"agg:volume:pool:{project_id}:{time_interval}"
 
+def metadata_project_id(pool_address: str) -> str:
+    """
+    Generate project ID for metadata snapshots.
+    """
+    return f"metadata:{pool_address}:{settings.namespace}"
 
 def metadata_pool_key(pool_address: str) -> str:
     """
