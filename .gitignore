@@ -4,6 +4,7 @@ __pycache__/
 .idea/
 .DS_Store
 screenlog*
+.env*
 temp/*
 uniswapTokenData
 **/*projects.json
@@ -12,12 +13,13 @@ config/*settings.json
 **/*.backup
 .vscode/*
 snapshotter-lite-local-collector
+*venv*/
 config
 computes
 logs
 ipfs-data
 ipfs-export
-redis_data
+redis-data
 .coverage
 .pytest_cache
 .mypy_cache
@@ -26,3 +28,6 @@ snapshotter-periphery-blockfetcher
 snapshotter-periphery-txprocessor
 snapshotter-periphery-epochsyncer
 rate-limiter
+docker-compose.yaml
+.cursorrules
+.venv/

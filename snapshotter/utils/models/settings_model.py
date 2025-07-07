@@ -166,6 +166,7 @@ class Settings(BaseModel):
     ipfs_unpinning: IPFSUnpinningConfig
     node_version: str
     anchor_chain_rpc: RPCConfigBase
+    block_shift_for_bitmap_index: int
 
 # Projects related models
 
@@ -179,6 +180,8 @@ class ProcessorConfig(BaseModel):
 class ProjectConfig(BaseModel):
     """Project configuration model."""
     project_name: str
+    keep_previous_snapshot_data: bool = False
+    cache_cids: bool = False
     processor: ProcessorConfig
     preload_tasks: List[str]
 
@@ -193,19 +196,13 @@ class AggregateFilterConfig(BaseModel):
     projectId: str
 
 
-class AggregateOn(str, Enum):
-    """Enumeration for aggregation types."""
-    single_project = 'SingleProject'
-    multi_project = 'MultiProject'
-
-
 class AggregationConfig(BaseModel):
     """Aggregation configuration model."""
-    project_type: str
-    aggregate_on: AggregateOn
-    base_project_type: Optional[str]
-    project_types_to_wait_for: Optional[List[str]]
+    project_name: str
+    depends_on: str
     processor: ProcessorConfig
+    keep_previous_snapshot_data: bool = False
+    cache_cids: bool = False
 
 
 class AggregatorConfig(BaseModel):

@@ -95,7 +95,7 @@ async def test_send_telegram_async_disabled(mock_async_client, mock_redis, mocke
     "message, expected_endpoint",
     [
         (EPOCH_MESSAGE, '/reportEpochProcessingIssue'),
-        (SNAPSHOTTER_MESSAGE, '/reportSnapshotIssue'),
+        (SNAPSHOTTER_MESSAGE, '/reportSnapshotterCoreIssue'),
     ]
 )
 async def test_send_telegram_async_interval_disabled(message, expected_endpoint, mock_async_client, mock_redis, mocker):
@@ -162,7 +162,7 @@ async def test_send_telegram_async_interval_disabled(message, expected_endpoint,
     try:
         mock_async_client.post.assert_awaited_once_with(
             url=urljoin(settings.reporting.telegram_url, expected_endpoint),
-            json=message.dict(),
+            json=message.model_dump(),
         )
         logger.info("Assert mock_async_client.post: PASSED")
     except AssertionError as e:
@@ -182,7 +182,7 @@ async def test_send_telegram_async_interval_disabled(message, expected_endpoint,
     "message, expected_endpoint",
     [
         (EPOCH_MESSAGE, '/reportEpochProcessingIssue'),
-        (SNAPSHOTTER_MESSAGE, '/reportSnapshotIssue'),
+        (SNAPSHOTTER_MESSAGE, '/reportSnapshotterCoreIssue'),
     ]
 )
 async def test_send_telegram_async_interval_enabled_first_time(message, expected_endpoint, mock_async_client, mock_redis, mocker):
@@ -252,7 +252,7 @@ async def test_send_telegram_async_interval_enabled_first_time(message, expected
         logger.info(f"mock_async_client.post await_count: {mock_async_client.post.await_count}")
         mock_async_client.post.assert_awaited_once_with(
             url=urljoin(settings.reporting.telegram_url, expected_endpoint),
-            json=message.dict(),
+            json=message.model_dump(),
         )
         logger.info("Assert mock_async_client.post: PASSED")
     except AssertionError as e:
@@ -276,10 +276,11 @@ async def test_send_telegram_async_interval_enabled_recently_sent(message, mock_
     mocker.patch.object(settings.reporting, 'min_reporting_interval', 60) # 1 minute
 
     redis_key = callback_last_sent_by_issue(message.issue.issueType)
-    await mock_redis.set(redis_key, str(time.time()), ex=settings.reporting.min_reporting_interval)
-
-    mock_redis.get = AsyncMock(wraps=mock_redis.get)
-    mock_redis.set = AsyncMock(wraps=mock_redis.set)
+    
+    # Mock redis.get to return a timestamp (indicating recent notification)
+    current_time = str(time.time())
+    mock_redis.get = AsyncMock(return_value=current_time)
+    mock_redis.set = AsyncMock()
 
     await send_telegram_notification_async(mock_async_client, message, mock_redis)
 

@@ -10,9 +10,11 @@ from fastapi import Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi_pagination import add_pagination
 from fastapi_pagination import Page
+from fastapi_pagination.customization import CustomizedPage, UseParamsFields
 from ipfs_client.main import AsyncIPFSClientSingleton
 from pydantic import Field
 from rpc_helper.rpc import RpcHelper
+from typing import TypeVar
 from web3 import Web3
 
 from snapshotter.settings.config import settings
@@ -23,6 +25,7 @@ from snapshotter.utils.default_logger import default_logger
 from snapshotter.utils.file_utils import read_json_file
 from snapshotter.utils.models.data_models import TaskStatusRequest
 from snapshotter.utils.redis.redis_conn import RedisPoolCache
+from computes.api.router import router as compute_router
 
 
 rest_logger = default_logger.bind(module='CoreAPI')
@@ -40,9 +43,11 @@ origins = ['*']
 app = FastAPI()
 
 # Configure pagination for epoch processing status reports
-Page = Page.with_custom_options(
-    size=Field(10, ge=1, le=30),
-)
+T = TypeVar("T")
+Page = CustomizedPage[
+    Page[T],
+    UseParamsFields(size=Field(10, ge=1, le=30)),
+]
 add_pagination(app)
 
 # Add CORS middleware
@@ -54,6 +59,9 @@ app.add_middleware(
     allow_headers=['*'],
 )
 
+# Include the Uniswap V3 API router
+app.include_router(compute_router)
+
 
 @app.on_event('startup')
 async def startup_boilerplate():
@@ -63,6 +71,9 @@ async def startup_boilerplate():
     """
     app.state.core_settings = settings
     app.state.local_user_cache = dict()
+    # Initialize both anchor and main RPC helpers
+    app.state.rpc_helper = RpcHelper(rpc_settings=settings.rpc)
+    await app.state.rpc_helper.init()
     app.state.anchor_rpc_helper = RpcHelper(rpc_settings=settings.anchor_chain_rpc)
     await app.state.anchor_rpc_helper.init()
     app.state.protocol_state_contract = app.state.anchor_rpc_helper.get_current_node()['web3_client'].eth.contract(
@@ -196,8 +207,6 @@ async def get_project_last_finalized_epoch_info(
     request: Request,
     response: Response,
     project_id: str,
-    # NOTE: Setting it to true for now, but we will need to set it to false once validators are live.
-    use_pending: bool = True,
 ):
     """
     Get the last finalized epoch information for a given project.
@@ -213,22 +222,13 @@ async def get_project_last_finalized_epoch_info(
 
     try:
         # Find the last finalized epoch from the contract
-        if use_pending:
-            [project_last_finalized_epoch] = await request.app.state.anchor_rpc_helper.web3_call(
-                tasks=[
-                    ('lastSequencerFinalizedSnapshot', [Web3.to_checksum_address(settings.data_market), project_id]),
-                ],
-                contract_addr=protocol_state_contract_address,
-                abi=protocol_state_contract_abi,
-            )
-        else:
-            [project_last_finalized_epoch] = await request.app.state.anchor_rpc_helper.web3_call(
-                tasks=[
-                    ('lastFinalizedSnapshot', [Web3.to_checksum_address(settings.data_market), project_id]),
-                ],
-                contract_addr=protocol_state_contract_address,
-                abi=protocol_state_contract_abi,
-            )
+        [project_last_finalized_epoch] = await request.app.state.anchor_rpc_helper.web3_call(
+            tasks=[
+                ('lastSequencerFinalizedSnapshot', [Web3.to_checksum_address(settings.data_market), project_id]),
+            ],
+            contract_addr=protocol_state_contract_address,
+            abi=protocol_state_contract_abi,
+        )
 
         # Get epoch info for the last finalized epoch
         [epoch_info_data] = await request.app.state.anchor_rpc_helper.web3_call(
@@ -285,7 +285,7 @@ async def get_data_for_project_id_epoch_id(
             'message': f'IPFS url not set, /data API endpoint is unusable, please use /cid endpoint instead!',
         }
     try:
-        data = await get_project_epoch_snapshot(
+        snapshot_response = await get_project_epoch_snapshot(
             request.app.state.redis_conn,
             request.app.state.protocol_state_contract,
             request.app.state.anchor_rpc_helper,
@@ -305,14 +305,32 @@ async def get_data_for_project_id_epoch_id(
             f' epoch_id: {epoch_id}, error: {e}',
         }
 
-    if not data:
+    if not snapshot_response.has_data:
         response.status_code = 404
         return {
             'status': 'error',
             'message': f'No data found for project_id: {project_id},'
             f' epoch_id: {epoch_id}',
         }
-    return data
+    
+    # If we have an exact match, return its data
+    if snapshot_response.exact_match:
+        return snapshot_response.exact_match.data
+    
+    # If we have closest epochs info, return that
+    if snapshot_response.closest_epochs:
+        return {
+            'status': 'closest_epochs',
+            'previous': snapshot_response.closest_epochs.previous.dict() if snapshot_response.closest_epochs.previous else None,
+            'next': snapshot_response.closest_epochs.next.dict() if snapshot_response.closest_epochs.next else None
+        }
+    
+    # This should never happen since we checked has_data above
+    response.status_code = 500
+    return {
+        'status': 'error',
+        'message': f'Internal error: response has no data despite has_data check'
+    }
 
 
 @app.get('/cid/{epoch_id}/{project_id}/')
@@ -340,6 +358,7 @@ async def get_finalized_cid_for_project_id_epoch_id(
             request.app.state.redis_conn,
             request.app.state.protocol_state_contract,
             request.app.state.anchor_rpc_helper,
+            request.app.state.ipfs_reader_client,
             epoch_id,
             project_id,
         )

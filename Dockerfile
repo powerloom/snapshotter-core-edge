@@ -1,10 +1,13 @@
-FROM python:3.10.16-slim
+FROM python:3.12-slim
 
 RUN apt-get update && apt-get install -y \
     build-essential git curl\
     && rm -rf /var/lib/apt/lists/*
 
-# Install the PM2 process manager for Node.js
+# Install CA certificates
+RUN apt-get update && apt-get install -y ca-certificates && rm -rf /var/lib/apt/lists/*
+
+# Install poetry
 RUN pip install poetry
 
 # Copy the application's dependencies files

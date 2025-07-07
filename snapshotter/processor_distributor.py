@@ -5,22 +5,19 @@ import multiprocessing
 import queue
 import resource
 import sys
-import threading
 import time
 import traceback
 from collections import defaultdict
-from functools import lru_cache
 from rpc_helper.rpc import RpcHelper
 from signal import SIGINT
 from signal import signal
 from signal import SIGQUIT
 from signal import SIGTERM
 from socket import gethostname
-from typing import Awaitable
+from typing import Awaitable, Tuple
 from typing import Dict
 from typing import List
 from typing import Set
-from typing import Optional
 from uuid import uuid4
 
 import dramatiq
@@ -37,9 +34,12 @@ from httpx import Timeout
 from redis import asyncio as aioredis
 from web3 import Web3
 
+from snapshotter.health_ping import create_health_ping_actor
+from snapshotter.health_ping import run_periodic_broker_health_check
 from snapshotter.settings.config import aggregator_config
 from snapshotter.settings.config import preloaders
 from snapshotter.settings.config import projects_config
+from snapshotter.settings.config import aggregator_types
 from snapshotter.settings.config import settings
 from snapshotter.utils.callback_helpers import send_telegram_notification_sync
 from snapshotter.utils.data_utils import get_source_chain_epoch_size
@@ -51,22 +51,22 @@ from snapshotter.utils.models.data_models import SnapshotterReportState
 from snapshotter.utils.models.data_models import SnapshotterStates
 from snapshotter.utils.models.data_models import SnapshotterStateUpdate
 from snapshotter.utils.models.data_models import TelegramEpochProcessingReportMessage
-from snapshotter.utils.models.message_models import CalculateAggregateMessage
 from snapshotter.utils.models.message_models import EpochBase
-from snapshotter.utils.models.message_models import SnapshotBatchSubmittedMessage
-from snapshotter.utils.models.message_models import SnapshotFinalizedMessage
 from snapshotter.utils.models.message_models import SnapshotProcessMessage
-from snapshotter.utils.models.message_models import SnapshotSubmittedMessage
-from snapshotter.utils.models.settings_model import AggregateOn
+from snapshotter.utils.models.message_models import ProcessingCompleteMessage
+from snapshotter.utils.models.message_models import CalculateAggregateMessage
 from snapshotter.utils.redis.redis_conn import RedisPoolCache
-from snapshotter.utils.redis.redis_keys import epoch_id_epoch_released_key
 from snapshotter.utils.redis.redis_keys import epoch_id_project_to_state_mapping
-from snapshotter.utils.redis.redis_keys import project_finalized_data_zset
-from snapshotter.utils.redis.redis_keys import project_last_finalized_epoch_key
-from snapshotter.utils.redis.redis_keys import service_health_timestamps_key
+from snapshotter.utils.dramatiq_queues import (
+    EVENT_DETECTOR_QUEUE_NAME,
+    DISTRIBUTOR_HEALTH_QUEUE_NAME,
+    SNAPSHOT_QUEUE_NAME,
+    AGGREGATION_QUEUE_NAME,
+    CACHER_QUEUE_NAME,
+)
 
 # Configure Redis broker with no middleware
-redis_broker = RedisBroker(host=settings.redis.host, port=settings.redis.port)
+redis_broker = RedisBroker(host=settings.redis.host, port=settings.redis.port, db=settings.redis.db)
 redis_broker.add_middleware(AsyncIO())
 
 # Remove Prometheus middleware to avoid errors
@@ -77,10 +77,6 @@ for m in middleware:
 
 # redis_broker.middleware.clear()  # Remove ALL middlewares
 dramatiq.set_broker(redis_broker)
-
-EVENT_DETECTOR_QUEUE_NAME = f'powerloom-event-detector_{settings.namespace}_{settings.instance_id}'
-SNAPSHOT_QUEUE_NAME = f'powerloom-snapshotter_{settings.namespace}_{settings.instance_id}'
-AGGREGATION_QUEUE_NAME = f'powerloom-aggregator_{settings.namespace}_{settings.instance_id}'
 
 
 class ProcessorDistributor(multiprocessing.Process):
@@ -134,7 +130,7 @@ class ProcessorDistributor(multiprocessing.Process):
         super(ProcessorDistributor, self).__init__(name=name, **kwargs)
         self._unique_id = f'{name}-' + keccak(text=str(uuid4())).hex()[:8]
         self._logger = default_logger.bind(
-            module=f'Callbacks|ProcessDistributor:{settings.namespace}-{settings.instance_id}',
+            module=f'ProcessDistributor:{settings.namespace}-{settings.instance_id}',
         )
         self._q = queue.Queue()
         self._shutdown_initiated = False
@@ -156,14 +152,14 @@ class ProcessorDistributor(multiprocessing.Process):
 
         self._aggregator_config_mapping = dict()
         for agg_config in aggregator_config:
-            self._aggregator_config_mapping[agg_config.project_type] = agg_config
+            self._aggregator_config_mapping[agg_config.project_name] = agg_config
 
         self._logger.debug('All preload tasks by string ID during init: {}', self._all_preload_tasks)
         self._last_epoch_processing_health_check = 0
         self._preloader_compute_mapping = dict()
         self._snapshot_build_awaited_project_ids = dict()
         # Task tracking
-        self._active_tasks: Set[asyncio.Task] = set()
+        self._active_tasks: Set[Tuple[float, asyncio.Task]] = set()
         self._task_timeout = settings.async_task_config.task_timeout
         self._task_cleanup_interval = settings.async_task_config.task_cleanup_interval
 
@@ -179,7 +175,12 @@ class ProcessorDistributor(multiprocessing.Process):
 
         self._hostname = gethostname()
         self._health_report_interval = settings.health_report_interval
-        self._worker_thread: Optional[threading.Thread] = None
+        self._health_ping_actor = create_health_ping_actor(
+            broker=redis_broker,
+            queue_name=DISTRIBUTOR_HEALTH_QUEUE_NAME,
+            actor_name='healthPingDist',
+            logger=self._logger
+        )
 
     def _signal_handler(self, signum, frame):
         """
@@ -271,16 +272,25 @@ class ProcessorDistributor(multiprocessing.Process):
             self._logger.debug('Set epoch size to {}', self._epoch_size)
         self._epochs_in_a_day = 86400 // (self._epoch_size * self._source_chain_block_time)
         self._logger.debug('Set epochs in a day to {}', self._epochs_in_a_day)
-        self._source_chain_epoch_size = await get_source_chain_epoch_size(
+        try:
+            self._source_chain_epoch_size = await get_source_chain_epoch_size(
             redis_conn=self._redis_conn,
-            state_contract_obj=self._protocol_state_contract,
-            rpc_helper=self._anchor_rpc_helper,
-        )
-        self._source_chain_id = await get_source_chain_id(
-            redis_conn=self._redis_conn,
-            rpc_helper=self._anchor_rpc_helper,
-            state_contract_obj=self._protocol_state_contract,
-        )
+                state_contract_obj=self._protocol_state_contract,
+                rpc_helper=self._anchor_rpc_helper,
+            )
+        except Exception as e:
+            self._logger.error(f'Error fetching source chain epoch size in processor distributor _init_protocol_meta: {e}')
+            sys.exit(1)
+
+        try:
+            self._source_chain_id = await get_source_chain_id(
+                redis_conn=self._redis_conn,
+                rpc_helper=self._anchor_rpc_helper,
+                state_contract_obj=self._protocol_state_contract,
+            )
+        except Exception as e:
+            self._logger.error(f'Error fetching source chain id in processor distributor _init_protocol_meta: {e}')
+            sys.exit(1)
 
     async def init_worker(self):
         """
@@ -371,7 +381,7 @@ class ProcessorDistributor(multiprocessing.Process):
                     mapping={
                         project_name: SnapshotterStateUpdate(
                             status='success', timestamp=int(time.time()),
-                        ).json(),
+                        ).model_dump_json(),
                     },
                 )
                 await self._distribute_callbacks_snapshotting(project_name, epoch)
@@ -385,7 +395,7 @@ class ProcessorDistributor(multiprocessing.Process):
                     mapping={
                         project_name: SnapshotterStateUpdate(
                             status='failed', timestamp=int(time.time()),
-                        ).json(),
+                        ).model_dump_json(),
                     },
                 )
         # TODO: set separate overall status for failed and successful preloads
@@ -449,7 +459,7 @@ class ProcessorDistributor(multiprocessing.Process):
             message (IncomingMessage): The message containing the epoch information.
         """
         msg_obj: EpochBase = (
-            EpochBase.parse_raw(event_data)
+            EpochBase.model_validate_json(event_data)
         )
 
         self._logger.debug('Pushing epoch release to preloader coroutine: {}', msg_obj)
@@ -495,11 +505,12 @@ class ProcessorDistributor(multiprocessing.Process):
             epochId=epoch.epochId,
         )
 
+        project_type = project_name.split(':')[0]
         dramatiq.broker.get_broker().enqueue(
             dramatiq.Message(
-                queue_name=SNAPSHOT_QUEUE_NAME,
+                queue_name=f'{SNAPSHOT_QUEUE_NAME}-{project_type}',
                 actor_name='handleEvent',  # Match actor name with event_receiver.py
-                args=(project_name, process_unit.json()),
+                args=(project_name, process_unit.model_dump_json()),
                 kwargs={},
                 options={},
             ),
@@ -509,132 +520,50 @@ class ProcessorDistributor(multiprocessing.Process):
             f' {project_name} : {process_unit}',
         )
 
-    # NOTE: Considering SequencerFinalized state as Finalized for now
-    # data data is overwritten upon receiving SnapshotFinalized message for the project
-    # TODO: Create separate states for SequencerFinalized and SnapshotFinalized
-    async def _cache_submitted_snapshot(self, event_data):
-        """
-        Caches the snapshot data and forwards it to the payload commit queue.
-
-        Args:
-            message (IncomingMessage): The incoming message containing the snapshot data.
-
-        Returns:
-            None
-        """
-        self._logger.debug(f'SnapshotBatchSubmittedEvent caught with message {event_data}')
-        msg_obj: SnapshotBatchSubmittedMessage = (
-            SnapshotBatchSubmittedMessage.parse_raw(event_data)
-        )
-
-        transaction_hash = msg_obj.transactionHash
-
-        tx = await self._anchor_rpc_helper.get_transaction_from_hash(transaction_hash)
-
-        decoded_input = self._protocol_state_contract.decode_function_input(tx.input)
-
-        _, input_params = decoded_input
-
-        # self._logger.info(f'Decoded input: {function_name}, {input_params}')
-        submitted_batch_data = zip(input_params['projectIds'], input_params['snapshotCids'])
-
-        for project_id, snapshot_cid in submitted_batch_data:
-            # update last_finalized_epoch in redis
-            await self._redis_conn.set(
-                name=project_last_finalized_epoch_key(project_id),
-                value=msg_obj.epochId,
-                ex=60,
-            )
-
-            # Add to project finalized data zset
-            await self._redis_conn.zadd(
-                project_finalized_data_zset(project_id=project_id),
-                {snapshot_cid: msg_obj.epochId},
-            )
-
-            await self._redis_conn.hset(
-                name=epoch_id_project_to_state_mapping(msg_obj.epochId, SnapshotterStates.SNAPSHOT_FINALIZE.value),
-                mapping={
-                    project_id: SnapshotterStateUpdate(
-                        status='success', timestamp=int(time.time()), extra={'snapshot_cid': snapshot_cid},
-                    ).json(),
-                },
-            )
-
-    async def _cache_finalized_snapshot(self, event_data):
-        """
-        Caches the snapshot data and forwards it to the payload commit queue.
-
-        Args:
-            message (IncomingMessage): The incoming message containing the snapshot data.
-
-        Returns:
-            None
-        """
-        self._logger.debug(f'SnapshotFinalizedEvent caught with message {event_data}')
-        msg_obj: SnapshotFinalizedMessage = (
-            SnapshotFinalizedMessage.parse_raw(event_data)
-        )
-
-        # set project last finalized epoch in redis
-        await self._redis_conn.set(
-            name=project_last_finalized_epoch_key(msg_obj.projectId),
-            value=msg_obj.epochId,
-            ex=60,
-        )
-
-        # Add to project finalized data zset
-        await self._redis_conn.zadd(
-            project_finalized_data_zset(project_id=msg_obj.projectId),
-            {msg_obj.snapshotCid: msg_obj.epochId},
-        )
-
-        await self._redis_conn.hset(
-            name=epoch_id_project_to_state_mapping(msg_obj.epochId, SnapshotterStates.SNAPSHOT_FINALIZE.value),
-            mapping={
-                msg_obj.projectId: SnapshotterStateUpdate(
-                    status='success', timestamp=int(time.time()), extra={'snapshot_cid': msg_obj.snapshotCid},
-                ).json(),
-            },
-        )
-
-        self._logger.trace(f'Payload Commit Message Distribution time - {int(time.time())}')
-
     async def _distribute_callbacks_aggregate(self, event_data):
         """
         Distributes the callbacks for aggregation.
 
         :param message: IncomingMessage object containing the message to be processed.
         """
-        process_unit: SnapshotSubmittedMessage = (
-            SnapshotSubmittedMessage.parse_raw(event_data)
+        self._logger.debug('Distributing callbacks for aggregation: {}', event_data)
+        process_unit: ProcessingCompleteMessage = (
+            ProcessingCompleteMessage.model_validate_json(event_data)
         )
 
         self._logger.trace(f'Aggregation Task Distribution time - {int(time.time())}')
-        pass
         # go through aggregator config, if it matches then send appropriate message
-        # for config in aggregator_config:
-        #     task_type = config.project_type
-        #     if config.aggregate_on == AggregateOn.single_project:
-        #         if config.base_project_type not in process_unit.projectId:
-        #             self._logger.trace(f'projectId mismatch {process_unit.projectId} {config.base_project_type}')
-        #             continue
-
-        #         dramatiq.broker.get_broker().enqueue(
-        #             dramatiq.Message(
-        #                 queue_name=AGGREGATION_QUEUE_NAME,
-        #                 actor_name='handleEvent',  # Match actor name with event_receiver.py
-        #                 args=(task_type, process_unit.json()),
-        #                 kwargs={},
-        #                 options={},
-        #             ),
-        #         )
+        if len(aggregator_types) > 0:
+            for config in aggregator_config:
+                task_type = config.project_name
+                if config.depends_on not in process_unit.task_type:
+                    self._logger.trace(f'projectId mismatch {process_unit.task_type} {config.project_name}')
+                    continue
+                else:
+                    calculate_aggregate_message = CalculateAggregateMessage(
+                        epochId=process_unit.epochId,
+                        begin=process_unit.begin,
+                        end=process_unit.end,
+                        task_type=task_type,
+                        processed_message=process_unit,
+                    )
+                    dramatiq.broker.get_broker().enqueue(
+                        dramatiq.Message(
+                            queue_name=AGGREGATION_QUEUE_NAME,
+                            actor_name='handleEvent',  # Match actor name with event_receiver.py
+                            args=(task_type, calculate_aggregate_message.model_dump_json()),
+                            kwargs={},
+                            options={},
+                        ),
+                    )
+        else:
+            self._logger.debug('No aggregator types found, skipping aggregation distribution')
 
     async def _cleanup_older_epoch_status(self, epoch_id: int):
         """
         Deletes the epoch status keys for the epoch that is 30 epochs older than the given epoch_id.
         """
-        tasks = [self._redis_conn.delete(epoch_id_epoch_released_key(epoch_id - 30))]
+        tasks = []
         delete_keys = list()
         for state in SnapshotterStates:
             k = epoch_id_project_to_state_mapping(epoch_id - 30, state.value)
@@ -661,11 +590,7 @@ class ProcessorDistributor(multiprocessing.Process):
         )
 
         if event_type == 'EpochReleased':
-            epoch_msg: EpochBase = EpochBase.parse_raw(event_data)
-            await self._redis_conn.set(
-                epoch_id_epoch_released_key(epoch_msg.epochId),
-                int(time.time()),
-            )
+            epoch_msg: EpochBase = EpochBase.model_validate_json(event_data)
             current_time = time.time()
             task = asyncio.create_task(
                 self._cleanup_older_epoch_status(epoch_msg.epochId),
@@ -678,18 +603,43 @@ class ProcessorDistributor(multiprocessing.Process):
             await self._epoch_release_processor(event_data)
 
         elif event_type == 'SnapshotSubmitted':
+            # enqueue to cacher
+            dramatiq.broker.get_broker().enqueue(
+                dramatiq.Message(
+                    queue_name=CACHER_QUEUE_NAME,
+                    actor_name='handleEvent',
+                    args=(event_type, event_data),
+                    kwargs={},
+                    options={},
+                ),
+            )
+        elif event_type == 'ProcessingComplete':
             await self._distribute_callbacks_aggregate(
                 event_data,
             )
 
         elif event_type == 'SnapshotFinalized':
-            await self._cache_finalized_snapshot(
-                event_data,
+            # enqueue to cacher
+            dramatiq.broker.get_broker().enqueue(
+                dramatiq.Message(
+                    queue_name=CACHER_QUEUE_NAME,
+                    actor_name='handleEvent',
+                    args=(event_type, event_data),
+                    kwargs={},
+                    options={},
+                ),
             )
 
         elif event_type == 'SnapshotBatchSubmitted':
-            await self._cache_submitted_snapshot(
-                event_data,
+            # enqueue to cacher
+            dramatiq.broker.get_broker().enqueue(
+                dramatiq.Message(
+                    queue_name=CACHER_QUEUE_NAME,
+                    actor_name='handleEvent',
+                    args=(event_type, event_data),
+                    kwargs={},
+                    options={},
+                ),
             )
 
         else:
@@ -721,7 +671,7 @@ class ProcessorDistributor(multiprocessing.Process):
             # Wait for the result
             future.result()  # 60 second timeout
 
-            self._logger.warning(f'Event has been handled: {args}')
+            self._logger.debug(f'Event has been handled: {args}')
 
             return None
         except Exception as e:
@@ -849,58 +799,10 @@ class ProcessorDistributor(multiprocessing.Process):
             except Exception as e:
                 self._logger.error('Error sending Telegram notification: {}', e)
 
-    async def report_health_status(self):
-        """Reports the current timestamp for this container's hostname to Redis."""
-        if not hasattr(self, '_redis_conn') or self._redis_conn is None:
-            self._logger.warning('Redis connection not initialized, skipping health report.')
-            return
-        try:
-            current_timestamp = int(time.time())
-            await self._redis_conn.hset(
-                service_health_timestamps_key,
-                self._hostname,
-                current_timestamp,
-            )
-            self._logger.debug(f'Reported health for {self._hostname} at {current_timestamp}')
-        except Exception as e:
-            self._logger.error(f'Failed to report health status for hostname {self._hostname}: {e}')
-
-    async def _periodic_health_reporter(self):
-        """Periodically reports health status."""
-        self._logger.info(
-            f'Starting periodic health reporter task for {self._hostname} (Interval: {self._health_report_interval}s)',
-        )
-        while True:
-            should_report = True
-            if not self._worker_thread or not self._worker_thread.is_alive():
-                should_report = False
-                if self._worker_thread:
-                    # Worker thread is no longer alive
-                    self._logger.critical(
-                        'Main Dramatiq worker thread has died. Halting health reports.'
-                    )
-                    # Halt the health reporter
-                    break
-                else:
-                    # Worker thread hasn't been initialized yet
-                    self._logger.warning('Worker thread not found. Skipping health report for now.')
-
-            try:
-                if should_report:
-                    await self.report_health_status()
-
-                await asyncio.sleep(self._health_report_interval)
-            except asyncio.CancelledError:
-                self._logger.info(f'Periodic health reporter task for {self._hostname} cancelled.')
-                break
-            except Exception as e:
-                self._logger.error(f'Error in periodic health reporter loop: {e}')
-                await asyncio.sleep(self._health_report_interval)
-
     def run(self) -> None:
         """
         Runs the ProcessorDistributor by setting resource limits, registering signal handlers,
-        initializing the worker, starting the Dramatiq worker, and running the event loop.
+        initializing the worker, starting the Dramatiq worker's internal threads, and running the event loop.
         """
         soft, hard = resource.getrlimit(resource.RLIMIT_NOFILE)
         resource.setrlimit(
@@ -911,30 +813,57 @@ class ProcessorDistributor(multiprocessing.Process):
             signal(signame, self._signal_handler)
         asyncio.set_event_loop_policy(uvloop.EventLoopPolicy())
 
-        ev_loop = asyncio.get_event_loop()
+        ev_loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(ev_loop)
+
         ProcessorDistributor._event_loop = ev_loop  # Store the event loop
+        
         # Update the middleware to use this event loop
         for middleware in redis_broker.middleware:
             if isinstance(middleware, dramatiq.middleware.AsyncIO):
                 middleware.event_loop = ev_loop
 
+        # Initialize worker components
         ev_loop.run_until_complete(self.init_worker())
+        worker = Worker(redis_broker, queues=[EVENT_DETECTOR_QUEUE_NAME, DISTRIBUTOR_HEALTH_QUEUE_NAME])
+        
+        self._logger.info("Starting Distributor Dramatiq worker internal threads...")
+        worker.start()
 
-        # Start a Dramatiq worker in a separate thread
-        worker = Worker(redis_broker, queues=[EVENT_DETECTOR_QUEUE_NAME])
-        worker_thread = threading.Thread(target=worker.start, daemon=True)
-        self._worker_thread = worker_thread # Store the thread object
-        worker_thread.start()
-
-        health_reporter_task = ev_loop.create_task(self._periodic_health_reporter())
+        health_reporter_task = ev_loop.create_task(
+            run_periodic_broker_health_check(
+                logger=self._logger,
+                redis_conn=self._redis_conn,
+                hostname=self._hostname,
+                health_report_interval=self._health_report_interval,
+                health_actor_send=self._health_ping_actor.send,
+                worker_type="ProcessorDistributor",
+                health_queue_name=DISTRIBUTOR_HEALTH_QUEUE_NAME
+            )
+        )
 
         try:
+            self._logger.info("Running Distributor main event loop...")
             ev_loop.run_forever()
         finally:
+            self._logger.info("Distributor main event loop stopped. Shutting down...")
             if health_reporter_task and not health_reporter_task.done():
                 health_reporter_task.cancel()
-                ev_loop.run_until_complete(asyncio.sleep(2))
+                try:
+                    ev_loop.run_until_complete(asyncio.sleep(1))
+                except RuntimeError as e:
+                     self._logger.warning(f"Could not fully await health reporter cancellation on loop close: {e}") # Corrected logger usage
+
+            try:
+                self._logger.info("Stopping Distributor Dramatiq worker internal threads...")
+                worker.stop()
+                self._logger.info("Distributor Dramatiq worker stopped.")
+            except Exception as e:
+                self._logger.error(f"Error stopping Distributor Dramatiq worker: {e}")
+            
+            self._logger.info("Closing Distributor event loop...")
             ev_loop.close()
+            self._logger.info("Distributor Event loop closed.")
 
 
 if __name__ == '__main__':

@@ -28,7 +28,6 @@ async def test_web3_async_call():
     # Initialize and populate the Redis pool cache
     aioredis_pool = RedisPoolCache()
     await aioredis_pool.populate()
-    writer_redis_pool = aioredis_pool._aioredis_pool
 
     # Set up the RPC helper with the anchor chain RPC
     rpc_helper = RpcHelper(settings.anchor_chain_rpc)
@@ -45,18 +44,24 @@ async def test_web3_async_call():
 
     # Prepare the task for asynchronous execution
     tasks = [
-        contract_obj.functions.retrieve(),
+        ('retrieve', []),
     ]
 
     # Execute the Web3 call asynchronously
-    result = await rpc_helper.web3_call(tasks)
+    result = await rpc_helper.web3_call(
+        tasks=tasks,
+        contract_addr=contract_obj.address,
+        abi=contract_abi,
+    )
     test_logger.debug('Retrieve: {}', result)
 
 
 if __name__ == '__main__':
     try:
         # Run the test function in the event loop
-        asyncio.get_event_loop().run_until_complete(test_web3_async_call())
+        ev_loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(ev_loop)
+        ev_loop.run_until_complete(test_web3_async_call())
     except Exception as e:
         # Log any exceptions that occur during execution
         test_logger.opt(exception=settings.logs.debug_mode).error('exception: {}', e)

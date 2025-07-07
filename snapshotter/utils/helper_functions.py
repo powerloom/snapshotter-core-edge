@@ -83,7 +83,8 @@ async def as_completed_async(futures):
     Yields:
         The result of each completed future as it completes.
     """
-    loop = asyncio.get_event_loop()
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
     wrappers = []
     for fut in futures:
         assert isinstance(fut, asyncio.Future)  # we need Future or Task

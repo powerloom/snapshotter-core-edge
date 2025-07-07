@@ -42,7 +42,7 @@ from snapshotter.utils.redis.redis_keys import service_health_timestamps_key
 
 
 # Setup Dramatiq with Redis broker for sending only
-redis_broker = RedisBroker(host=settings.redis.host, port=settings.redis.port)
+redis_broker = RedisBroker(host=settings.redis.host, port=settings.redis.port, db=settings.redis.db)
 dramatiq.set_broker(redis_broker)
 
 
@@ -312,7 +312,7 @@ class EventDetectorProcess(multiprocessing.Process):
             dramatiq.Message(
                 queue_name=self.queue_name,
                 actor_name='handleEvent',  # Match actor name with event_receiver.py
-                args=(event_type, event.json()),
+                args=(event_type, event.model_dump_json()),
                 kwargs={},
                 options={},
             ),
@@ -543,8 +543,9 @@ class EventDetectorProcess(multiprocessing.Process):
         This method initializes the necessary components, sets up signal handlers,
         initializes RPC connections, and begins the event detection loop.
         """
-        # Initialize the event loop
-        self.ev_loop = asyncio.get_event_loop()
+        # Initialize the event loop  
+        self.ev_loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(self.ev_loop)
 
         self._logger = default_logger.bind(
             module='SystemEventDetector',

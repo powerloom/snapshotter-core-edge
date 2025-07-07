@@ -1,28 +1,39 @@
 from snapshotter.settings.config import settings
 
 # Redis key for cached block details at a specific height
-cached_block_details_at_height = (
-    'block_cache:' + settings.namespace
-)
+cached_block_details_at_height = f'block_cache:{settings.namespace}'
 
 # Redis key for the last processed block by the event detector
 event_detector_last_processed_block = 'SystemEventDetector:lastProcessedBlock'
 
-# Redis key for service health timestamps
-service_health_timestamps_key = 'service:health:timestamps'
+
+def block_number_to_timestamp_key(namespace: str) -> str:
+    return f'blockNumberToTimestamp:{namespace}'
 
 
-def project_finalized_data_zset(project_id):
+def timestamp_to_block_number_key(namespace: str) -> str:
+    return f'timestampToBlockNumber:{namespace}'
+
+
+def project_data_hmap(project_id):
     """
-    Generate Redis key for project finalized data zset.
-
-    Args:
-        project_id (str): The ID of the project.
-
-    Returns:
-        str: Redis key for the project's finalized data zset.
+    Generate Redis key for project data hashmap.
     """
-    return f'projectID:{project_id}:finalizedData'
+    return f'projectID:{project_id}:data'
+
+
+def cid_cache(cid: str):
+    """
+    Generate Redis key for CID cache.
+    """
+    return f'CIDCache:{cid}'
+
+
+def blank_epochs_bitmap(project_id: str):
+    """
+    Generate Redis key for blank epochs bitmap.
+    """
+    return f'BlankEpochsBitmap:{project_id}'
 
 
 def cid_not_found_key(cid):
@@ -78,20 +89,14 @@ def source_chain_epoch_size_key():
     return 'sourceChainEpochSize'
 
 
-def project_last_finalized_epoch_key(project_id):
+def project_last_finalized_epoch_hmap():
     """
-    Generate Redis key for project's last finalized epoch.
-
-    Args:
-        project_id (str): The ID of the project.
-
-    Returns:
-        str: Redis key for the project's last finalized epoch.
+    Generate Redis key for project's last finalized epoch hashmap.
     """
-    return f'projectID:{project_id}:lastFinalizedEpoch'
+    return 'projectLastFinalizedEpoch'
 
 
-def unpinned_snapshots_zset_name():
+def snapshots_to_unpin_zset_name():
     """
     Generate Redis key for unpinned snapshots zset.
 
@@ -99,19 +104,6 @@ def unpinned_snapshots_zset_name():
         str: Redis key for the unpinned snapshots zset.
     """
     return 'snapshotsToUnpin'
-
-
-def epoch_id_epoch_released_key(epoch_id):
-    """
-    Generate Redis key for epoch release status.
-
-    Args:
-        epoch_id (str): The ID of the epoch.
-
-    Returns:
-        str: Redis key for the epoch's release status.
-    """
-    return f'epochID:{epoch_id}:epochReleased'
 
 
 def epoch_id_project_to_state_mapping(epoch_id, state_id):
@@ -126,6 +118,19 @@ def epoch_id_project_to_state_mapping(epoch_id, state_id):
         str: Redis key for the epoch-project state mapping.
     """
     return f'epochID:{epoch_id}:stateID:{state_id}:processingStatus'
+
+
+def last_submitted_snapshot_data_key(project_id):
+    """
+    Generate Redis key for last submitted snapshot data.
+
+    Args:
+        project_id (str): The ID of the project.
+
+    Returns:
+        str: Redis key for the last submitted snapshot data.
+    """
+    return f'lastSubmittedSnapshotData:{project_id}'
 
 
 def last_snapshot_processing_complete_timestamp_key():
@@ -158,31 +163,15 @@ def last_epoch_detected_epoch_id_key():
     return f'lastEpochDetectedEpochID:{settings.namespace}'
 
 
-def submitted_base_snapshots_key(epoch_id, project_id):
+def data_expiry_zset():
     """
-    Generate Redis key for submitted base snapshots.
-
-    Args:
-        epoch_id (str): The ID of the epoch.
-        project_id (str): The ID of the project.
+    Generate Redis key for project data expiry zset.
+    This zset tracks expiration times for individual hash entries in project data hashmaps.
 
     Returns:
-        str: Redis key for the submitted base snapshots.
+        str: Redis key for the project data expiry zset.
     """
-    return f'submittedBaseSnapshots:{epoch_id}:{project_id}'
-
-
-def submitted_unfinalized_snapshot_cids(project_id):
-    """
-    Generate Redis key for submitted unfinalized snapshot CIDs.
-
-    Args:
-        project_id (str): The ID of the project.
-
-    Returns:
-        str: Redis key for the submitted unfinalized snapshot CIDs.
-    """
-    return f'projectID:{project_id}:unfinalizedSnapshots'
+    return f'DataExpiry:{settings.namespace}'
 
 
 def callback_last_sent_by_issue(issue_type):
@@ -193,3 +182,32 @@ def callback_last_sent_by_issue(issue_type):
         str: Redis key for the callback last sent timestamp.
     """
     return f'callbackLastSentTimestamp:{settings.namespace}:{issue_type}'
+
+
+def service_health_timestamps_key():
+    """
+    Generate Redis key for the service health timestamps hash.
+
+    This key points to a Redis hash that stores the last reported health timestamp
+    for each service instance (e.g., worker, API). The field is the service's
+    hostname, and the value is the Unix timestamp of the last health ping.
+
+    Returns:
+        str: Redis key for the service health timestamps hash.
+    """
+    return f'{settings.namespace}:service_health_timestamps'
+
+
+def cids_to_cache_set():
+    """
+    Generate Redis key for the set of CIDs to be cached.
+
+    This key points to a Redis set that acts as a queue for snapshot CIDs
+    that need to be fetched from IPFS and cached in Redis. A worker process
+    (e.g., Cacher) monitors this set, processes the CIDs, and removes them
+    upon successful caching.
+
+    Returns:
+        str: Redis key for the CIDs to cache set.
+    """
+    return f'cidsToCache:{settings.namespace}'

@@ -10,20 +10,15 @@ from typing import Dict
 from typing import Set
 from typing import Union
 from uuid import uuid4
-
 import dramatiq
 import grpclib
-import sha3
+import hashlib
 import tenacity
 from coincurve import PrivateKey
 from dramatiq.brokers.redis import RedisBroker
 from dramatiq.middleware import AsyncIO
-from eip712_structs import EIP712Struct
-from eip712_structs import make_domain
-from eip712_structs import String
-from eip712_structs import Uint
+from eth_account.messages import encode_structured_data
 from eth_utils.crypto import keccak
-from eth_utils.encoding import big_endian_to_int
 from grpclib.client import Channel
 from httpx import AsyncClient
 from httpx import AsyncHTTPTransport
@@ -44,12 +39,13 @@ from snapshotter.settings.config import settings
 from snapshotter.utils.callback_helpers import send_telegram_notification_async
 from snapshotter.utils.default_logger import default_logger
 from snapshotter.utils.file_utils import read_json_file
+from snapshotter.utils.models.data_models import EIP712Domain
+from snapshotter.utils.models.data_models import EIPRequest
 from snapshotter.utils.models.data_models import SnapshotterIssue
 from snapshotter.utils.models.data_models import SnapshotterReportState
 from snapshotter.utils.models.data_models import SnapshotterStates
 from snapshotter.utils.models.data_models import SnapshotterStateUpdate
 from snapshotter.utils.models.data_models import TelegramSnapshotterCoreReportMessage
-from snapshotter.utils.models.data_models import UnfinalizedSnapshot
 from snapshotter.utils.models.message_models import AggregateBase
 from snapshotter.utils.models.message_models import CalculateAggregateMessage
 from snapshotter.utils.models.message_models import SnapshotProcessMessage
@@ -59,13 +55,16 @@ from snapshotter.utils.models.proto.snapshot_submission.submission_pb2 import Re
 from snapshotter.utils.models.proto.snapshot_submission.submission_pb2 import SnapshotSubmission
 from snapshotter.utils.redis.redis_conn import RedisPoolCache
 from snapshotter.utils.redis.redis_keys import epoch_id_project_to_state_mapping
-from snapshotter.utils.redis.redis_keys import submitted_unfinalized_snapshot_cids
-from snapshotter.utils.redis.redis_keys import unpinned_snapshots_zset_name
-
+from snapshotter.utils.redis.redis_keys import last_submitted_snapshot_data_key
+from snapshotter.utils.data_utils import get_project_last_finalized_epoch
+from snapshotter.utils.data_utils import get_project_finalized_cid
+from snapshotter.utils.data_utils import get_submission_data
+from snapshotter.settings.config import projects_config
+from snapshotter.settings.config import aggregator_config
 logger = default_logger.bind(module='GenericWorker')
 
 # Configure Redis broker with no middleware
-redis_broker = RedisBroker(host=settings.redis.host, port=settings.redis.port)
+redis_broker = RedisBroker(host=settings.redis.host, port=settings.redis.port, db=settings.redis.db)
 redis_broker.add_middleware(AsyncIO())
 
 # Remove Prometheus middleware to avoid errors
@@ -79,15 +78,33 @@ dramatiq.set_broker(redis_broker)
 EVENT_DETECTOR_QUEUE_NAME = f'powerloom-event-detector_{settings.namespace}_{settings.instance_id}'
 
 
-class EIPRequest(EIP712Struct):
-    """
-    Represents an EIP712 structured request for snapshot submission.
-    """
-    slotId = Uint()
-    deadline = Uint()
-    snapshotCid = String()
-    epochId = Uint()
-    projectId = String()
+def get_eip712_typed_data_dict(domain: EIP712Domain, message: EIPRequest) -> Dict[str, any]:
+    """Constructs the full EIP-712 typed data dictionary for eth-account."""
+    # Pydantic v2 uses model_dump, v1 used dict()
+
+    domain_dict = domain.model_dump()
+    message_dict = message.model_dump()
+
+    return {
+        'types': {
+            'EIP712Domain': [
+                {'name': 'name', 'type': 'string'},
+                {'name': 'version', 'type': 'string'},
+                {'name': 'chainId', 'type': 'uint256'},
+                {'name': 'verifyingContract', 'type': 'address'},
+            ],
+            'EIPRequest': [
+                {'name': 'slotId', 'type': 'uint256'},
+                {'name': 'deadline', 'type': 'uint256'},
+                {'name': 'snapshotCid', 'type': 'string'},
+                {'name': 'epochId', 'type': 'uint256'},
+                {'name': 'projectId', 'type': 'string'},
+            ]
+        },
+        'primaryType': 'EIPRequest',
+        'domain': domain_dict,
+        'message': message_dict,
+    }
 
 
 def submit_snapshot_retry_callback(retry_state: tenacity.RetryCallState):
@@ -170,7 +187,7 @@ class GenericAsyncWorker(multiprocessing.Process):
 
         self.protocol_state_contract_address = Web3.to_checksum_address(settings.protocol_state.address)
 
-        self._keccak_hash = lambda x: sha3.keccak_256(x).digest()
+        self._keccak_hash = lambda x: hashlib.sha3_256(x).digest()
         self._private_key = settings.signer_private_key
         if self._private_key.startswith('0x'):
             self._private_key = self._private_key[2:]
@@ -189,6 +206,14 @@ class GenericAsyncWorker(multiprocessing.Process):
         self._telegram_httpx_client = None
         self._last_notification_time = 0
         self._notification_cooldown = settings.reporting.min_reporting_interval
+        self._project_config_mapping = dict()
+        for project_config in projects_config:
+            key = project_config.project_name
+            self._project_config_mapping[key] = project_config
+        self._aggregator_config_mapping = dict()
+        for config in aggregator_config:
+            key = config.project_name
+            self._aggregator_config_mapping[key] = config
 
     def _signal_handler(self, signum, frame):
         """
@@ -221,12 +246,6 @@ class GenericAsyncWorker(multiprocessing.Process):
             str: The CID of the uploaded snapshot.
         """
         snapshot_cid = await _ipfs_writer_client.add_bytes(snapshot)
-        if settings.ipfs_unpinning.enabled:
-            # add to redis zset of unpinned snapshots
-            await self._redis_conn.zadd(
-                name=unpinned_snapshots_zset_name(),
-                mapping={snapshot_cid: int(time.time()) + settings.ipfs_unpinning.unpin_after},
-            )
         return snapshot_cid
 
     async def generate_signature(self, snapshot_cid, epoch_id, project_id, slot_id=None, private_key=None):
@@ -248,7 +267,7 @@ class GenericAsyncWorker(multiprocessing.Process):
         current_block_hash = current_block['hash']
         deadline = current_block_number + settings.protocol_state.deadline_buffer
         request_slot_id = settings.slot_id if not slot_id else slot_id
-        request = EIPRequest(
+        request_message = EIPRequest(
             slotId=request_slot_id,
             deadline=deadline,
             snapshotCid=snapshot_cid,
@@ -256,24 +275,47 @@ class GenericAsyncWorker(multiprocessing.Process):
             projectId=project_id,
         )
 
-        signable_bytes = request.signable_bytes(self._domain_separator)
+        eip712_typed_data = get_eip712_typed_data_dict(
+            domain=self._domain_model,
+            message=request_message,
+        )
+
+
+        signable_message = encode_structured_data(eip712_typed_data)
+        message_hash_bytes = keccak(b'\x19\x01' + signable_message.header + signable_message.body)
+
         if not private_key:  # self signing
-            signature = self._identity_private_key.sign_recoverable(signable_bytes, hasher=self._keccak_hash)
+            signer_private_key_obj = self._identity_private_key
         else:
             if private_key.startswith('0x'):
-                private_key = private_key[2:]
-            signer_private_key = PrivateKey.from_hex(private_key)
-            signature = signer_private_key.sign_recoverable(signable_bytes, hasher=self._keccak_hash)
-        v = signature[64] + 27
-        r = big_endian_to_int(signature[0:32])
-        s = big_endian_to_int(signature[32:64])
+                private_key_hex = private_key[2:]
+            else:
+                private_key_hex = private_key
+            signer_private_key_obj = PrivateKey.from_hex(private_key_hex)
+        
+        recoverable_sig_bytes = signer_private_key_obj.sign_recoverable(message_hash_bytes, hasher=None) # hasher=None as we sign the hash directly
 
-        final_sig = r.to_bytes(32, 'big') + s.to_bytes(32, 'big') + v.to_bytes(1, 'big')
-        request_ = {
-            'slotId': request_slot_id, 'deadline': deadline,
-            'snapshotCid': snapshot_cid, 'epochId': epoch_id, 'projectId': project_id,
-        }
-        return request_, final_sig, current_block_hash
+        v = recoverable_sig_bytes[64]
+        normalized_v = v + 27
+
+        r_bytes = recoverable_sig_bytes[0:32]
+        s_bytes = recoverable_sig_bytes[32:64]
+        final_sig_bytes = r_bytes + s_bytes + normalized_v.to_bytes(1, 'big')
+
+        request_ = request_message.model_dump()
+
+        return request_, final_sig_bytes.hex(), current_block_hash
+    
+    def _enqueue_to_event_detector(self, event_type: str, payload: dict):
+        dramatiq.broker.get_broker().enqueue(
+            dramatiq.Message(
+                queue_name=EVENT_DETECTOR_QUEUE_NAME,
+                actor_name='handleEvent',  # Match actor name with event_receiver.py
+                args=(event_type, payload),
+                kwargs={},
+                options={},
+            ),
+        )
 
     async def _commit_payload(
             self,
@@ -302,8 +344,41 @@ class GenericAsyncWorker(multiprocessing.Process):
             None
         """
         # Payload commit sequence begins
-        # Upload to IPFS
-        snapshot_json = json.dumps(snapshot.dict(by_alias=True), sort_keys=True, separators=(',', ':'))
+        project_config = self._project_config_mapping.get(task_type)
+        if not project_config:
+            project_config = self._aggregator_config_mapping.get(task_type)
+        last_snapshot = None
+        if project_config and project_config.keep_previous_snapshot_data:
+            # check if snapshot has previousSnapshots field it's a pydantic model
+            if hasattr(snapshot, 'previousSnapshots'):
+                # try to fetch last submitted data from redis
+                last_submitted_data = await self._redis_conn.get(name=last_submitted_snapshot_data_key(project_id))
+                if last_submitted_data:
+                    last_submitted_data = json.loads(last_submitted_data)
+                    last_snapshot_cid = last_submitted_data['snapshotCid']
+                    last_epoch_id = last_submitted_data['epochId']
+                    last_snapshot = await get_submission_data(last_snapshot_cid, self._ipfs_reader_client, False)
+                else:
+                    # fetch last finalized snapshot for the project
+                    last_epoch_id = await get_project_last_finalized_epoch(self._redis_conn, self._protocol_state_contract, self._anchor_rpc_helper, project_id)
+                    if last_epoch_id:
+                        last_snapshot_cid = await get_project_finalized_cid(self._redis_conn, self._protocol_state_contract, self._anchor_rpc_helper, self._ipfs_reader_client, last_epoch_id, project_id)
+                        if last_snapshot_cid:
+                            last_snapshot = await get_submission_data(last_snapshot_cid, self._ipfs_reader_client, False)
+                
+                if last_snapshot:
+                    previous_snapshots = last_snapshot.get('previousSnapshots', [])
+                    if previous_snapshots:
+                        if len(previous_snapshots) > 200:
+                            previous_snapshots.pop(0)
+                        # convert previous_snapshots to list of tuples
+                        previous_snapshots = [(int(epoch_id), snapshot_cid) for epoch_id, snapshot_cid in previous_snapshots]
+                        previous_snapshots.append((last_epoch_id, last_snapshot_cid))
+                        snapshot.previousSnapshots = previous_snapshots
+                    else:
+                        snapshot.previousSnapshots = [(last_epoch_id, last_snapshot_cid)]
+
+        snapshot_json = json.dumps(snapshot.model_dump(by_alias=True), sort_keys=True, separators=(',', ':'))
         snapshot_bytes = snapshot_json.encode('utf-8')
         try:
             snapshot_cid = await self._upload_to_ipfs(snapshot_bytes, _ipfs_writer_client)
@@ -314,15 +389,6 @@ class GenericAsyncWorker(multiprocessing.Process):
             )
             await self._send_failure_notifications(error=e, epoch_id=epoch.epochId, project_id=project_id)
         else:
-            # Add to zset of unfinalized snapshot CIDs
-            unfinalized_entry = UnfinalizedSnapshot(
-                snapshotCid=snapshot_cid,
-                snapshot=snapshot.dict(by_alias=True),
-            )
-            await self._redis_conn.zadd(
-                name=submitted_unfinalized_snapshot_cids(project_id),
-                mapping={unfinalized_entry.json(sort_keys=True): epoch.epochId},
-            )
             # Publish snapshot submitted event to event detector queue
             snapshot_submitted_message = SnapshotSubmittedMessage(
                 snapshotCid=snapshot_cid,
@@ -330,27 +396,7 @@ class GenericAsyncWorker(multiprocessing.Process):
                 projectId=project_id,
                 timestamp=int(time.time()),
             )
-            # Send message to event detector queue
-
-            dramatiq.broker.get_broker().enqueue(
-                dramatiq.Message(
-                    queue_name=EVENT_DETECTOR_QUEUE_NAME,
-                    actor_name='handleEvent',  # Match actor name with event_receiver.py
-                    args=('SnapshotSubmitted', snapshot_submitted_message.json()),
-                    kwargs={},
-                    options={},
-                ),
-            )
-
-            try:
-                # Remove old unfinalized snapshots
-                await self._redis_conn.zremrangebyscore(
-                    name=submitted_unfinalized_snapshot_cids(project_id),
-                    min='-inf',
-                    max=epoch.epochId - 32,
-                )
-            except:
-                pass
+            self._enqueue_to_event_detector('SnapshotSubmitted', snapshot_submitted_message.model_dump_json())
 
             try:
                 await self._send_submission_to_collector(snapshot_cid, epoch.epochId, project_id)
@@ -366,7 +412,7 @@ class GenericAsyncWorker(multiprocessing.Process):
                     mapping={
                         project_id: SnapshotterStateUpdate(
                             status='failed', error=str(e), timestamp=int(time.time()),
-                        ).json(),
+                        ).model_dump_json(),
                     },
                 )
                 await self._send_failure_notifications(error=e, epoch_id=epoch.epochId, project_id=project_id)
@@ -378,9 +424,10 @@ class GenericAsyncWorker(multiprocessing.Process):
                     mapping={
                         project_id: SnapshotterStateUpdate(
                             status='success', timestamp=int(time.time()),
-                        ).json(),
+                        ).model_dump_json(),
                     },
                 )
+                return snapshot_cid
 
     async def _init_redis_pool(self):
         """
@@ -411,8 +458,10 @@ class GenericAsyncWorker(multiprocessing.Process):
         self._w3 = self._anchor_rpc_helper._nodes[0]['web3_client']
         self._chain_id = await self._w3.eth.chain_id
         self._logger.debug('Set anchor chain ID to {}', self._chain_id)
-        self._domain_separator = make_domain(
-            name='PowerloomProtocolContract', version='0.1', chainId=self._chain_id,
+        self._domain_model = EIP712Domain(
+            name='PowerloomProtocolContract',
+            version='0.1',
+            chainId=self._chain_id,
             verifyingContract=self.protocol_state_contract_address,
         )
 
@@ -522,7 +571,7 @@ class GenericAsyncWorker(multiprocessing.Process):
         )
 
         msg = SnapshotSubmission(
-            request=request_msg, signature=signature.hex(),
+            request=request_msg, signature=signature,
             header=current_block_hash, dataMarket=settings.data_market,
         )
         self._logger.info(

@@ -73,16 +73,10 @@ async def get_block_details_in_block_range(
 
         # Cache new block details and prune old ones
         source_chain_epoch_size = int(await redis_conn.get(source_chain_epoch_size_key()))
-        await asyncio.gather(
-            redis_conn.zadd(
-                name=cached_block_details_at_height,
-                mapping=redis_cache_mapping,
-            ),
-            redis_conn.zremrangebyscore(
-                name=cached_block_details_at_height,
-                min=0,
-                max=int(from_block) - source_chain_epoch_size * 3,
-            ),
+        # removed: block details cache pruning since that is handled by responsbile periphery services
+        await redis_conn.zadd(
+            name=cached_block_details_at_height,
+            mapping=redis_cache_mapping,
         )
         return block_details_dict
 

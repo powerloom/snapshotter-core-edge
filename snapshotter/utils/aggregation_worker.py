@@ -1,16 +1,12 @@
 import asyncio
-import hashlib
 import importlib
 import resource
-import threading
 import time
 from signal import SIGINT
 from signal import signal
 from signal import SIGQUIT
 from signal import SIGTERM
-from typing import Union, Optional
 from socket import gethostname
-from typing import Union
 
 import dramatiq
 import uvloop
@@ -19,24 +15,21 @@ from dramatiq.middleware import AsyncIO
 from dramatiq.worker import Worker
 from pydantic import ValidationError
 
+from snapshotter.health_ping import create_health_ping_actor
+from snapshotter.health_ping import run_periodic_broker_health_check
 from snapshotter.settings.config import aggregator_config
-from snapshotter.settings.config import projects_config
 from snapshotter.settings.config import settings
 from snapshotter.utils.default_logger import default_logger
 from snapshotter.utils.generic_worker import GenericAsyncWorker
 from snapshotter.utils.models.data_models import SnapshotterStates
 from snapshotter.utils.models.data_models import SnapshotterStateUpdate
 from snapshotter.utils.models.message_models import CalculateAggregateMessage
-from snapshotter.utils.models.message_models import SnapshotSubmittedMessage
-from snapshotter.utils.models.settings_model import AggregateOn
 from snapshotter.utils.redis.redis_keys import epoch_id_project_to_state_mapping
-from snapshotter.utils.redis.redis_keys import service_health_timestamps_key
+from snapshotter.utils.dramatiq_queues import AGGREGATION_QUEUE_NAME, AGGREGATION_HEALTH_QUEUE_NAME
 
-AGGREGATION_QUEUE_NAME = f'powerloom-aggregator_{settings.namespace}_{settings.instance_id}'
-logger = default_logger.bind(module='AggregationWorker')
 
 # Configure Redis broker with no middleware
-redis_broker = RedisBroker(host=settings.redis.host, port=settings.redis.port)
+redis_broker = RedisBroker(host=settings.redis.host, port=settings.redis.port, db=settings.redis.db)
 redis_broker.add_middleware(AsyncIO())
 
 # Remove Prometheus middleware to avoid errors
@@ -68,85 +61,32 @@ class AggregationAsyncWorker(GenericAsyncWorker):
         """
         super(AggregationAsyncWorker, self).__init__(name=name, **kwargs)
 
+        self._logger = default_logger.bind(module='AggregationWorker')
+
         self._project_calculation_mapping = None
-        self._single_project_types = set()
-        self._multi_project_types = set()
         self._task_types = set()
 
         # Categorize project types based on aggregation configuration
         for config in aggregator_config:
-            if config.aggregate_on == AggregateOn.single_project:
-                self._single_project_types.add(config.project_type)
-            elif config.aggregate_on == AggregateOn.multi_project:
-                self._multi_project_types.add(config.project_type)
-            self._task_types.add(config.project_type)
+            self._task_types.add(config.project_name)
 
         self._handle_event_actor = dramatiq.actor(
             queue_name=AGGREGATION_QUEUE_NAME,
             actor_name='handleEvent',
         )(self.handle_event)
-        self._worker_thread: Optional[threading.Thread] = None
         self._hostname = gethostname()
         self._health_report_interval = settings.health_report_interval
-
-    def _gen_single_type_project_id(self, task_type, epoch):
-        """
-        Generate a project ID for a single task type and epoch.
-
-        Args:
-            task_type (str): The task type.
-            epoch (Epoch): The epoch object.
-
-        Returns:
-            str: The generated project ID.
-        """
-        data_source = epoch.projectId.split(':')[-2]
-        project_id = f'{task_type}:{data_source}:{settings.namespace}'
-        return project_id
-
-    def _gen_multiple_type_project_id(self, task_type, epoch):
-        """
-        Generate a unique project ID based on the task type and epoch messages.
-
-        Args:
-            task_type (str): The type of task.
-            epoch (Epoch): The epoch object containing messages.
-
-        Returns:
-            str: The generated project ID.
-        """
-        underlying_project_ids = [project.projectId for project in epoch.messages]
-        unique_project_id = ''.join(sorted(underlying_project_ids))
-
-        project_hash = hashlib.sha3_256(unique_project_id.encode()).hexdigest()
-
-        project_id = f'{task_type}:{project_hash}:{settings.namespace}'
-        return project_id
-
-    def _gen_project_id(self, task_type, epoch):
-        """
-        Generate a project ID based on the given task type and epoch.
-
-        Args:
-            task_type (str): The type of task.
-            epoch (int): The epoch number.
-
-        Returns:
-            str: The generated project ID.
-
-        Raises:
-            ValueError: If the task type is unknown.
-        """
-        if task_type in self._single_project_types:
-            return self._gen_single_type_project_id(task_type, epoch)
-        elif task_type in self._multi_project_types:
-            return self._gen_multiple_type_project_id(task_type, epoch)
-        else:
-            raise ValueError(f'Unknown project type {task_type}')
+        # Bind logger once for the instance
+        self._health_ping_actor = create_health_ping_actor(
+            broker=redis_broker,
+            queue_name=AGGREGATION_HEALTH_QUEUE_NAME,
+            actor_name='healthPingAgg',
+            logger=self._logger # Pass the instance logger
+        )
 
     async def _process_task(
         self,
-        msg_obj: Union[SnapshotSubmittedMessage, CalculateAggregateMessage],
+        msg_obj: CalculateAggregateMessage,
         task_type: str,
     ):
         """
@@ -176,8 +116,6 @@ class AggregationAsyncWorker(GenericAsyncWorker):
             )
             return
 
-        project_id = self._gen_project_id(task_type, msg_obj)
-
         try:
             self._logger.info(
                 'Got epoch to process for {}: {}',
@@ -187,14 +125,14 @@ class AggregationAsyncWorker(GenericAsyncWorker):
             task_processor = self._project_calculation_mapping[task_type]
 
             # Compute the snapshot
-            snapshot = await task_processor.compute(
+            snapshots = await task_processor.compute(
                 msg_obj=msg_obj,
-                redis=self._redis_conn,
+                redis_conn=self._redis_conn,
                 rpc_helper=self._rpc_helper,
                 anchor_rpc_helper=self._anchor_rpc_helper,
                 ipfs_reader=self._ipfs_reader_client,
                 protocol_state_contract=self._protocol_state_contract,
-                project_id=project_id,
+                task_type=task_type,
             )
 
         except Exception as e:
@@ -210,64 +148,58 @@ class AggregationAsyncWorker(GenericAsyncWorker):
                     epoch_id=msg_obj.epochId, state_id=SnapshotterStates.SNAPSHOT_BUILD.value,
                 ),
                 mapping={
-                    project_id: SnapshotterStateUpdate(
+                    f"{task_type}:{settings.namespace}": SnapshotterStateUpdate(
                         status='failed', error=str(e), timestamp=int(time.time()),
-                    ).json(),
+                    ).model_dump_json(),
                 },
             )
         else:
-            if not snapshot:
+            if not snapshots:
                 # Handle empty snapshot case
                 await self._redis_conn.hset(
                     name=epoch_id_project_to_state_mapping(
                         epoch_id=msg_obj.epochId, state_id=SnapshotterStates.SNAPSHOT_BUILD.value,
                     ),
                     mapping={
-                        project_id: SnapshotterStateUpdate(
+                        f"{task_type}:{settings.namespace}": SnapshotterStateUpdate(
                             status='failed', timestamp=int(time.time()), error='Empty snapshot',
-                        ).json(),
+                        ).model_dump_json(),
                     },
                 )
             else:
-                # Handle successful snapshot case
-                await self._redis_conn.hset(
-                    name=epoch_id_project_to_state_mapping(
-                        epoch_id=msg_obj.epochId, state_id=SnapshotterStates.SNAPSHOT_BUILD.value,
-                    ),
-                    mapping={
-                        project_id: SnapshotterStateUpdate(
-                            status='success', timestamp=int(time.time()),
-                        ).json(),
-                    },
-                )
-                await self._commit_payload(
-                    task_type=task_type,
-                    project_id=project_id,
-                    epoch=msg_obj,
-                    snapshot=snapshot,
-                    _ipfs_writer_client=self._ipfs_writer_client,
-                )
-            self._logger.debug(
-                'Updated epoch processing status in aggregation worker for project {} for transition {}',
-                project_id, SnapshotterStates.SNAPSHOT_BUILD.value,
-            )
-        await self._redis_conn.close()
+                for project_id, snapshot in snapshots:
+                    p = self._redis_conn.pipeline()
+                    p.hset(
+                        name=epoch_id_project_to_state_mapping(
+                            epoch_id=msg_obj.epochId, state_id=SnapshotterStates.SNAPSHOT_BUILD.value,
+                        ),
+                        mapping={
+                            project_id: SnapshotterStateUpdate(
+                                status='success', timestamp=int(time.time()),
+                            ).model_dump_json(),
+                        },
+                    )
+                    await p.execute()
+                    await self._commit_payload(
+                        task_type=task_type,
+                        project_id=project_id,
+                        epoch=msg_obj,
+                        snapshot=snapshot,
+                        _ipfs_writer_client=self._ipfs_writer_client,
+                    )
 
     def handle_event(self, *args):
         """
         Handle an event.
         """
         self._logger.debug('Handling event: {}', args)
-        event_type = args[0]
-        event_data = args[1]
         try:
-            if event_type in self._single_project_types:
-                msg_obj: SnapshotSubmittedMessage = SnapshotSubmittedMessage.parse_raw(event_data)
-            elif event_type in self._multi_project_types:
-                msg_obj: CalculateAggregateMessage = CalculateAggregateMessage.parse_raw(event_data)
-            else:
-                self._logger.error('Unknown event type: {}', event_type)
-                return
+            event_type = args[0]
+            event_data = args[1]
+
+            msg_obj: CalculateAggregateMessage = (
+                CalculateAggregateMessage.model_validate_json(event_data)
+            )
         except ValidationError as e:
             self._logger.opt(exception=settings.logs.debug_mode).error(
                 (
@@ -308,13 +240,6 @@ class AggregationAsyncWorker(GenericAsyncWorker):
 
         self._project_calculation_mapping = dict()
         for project_config in aggregator_config:
-            key = project_config.project_type
-            if key in self._project_calculation_mapping:
-                raise Exception('Duplicate project type found')
-            module = importlib.import_module(project_config.processor.module)
-            class_ = getattr(module, project_config.processor.class_name)
-            self._project_calculation_mapping[key] = class_()
-        for project_config in projects_config:
             key = project_config.project_name
             if key in self._project_calculation_mapping:
                 raise Exception('Duplicate project type found')
@@ -333,60 +258,11 @@ class AggregationAsyncWorker(GenericAsyncWorker):
             await self._init_project_calculation_mapping()
             await self.init()
 
-    async def report_health_status(self):
-        """Reports the current timestamp for this container's hostname to Redis."""
-        if not hasattr(self, '_redis_conn') or self._redis_conn is None:
-            self._logger.warning('Redis connection not initialized, skipping health report.')
-            return
-        try:
-            current_timestamp = int(time.time())
-            await self._redis_conn.hset(
-                service_health_timestamps_key,
-                self._hostname,
-                current_timestamp,
-            )
-            self._logger.debug(f'Reported health for {self._hostname} at {current_timestamp}')
-        except Exception as e:
-            self._logger.error(f'Failed to report health status for hostname {self._hostname}: {e}')
-
-    async def _periodic_health_reporter(self):
-        """Periodically reports health status."""
-        self._logger.info(
-            f'Starting periodic health reporter task for {self._hostname} (Interval: {self._health_report_interval}s)',
-        )
-        while True:
-            should_report = True
-            if not self._worker_thread or not self._worker_thread.is_alive():
-                should_report = False
-                if self._worker_thread:
-                    # Worker thread is no longer alive
-                    self._logger.critical(
-                        'Main Dramatiq worker thread has died. Halting health reports.'
-                    )
-                    # Halt the health reporter
-                    break
-                else:
-                    # Worker thread hasn't been initialized yet
-                    self._logger.warning('Worker thread not found. Skipping health report for now.')
-
-            try:
-                if should_report:
-                    await self.report_health_status()
-
-                await asyncio.sleep(self._health_report_interval)
-            except asyncio.CancelledError:
-                self._logger.info(f'Periodic health reporter task for {self._hostname} cancelled.')
-                break
-            except Exception as e:
-                self._logger.error(f'Error in periodic health reporter loop: {e}')
-                await asyncio.sleep(self._health_report_interval)
-
     def run(self) -> None:
         """
-        Runs the worker by setting resource limits, registering signal handlers, starting the Dramatiq worker, and
-        running the event loop until it is stopped.
+        Runs the worker by setting resource limits, registering signal handlers, starting the Dramatiq worker's
+        internal threads, and running the main event loop until it is stopped.
         """
-        self._logger = logger
         soft, hard = resource.getrlimit(resource.RLIMIT_NOFILE)
         resource.setrlimit(
             resource.RLIMIT_NOFILE,
@@ -397,7 +273,8 @@ class AggregationAsyncWorker(GenericAsyncWorker):
 
         asyncio.set_event_loop_policy(uvloop.EventLoopPolicy())
 
-        ev_loop = asyncio.get_event_loop()
+        ev_loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(ev_loop)
         self._event_loop = ev_loop
 
         # Update the middleware to use this event loop
@@ -406,30 +283,50 @@ class AggregationAsyncWorker(GenericAsyncWorker):
                 middleware.event_loop = ev_loop
 
         self._logger.debug(
-            f'Starting asynchronous callback worker {self._unique_id}...',
+            f'Starting Aggregation worker {self._unique_id}...',
         )
 
         self._event_loop.run_until_complete(self.init_worker())
+        worker = Worker(redis_broker, queues=[AGGREGATION_QUEUE_NAME, AGGREGATION_HEALTH_QUEUE_NAME])
 
-        # Start a Dramatiq worker in a separate thread
-        worker = Worker(redis_broker, queues=[AGGREGATION_QUEUE_NAME])
-        worker_thread = threading.Thread(target=worker.start, daemon=True)
-        self._worker_thread = worker_thread # Store the thread object
-        worker_thread.start()
+        self._logger.info("Starting Aggregator Dramatiq worker internal threads...")
+        worker.start()
 
-        health_reporter_task = self._event_loop.create_task(self._periodic_health_reporter())
+        # Start the centralized health reporter task
+        health_reporter_task = self._event_loop.create_task(
+            run_periodic_broker_health_check(
+                logger=self._logger,
+                redis_conn=self._redis_conn,
+                hostname=self._hostname,
+                health_report_interval=self._health_report_interval,
+                health_actor_send=self._health_ping_actor.send,
+                worker_type="AggregatorWorker",
+                health_queue_name=AGGREGATION_HEALTH_QUEUE_NAME
+            )
+        )
 
         try:
-            ev_loop.run_forever()
+            self._logger.info("Running Aggregator main event loop...")
+            self._event_loop.run_forever()
         finally:
+            self._logger.info("Aggregator main event loop stopped. Shutting down...")
             if health_reporter_task and not health_reporter_task.done():
                 health_reporter_task.cancel()
                 try:
-                    ev_loop.run_until_complete(asyncio.sleep(1))
+                    self._event_loop.run_until_complete(asyncio.sleep(1))
                 except RuntimeError as e:
                     self._logger.warning(f"Could not fully await health reporter cancellation on loop close: {e}")
 
-            ev_loop.close()
+            try:
+                self._logger.info("Stopping Aggregator Dramatiq worker internal threads...")
+                worker.stop()
+                self._logger.info("Aggregator Dramatiq worker stopped.")
+            except Exception as e:
+                self._logger.error(f"Error stopping Aggregator Dramatiq worker: {e}")
+
+            self._logger.info("Closing Aggregator event loop...")
+            self._event_loop.close()
+            self._logger.info("Aggregator Event loop closed.")
 
 
 if __name__ == '__main__':

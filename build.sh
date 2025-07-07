@@ -65,6 +65,7 @@ echo "Found SIGNER ACCOUNT ADDRESS ${SIGNER_ACCOUNT_ADDRESS}"
 [ -n "$PROST_CHAIN_ID" ] && echo "Found PROST_CHAIN_ID ${PROST_CHAIN_ID}"
 [ -n "$IPFS_URL" ] && echo "Found IPFS_URL ${IPFS_URL}"
 [ -n "$PROTOCOL_STATE_CONTRACT" ] && echo "Found PROTOCOL_STATE_CONTRACT ${PROTOCOL_STATE_CONTRACT}" 
+[ -n "$WETH_ADDRESS" ] && echo "Found WETH_ADDRESS ${WETH_ADDRESS}"
 [ -n "$IPFS_S3_CONFIG_ENABLED" ] && echo "Found IPFS_S3_CONFIG_ENABLED ${IPFS_S3_CONFIG_ENABLED}"
 [ -n "$IPFS_S3_CONFIG_ENDPOINT_URL" ] && echo "Found IPFS_S3_CONFIG_ENDPOINT_URL ${IPFS_S3_CONFIG_ENDPOINT_URL}"
 [ -n "$IPFS_S3_CONFIG_BUCKET_NAME" ] && echo "Found IPFS_S3_CONFIG_BUCKET_NAME ${IPFS_S3_CONFIG_BUCKET_NAME}"
@@ -72,6 +73,7 @@ echo "Found SIGNER ACCOUNT ADDRESS ${SIGNER_ACCOUNT_ADDRESS}"
 [ -n "$IPFS_S3_CONFIG_SECRET_KEY" ] && echo "Found IPFS_S3_CONFIG_SECRET_KEY ${IPFS_S3_CONFIG_SECRET_KEY}"
 [ -n "$IPFS_UNPINNING_ENABLED" ] && echo "Found IPFS_UNPINNING_ENABLED ${IPFS_UNPINNING_ENABLED}"
 [ -n "$IPFS_UNPINNING_AFTER" ] && echo "Found IPFS_UNPINNING_AFTER ${IPFS_UNPINNING_AFTER}"
+[ -n "$GUNICORN_WORKERS" ] && echo "Found GUNICORN_WORKERS ${GUNICORN_WORKERS}"
 
 if [ -z "$IPFS_S3_CONFIG_ENABLED" ]; then
     export IPFS_S3_CONFIG_ENABLED=false
@@ -190,9 +192,20 @@ else
     export SNAPSHOTTER_IMAGE="ghcr.io/powerloom/snapshotter-core:${IMAGE_TAG}"
 fi
 
+# check if python is installed
+if ! command -v python &> /dev/null; then
+    echo "python could not be found, please install it"
+    exit 1
+fi
+
+# generate the docker-compose.yaml file
+echo "Generating docker-compose.yaml file..."
+python scripts/generate_docker_compose.py
+
 PROFILES=""
 [ "$IPFS_URL" = "/dns/ipfs/tcp/5001" ] && PROFILES="$PROFILES --profile ipfs"
 [ "$ARG1" = "yes_collector" ] && PROFILES="$PROFILES --profile local-collector"
+[ "$REDIS_HOST" = "redis" ] && PROFILES="$PROFILES --profile redis"
 if [ "$USE_NEW_SETUP" = "true" ]; then
     PROFILES="$PROFILES --profile new"
 else

@@ -1,0 +1,283 @@
+@startuml Redis Cache Structure
+
+skinparam backgroundColor #FFFFEF
+skinparam class {
+    BackgroundColor<<ProjectData>> #E1F5FE
+    BackgroundColor<<AggregatedData>> #F3E5F5
+    BackgroundColor<<TimeData>> #E8F5E8
+    BackgroundColor<<SystemData>> #FFF3E0
+    BackgroundColor<<IPFSCache>> #FCE4EC
+}
+
+package "Redis Cache Architecture" {
+    class "Redis Database" as A {
+    }
+    
+    package "Project Data Storage" <<ProjectData>> {
+        class "Project Data Hashmaps" as B1 {
+            + project_data:{project_id}
+            + HASHMAP
+            --
+            epoch_1: {cid, status}
+            epoch_2: {cid, status}
+            epoch_3: {cid, status}
+            --
+            Example:
+            project_data:baseSnapshot:0x123:namespace
+            12345: {'snapshot_cid': 'Qm...', 'status': 'SUBMITTED'}
+            12346: {'snapshot_cid': 'Qm...', 'status': 'FINALIZED'}
+        }
+        
+        class "Last Finalized Epochs" as B2 {
+            + project_last_finalized_epoch
+            + HASHMAP
+            --
+            project_1: 12350
+            project_2: 12348
+            project_3: 12351
+            --
+            Maps each project to its highest finalized epoch
+        }
+        
+        class "First Epochs" as B3 {
+            + project_first_epoch
+            + HASHMAP
+            --
+            project_1: 10000
+            project_2: 10500
+            project_3: 9800
+            --
+            Maps each project to its starting epoch
+        }
+        
+        class "Last Submitted Data" as B4 {
+            + last_submitted_snapshot_data:{project_id}
+            + STRING (JSON)
+            --
+            {'snapshotCid': 'Qm..', 'epochId': 12350}
+            --
+            Latest submitted snapshot info per project
+        }
+    }
+    
+    package "Aggregated Data Storage" <<AggregatedData>> {
+        class "Active Pool Data" as C1 {
+            + active_pool_data:{time_interval}:{epoch}:{namespace}
+            + STRING (JSON)
+            --
+            Pool addresses mapped to activity frequency
+            {'0x1f98...': 150, '0xA0b8...': 89, '0xC364...': 67}
+        }
+        
+        class "Active Token Data" as C2 {
+            + active_token_data:{time_interval}:{epoch}:{namespace}
+            + STRING (JSON)
+            --
+            Token addresses mapped to activity frequency
+            {'0xA0b8...': 200, '0xC02a...': 145, '0x2260...': 98}
+        }
+        
+        class "Trade Volume Data" as C3 {
+            + trade_volume_data:{project_id}:{time_interval}:{epoch}:{namespace}
+            + STRING
+            --
+            Aggregated trade volume as string number
+            '1234567.89'
+        }
+        
+        class "Latest Epoch Markers" as C4 {
+            + active_pool_data:{time_interval}:latest:epoch
+            + active_token_data:{time_interval}:latest:epoch
+            + STRING
+            --
+            Latest processed epoch for aggregated data
+            '12350'
+        }
+    }
+    
+    package "Block & Time Data" <<TimeData>> {
+        class "Block to Timestamp" as D1 {
+            + block_number_to_timestamp:{namespace}
+            + SORTED SET
+            --
+            Score: Block Number | Value: JSON
+            18500000 | '1695123456'
+            18500001 | '1695123468'
+            18500002 | '1695123480'
+            --
+            Maps block numbers to timestamps
+        }
+        
+        class "Timestamp to Block" as D2 {
+            + timestamp_to_block_number:{namespace}
+            + SORTED SET
+            --
+            Score: Timestamp | Value: Block
+            1695123456 | '18500000'
+            1695123468 | '18500001'
+            1695123480 | '18500002'
+            --
+            Maps timestamps to block numbers
+        }
+        
+        class "ETH Price Data" as D3 {
+            + uniswap_eth_usd_price_zset
+            + SORTED SET
+            --
+            Score: Block Height | Value: JSON
+            18500000 | {'blockHeight': 18500000, 'price': 1650.50}
+            18500100 | {'blockHeight': 18500100, 'price': 1652.25}
+            --
+            ETH/USD price data indexed by block height
+        }
+    }
+    
+    package "System Management" <<SystemData>> {
+        class "Data Expiry Tracking" as E1 {
+            + data_expiry_zset
+            + SORTED SET
+            --
+            Score: Expiry Time | Value: Data Key
+            1695210000 | 'project_1|12345'
+            1695210060 | 'project_2|12346'
+            1695210120 | 'project_3|12347'
+            --
+            Tracks when project data entries expire
+        }
+        
+        class "Health Timestamps" as E2 {
+            + service_health_timestamps
+            + HASHMAP
+            --
+            hostname_1: 1695123456
+            hostname_2: 1695123459
+            hostname_3: 1695123461
+            --
+            Last heartbeat from each service instance
+        }
+        
+        class "Blank Epochs Bitmap" as E3 {
+            + blank_epochs_bitmap:{project_id}
+            + BITMAP
+            --
+            Bit Position: Epoch
+            12340: 0 (has data)
+            12341: 1 (blank)
+            12342: 0 (has data)
+            12343: 1 (blank)
+            --
+            Efficiently tracks epochs with no data
+        }
+        
+        class "Chain Metadata" as E4 {
+            + source_chain_epoch_size
+            + source_chain_block_time
+            + STRING
+            --
+            Cached epoch size and block time from blockchain
+            '100', '12'
+        }
+    }
+    
+    package "IPFS Cache" <<IPFSCache>> {
+        class "CID Content Cache" as F1 {
+            + cid_cache:{cid}
+            + STRING (JSON)
+            --
+            Cached IPFS content by CID (with TTL)
+            {'token0': '0x...', 'token1': '0x...', 
+             'trades': [...], 'pools': {...},
+             'previousSnapshots': []}
+        }
+        
+        class "CID Not Found Cache" as F2 {
+            + cid_not_found:{cid}
+            + STRING
+            --
+            Marks CIDs that failed to fetch (with TTL)
+            'true'
+        }
+        
+        class "Token Metadata Cache" as F3 {
+            + erc20_metadata:{token_address}
+            + STRING (JSON)
+            --
+            Cached token metadata (24h TTL)
+            {'address': '0x...', 'symbol': 'USDC',
+             'decimals': 6, 'name': 'USD Coin'}
+        }
+        
+        class "Pool Metadata Cache" as F4 {
+            + pool_metadata:{pool_address}
+            + STRING (JSON)
+            --
+            Cached pool metadata
+            {'token0': {...}, 'token1': {...},
+             'fee': 3000, 'tickSpacing': 60}
+        }
+    }
+}
+
+package "Key Patterns & Examples" {
+    class "Project Keys" as G1 {
+        --
+        project_data:baseSnapshot:0xPoolAddress:namespace
+        project_data:activePools:namespace
+        project_data:activeTokens:namespace
+        project_data:tradesSnapshot:0xPoolAddress:namespace
+    }
+    
+    class "Aggregated Keys" as G2 {
+        --
+        active_pool_data:86400:12350:namespace (24h)
+        active_pool_data:604800:12350:namespace (7d)
+        trade_volume_data:project:86400:12350:namespace
+    }
+    
+    class "Time Keys" as G3 {
+        --
+        block_number_to_timestamp:namespace
+        timestamp_to_block_number:namespace
+        uniswap_eth_usd_price_zset
+    }
+    
+    class "Cache Keys" as G4 {
+        --
+        cid_cache:QmHashValue
+        cid_not_found:QmHashValue
+        erc20_metadata:0xTokenAddress
+        pool_metadata:0xPoolAddress
+    }
+}
+
+package "Data Structure Details" {
+    class "Redis Data Types" as H {
+        + HASHMAP: project data with epoch fields
+        + SORTED SET: time-ordered data with scores
+        + STRING: JSON serialized complex data
+        + BITMAP: efficient boolean flags per epoch
+    }
+}
+
+' Relationships
+A --> B1
+A --> B2
+A --> B3
+A --> B4
+A --> C1
+A --> C2
+A --> C3
+A --> C4
+A --> D1
+A --> D2
+A --> D3
+A --> E1
+A --> E2
+A --> E3
+A --> E4
+A --> F1
+A --> F2
+A --> F3
+A --> F4
+
+@enduml 

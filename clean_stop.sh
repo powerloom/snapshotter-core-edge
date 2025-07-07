@@ -3,17 +3,20 @@
 source .env
 
 
-if [ "$DEVMODE" != "true" ]; then
-
-    if [ -z "$OVERRIDE_DEFAULTS" ]; then
-        echo "setting default values..."
-        export PROST_RPC_URL="https://rpc-prost1m.powerloom.io"
-        export PROTOCOL_STATE_CONTRACT="0xE88E5f64AEB483d7057645326AdDFA24A3B312DF"
-        export DATA_MARKET_CONTRACT="0x0C2E22fe7526fAeF28E7A58c84f8723dEFcE200c"
-        export PROST_CHAIN_ID="11169"
-    fi
-
+if [ -z "$OVERRIDE_DEFAULTS" ]; then
+    echo "setting default values..."
+    export PROST_RPC_URL="https://rpc-v2.powerloom.network"
+    export PROTOCOL_STATE_CONTRACT="0x000AA7d3a6a2556496f363B59e56D9aA1881548F"
+    export DATA_MARKET_CONTRACT="0x21cb57C1f2352ad215a463DD867b838749CD3b8f"
+    export PROST_CHAIN_ID="7869"
 fi
+
+# cleanup redis and ipfs data
+rm -rf redis-data
+rm -rf ipfs-data
+rm -rf ipfs-export
+rm -rf logs
+mkdir logs
 
 echo "testing before build..."
 
@@ -53,30 +56,13 @@ else
     echo "Found LOCAL_COLLECTOR_PORT ${LOCAL_COLLECTOR_PORT}"
 fi
 
-# Get the first command line argument
-ARG1=${1:-yes_collector}
-
-if [ "$DEVMODE" = "true" ]; then
-    export SNAPSHOTTER_COLLECTOR_IMAGE="snapshotter-lite-local-collector"
-    export SNAPSHOTTER_IMAGE="snapshotter-core"
-else
-    #fetch current git branch name
-    GIT_BRANCH=$(git rev-parse --abbrev-ref HEAD)
-
-    echo "Current branch is ${GIT_BRANCH}"
-
-    #if on main git branch, set image_tag to latest or use the branch name
-    export IMAGE_TAG=$([ "$GIT_BRANCH" = "dockerify" ] && echo "dockerify" || echo "latest")
-
-    echo "Building image with tag ${IMAGE_TAG}"
-
-    export SNAPSHOTTER_COLLECTOR_IMAGE="ghcr.io/powerloom/snapshotter-lite-local-collector:${IMAGE_TAG}"
-    export SNAPSHOTTER_IMAGE="ghcr.io/powerloom/snapshotter-core:${IMAGE_TAG}"
-fi
-
 PROFILES=""
-[ "$IPFS_URL" = "/dns/ipfs/tcp/5001" ] && PROFILES="$PROFILES --profile ipfs"
-[ "$ARG1" = "yes_collector" ] && PROFILES="$PROFILES --profile local-collector"
+# removing all old and new profiles to avoid conflicts
+PROFILES="$PROFILES --profile old"
+PROFILES="$PROFILES --profile new"
+PROFILES="$PROFILES --profile ipfs"
+PROFILES="$PROFILES --profile local-collector"
+
 
 if command -v docker-compose &> /dev/null; then
     COMPOSE_CMD="docker-compose"
@@ -85,4 +71,4 @@ else
     COMPOSE_CMD="docker compose"
 fi
 
-$COMPOSE_CMD -f docker-compose.yaml $PROFILES down --volumes
+$COMPOSE_CMD -f docker-compose.yaml $PROFILES down --volumes --remove-orphans
