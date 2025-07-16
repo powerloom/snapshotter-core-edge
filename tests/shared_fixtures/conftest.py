@@ -1,12 +1,8 @@
 import sys
 import os
-import shutil
-import re
 import pytest
-from dotenv import load_dotenv
 import json
 from typing import Dict, AsyncGenerator
-import asyncio
 from web3 import Web3
 from web3.contract.contract import Contract
 from rpc_helper.rpc import RpcHelper
@@ -19,6 +15,32 @@ from httpx import AsyncHTTPTransport, Limits, Timeout, AsyncClient
 PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
 if PROJECT_ROOT not in sys.path:
     sys.path.insert(0, PROJECT_ROOT)
+
+# Create test_logs directory for tests
+test_logs_dir = os.path.join(PROJECT_ROOT, 'test_logs')
+os.makedirs(test_logs_dir, exist_ok=True)
+
+# Monkey patch the loguru logger to use test_logs instead of logs
+original_add = None
+
+def patch_loguru_for_tests():
+    """Patch loguru to redirect file logging to test_logs directory"""
+    global original_add
+    from loguru import logger
+    
+    if original_add is None:
+        original_add = logger.add
+    
+    def patched_add(sink, **kwargs):
+        # If sink is a file path that starts with 'logs/', redirect to test_logs/
+        if isinstance(sink, str) and sink.startswith('logs/'):
+            sink = sink.replace('logs/', 'test_logs/')
+        return original_add(sink, **kwargs)
+    
+    logger.add = patched_add
+
+# Apply the patch before any logger initialization
+patch_loguru_for_tests()
 
 print("--- conftest.py ---")
 print(f"PROJECT_ROOT added to sys.path: {PROJECT_ROOT}")
@@ -141,6 +163,27 @@ def app_config():
     This is the earliest point in our test setup that runs before any
     RpcHelper instances are created.
     """
+    # Create test-specific settings from the test_config directory created by root conftest.py
+    import os
+    import json
+    from snapshotter.utils.models.settings_model import Settings
+    
+    # Load test settings from test_config directory (created by root conftest.py)
+    test_config_dir = os.path.join(os.getcwd(), "test_config")
+    test_settings_path = os.path.join(test_config_dir, "settings.json")
+    
+    if not os.path.exists(test_settings_path):
+        pytest.fail(f"Test settings file not found at {test_settings_path}. Make sure the root conftest.py setup completed successfully.")
+    
+    with open(test_settings_path, 'r') as f:
+        test_settings_dict = json.load(f)
+    
+    # Create test settings object
+    settings = Settings(**test_settings_dict)
+    
+    # Disable file logging for tests to avoid permission issues
+    settings.logs.write_to_files = False
+    
     # --- MONKEYPATCH RpcHelper for SSL ---
     # The RpcHelper library has a hardcoded, Linux-specific SSL certificate path,
     # causing OSError on other platforms like macOS. We replace the problematic
@@ -184,10 +227,6 @@ def app_config():
     # Apply the rate limiter patch
     RpcHelper.check_rate_limit = mock_check_rate_limit
 
-
-    # This import is deliberately inside the fixture to delay it.
-    from snapshotter.settings.config import settings
-    
     yield settings
     
     # Restore the original methods after the test session
