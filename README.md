@@ -531,6 +531,103 @@ cp env.test.example .env.test
 # Edit .env.test with your test configuration values
 ```
 
+### Test Configuration Fields
+
+The `.env.test` file contains all the configuration values needed for running tests. Here's a breakdown of each section and what values to use:
+
+#### **RPC Settings (Required)**
+These settings configure the main blockchain RPC endpoints for testing:
+
+```bash
+# Main RPC endpoint - use a reliable Ethereum RPC provider
+TEST_RPC_URL_FULL_NODE_1=https://eth-mainnet.alchemyapi.io/v2/YOUR_API_KEY
+# Archive node (optional) - for historical data queries
+TEST_RPC_URL_ARCHIVE_NODE_1=https://eth-mainnet.alchemyapi.io/v2/YOUR_ARCHIVE_KEY
+
+# Connection settings (defaults are usually fine)
+TEST_RPC_REQUEST_TIMEOUT=30          # Request timeout in seconds
+TEST_RPC_RETRY_COUNT=3               # Number of retry attempts
+TEST_RPC_MAX_CONNECTIONS=100         # Max concurrent connections
+TEST_RPC_MAX_KEEPALIVE_CONNECTIONS=50 # Max persistent connections
+TEST_RPC_KEEPALIVE_EXPIRY=300        # Connection keep-alive time
+```
+
+#### **Anchor RPC Settings **
+These configure the Powerloom anchor chain (if different from main RPC):
+
+```bash
+# Powerloom-specific anchor chain endpoint
+TEST_ANCHOR_RPC_URL_FULL_NODE_1=
+TEST_ANCHOR_RPC_URL_ARCHIVE_NODE_1=
+
+# Lower connection limits for anchor chain
+TEST_ANCHOR_RPC_MAX_CONNECTIONS=5
+TEST_ANCHOR_RPC_MAX_KEEPALIVE_CONNECTIONS=2
+```
+
+#### **IPFS Settings (Required)**
+Configure IPFS for data storage and retrieval:
+
+```bash
+# Local IPFS node (recommended for testing)
+TEST_IPFS_URL=/ip4/127.0.0.1/tcp/5001
+
+# Or remote IPFS service
+# TEST_IPFS_URL=/dns/your-ipfs-provider.com/tcp/443/https
+
+# IPFS connection settings
+TEST_IPFS_TIMEOUT=60                 # Request timeout
+TEST_IPFS_MAX_RETRIES=3              # Retry attempts
+```
+
+#### **Redis Settings (Required)**
+Configure Redis for caching and state management:
+
+```bash
+TEST_REDIS_HOST=localhost            # Redis server host
+TEST_REDIS_PORT=6379                 # Redis server port
+TEST_REDIS_DB=0                      # Database number (0-15)
+TEST_REDIS_PASSWORD=                 # Password (empty for no auth)
+TEST_REDIS_TIMEOUT=5                 # Connection timeout
+```
+
+#### **Core API Settings**
+Configure the snapshotter core API:
+
+```bash
+TEST_CORE_API_PORT=8002              # Port for core API server
+TEST_BLOCK_SHIFT_FOR_BITMAP_INDEX=22400000  # Block indexing offset
+```
+
+#### **Protocol Settings (Required)**
+Set the contract addresses and namespace:
+
+```bash
+# Your unique namespace identifier
+TEST_NAMESPACE=my_test_namespace
+
+# Smart contract addresses
+TEST_PROTOCOL_STATE_CONTRACT_ADDRESS=0x3B5A0FB70ef68B5dd677C7d614dFB89961f97401
+TEST_DATA_MARKET_CONTRACT_ADDRESS=0xae32c4FA72E2e5F53ed4D214E4aD049286Ded16f
+
+# Chain Wrapped ETH
+TEST_WETH_ADDRESS=0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2
+```
+
+#### **External API Settings (Optional)**
+Configure external data providers:
+
+```bash
+# Etherscan API
+TEST_ETHERSCAN_API_KEY=your_etherscan_api_key_here
+TEST_ETHERSCAN_URL=https://api.etherscan.io/v2/
+
+# CoinMarketCap API (for price data)
+COINMARKETCAP_API_KEY=your_cmc_api_key_here
+COINMARKETCAP_API_URL=https://pro-api.coinmarketcap.com
+COINMARKETCAP_API_PRICE_TOLERANCE=5  # Acceptable price variance %
+```
+
 **7. Run Tests**
 
 ```bash
