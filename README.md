@@ -447,53 +447,117 @@ Pooler needs the following config files to be present
 
 To ensure a consistent and correct testing environment, follow these steps to configure your virtual environment and verify the test configuration loading mechanism.
 
-### Python Version and Virtual Environment
+### Prerequisites
 
-This project uses Poetry for dependency management and requires a Python 3.12 environment.
+This project uses Poetry 2.0+ for dependency management and requires Python 3.12.
 
-*   **Python Version**: Ensure you have Python 3.12.x installed. Using a Python version manager like `pyenv` is highly recommended.
-    ```bash
-    # Example using pyenv to install a specific Python version
-    pyenv install 3.12.8 # Or your preferred 3.12 patch version
-    ```
+**Required Tools:**
+- **Python 3.12.x**: Using `pyenv` for Python version management is strongly recommended
+- **Poetry 2.0+**: Modern Python dependency management tool
 
-*   **Poetry Installation**: If you don't have Poetry installed, follow the [official Poetry installation guide](https://python-poetry.org/docs/#installation).
+### Step-by-Step Setup
 
-*   **Setting up the Virtual Environment**:
-    You have flexibility in how you set up your virtual environment. Poetry will respect an already-activated virtual environment.
+**1. Install Python 3.12 with pyenv (Recommended)**
 
-    *   **Option A: Using a `pyenv`-managed virtual environment (Recommended if you use `pyenv`)**:
-        1.  Create a virtual environment with `pyenv` linked to your desired Python 3.12.x version:
-            ```bash
-            # Ensure you are in your project's root directory
-            pyenv virtualenv 3.12.8 snapshotter-core-venv  # Creates a venv named 'snapshotter-core-venv'
-            ```
-        2.  Set this virtual environment as the local environment for your project. This way, it activates automatically when you `cd` into the directory:
-            ```bash
-            pyenv local snapshotter-core-venv
-            ```
-            Alternatively, you can activate it manually each time: `pyenv activate snapshotter-core-venv`.
-        3.  Verify that the virtual environment is active. Your shell prompt should indicate it.
+If you don't have `pyenv` installed, follow the [pyenv installation guide](https://github.com/pyenv/pyenv#installation).
 
-    *   **Option B: Letting Poetry create and manage the virtual environment**:
-        1.  If you prefer Poetry to handle virtual environment creation directly, navigate to the project root.
-        2.  To have Poetry create the virtual environment within your project directory (e.g., as `.venv`), run:
-            ```bash
-            poetry config virtualenvs.in-project true --local
-            ```
-        3.  Poetry will then create/use this `.venv` when you run `poetry install`. Activate it with `source .venv/bin/activate` or by using `poetry shell`.
+```bash
+# Install Python 3.12 (use the latest available patch version)
+pyenv install 3.12.11
 
-*   **Install Dependencies**:
-    *   With your chosen virtual environment **activated**, navigate to the project root directory.
-    *   Install the project dependencies using:
-        ```bash
-        poetry install --no-root --with dev
-        ```
-        *   `--no-root`: This flag prevents Poetry from installing the current project (snapshotter-core-edge) as a package in the virtual environment. This is typically used for applications rather than libraries.
-        *   `--with dev`: This ensures that development dependencies, including `pytest` and other testing tools, are installed.
+# Verify installation
+pyenv versions
+```
 
-*   **Using `poetry shell`**:
-    Regardless of how the virtual environment was initially created or activated, you can often use `poetry shell` from the project root. This command will activate the correct Poetry-managed virtual environment for you or use the already active compatible one.
+**2. Install Poetry**
+
+If you don't have Poetry installed, follow the [official Poetry installation guide](https://python-poetry.org/docs/#installation).
+
+```bash
+# Verify Poetry version (should be 2.0+)
+poetry --version
+```
+
+**3. Set Up Project Environment**
+
+Navigate to the project root directory and set up the Python version:
+
+```bash
+# Navigate to project root
+cd /path/to/snapshotter-core-edge
+
+# Set Python version for this project
+pyenv local 3.12.11
+
+# Verify correct Python version is active
+python --version  # Should show Python 3.12.11
+```
+
+**4. Install Dependencies**
+
+```bash
+# Install all dependencies including development tools
+poetry install
+
+# Verify installation
+poetry env info  # Shows virtual environment details
+```
+
+**5. Activate Environment**
+
+With Poetry 2.0, you have several options to work with the virtual environment:
+
+```bash
+# Option A: Use poetry run for individual commands
+poetry run python --version
+poetry run pytest tests/
+
+# Option B: Get activation command (recommended for development)
+poetry env activate
+# Then source the provided activation command
+
+# Option C: Spawn a new shell with environment activated (Requires the shell plugin)
+poetry shell
+```
+
+**6. Create Test Environment Configuration**
+
+Before running tests, create your test environment configuration:
+
+```bash
+# Copy the test environment template
+cp env.test.example .env.test
+
+# Edit .env.test with your test configuration values
+```
+
+**7. Run Tests**
+
+```bash
+# Run all tests
+poetry run pytest
+
+# Run specific test files
+poetry run pytest tests/shared_fixtures/test_config_loading.py
+
+# Run with verbose output
+poetry run pytest -v tests/shared_fixtures/test_config_loading.py::test_ipfs_settings_are_correct
+```
+
+### Environment Verification
+
+To verify your environment is set up correctly:
+
+```bash
+# Check Python version
+poetry run python --version
+
+# Check that pytest is available
+poetry run pytest --version
+
+# Verify test configuration loads correctly
+poetry run pytest tests/shared_fixtures/test_config_loading.py::test_app_settings_loaded_successfully -v
+```
 
 ### Test-Specific Environment Variables
 
