@@ -52,6 +52,7 @@ CONFIG_FILES_TO_MANAGE = [
     "projects.json",
     "auth_settings.json",
     "aggregator.json",
+    "event_filters.json",
 ]
 APP_CONFIG_DIR_NAME = "test_config"  # Relative to PROJECT_ROOT
 BACKUP_DIR_NAME = "tmp_config_backup_pytest"  # Created in tests/ directory
