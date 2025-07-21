@@ -12,7 +12,6 @@ from tenacity import wait_random_exponential
 from typing import List, Optional, Tuple, Dict, Any
 from web3 import Web3
 from ipfs_client.main import AsyncIPFSClient
-from async_lru import alru_cache
 from snapshotter.utils.models.data_models import (
     EpochSnapshotResponse, 
     ExactEpochSnapshot, 
@@ -712,7 +711,7 @@ async def w3_get_and_cache_finalized_cid_bulk(
         logger.error(f'Error in w3_get_and_cache_finalized_cid_bulk: {str(e)}')
         raise
 
-@alru_cache(maxsize=10000)
+
 async def get_project_first_epoch(redis_conn: aioredis.Redis, state_contract_obj, rpc_helper: RpcHelper, project_id):
     """
     Get the first epoch for a given project ID.
