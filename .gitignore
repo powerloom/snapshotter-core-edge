@@ -31,3 +31,5 @@ rate-limiter
 docker-compose.yaml
 .cursorrules
 .venv/
+test_logs/
+test_config/

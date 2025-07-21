@@ -447,53 +447,214 @@ Pooler needs the following config files to be present
 
 To ensure a consistent and correct testing environment, follow these steps to configure your virtual environment and verify the test configuration loading mechanism.
 
-### Python Version and Virtual Environment
+### Prerequisites
 
-This project uses Poetry for dependency management and requires a Python 3.12 environment.
+This project uses Poetry 2.0+ for dependency management and requires Python 3.12.
 
-*   **Python Version**: Ensure you have Python 3.12.x installed. Using a Python version manager like `pyenv` is highly recommended.
-    ```bash
-    # Example using pyenv to install a specific Python version
-    pyenv install 3.12.8 # Or your preferred 3.12 patch version
-    ```
+**Required Tools:**
+- **Python 3.12.x**: Using `pyenv` for Python version management is strongly recommended
+- **Poetry 2.0+**: Modern Python dependency management tool
 
-*   **Poetry Installation**: If you don't have Poetry installed, follow the [official Poetry installation guide](https://python-poetry.org/docs/#installation).
+### Step-by-Step Setup
 
-*   **Setting up the Virtual Environment**:
-    You have flexibility in how you set up your virtual environment. Poetry will respect an already-activated virtual environment.
+**1. Install Python 3.12 with pyenv (Recommended)**
 
-    *   **Option A: Using a `pyenv`-managed virtual environment (Recommended if you use `pyenv`)**:
-        1.  Create a virtual environment with `pyenv` linked to your desired Python 3.12.x version:
-            ```bash
-            # Ensure you are in your project's root directory
-            pyenv virtualenv 3.12.8 snapshotter-core-venv  # Creates a venv named 'snapshotter-core-venv'
-            ```
-        2.  Set this virtual environment as the local environment for your project. This way, it activates automatically when you `cd` into the directory:
-            ```bash
-            pyenv local snapshotter-core-venv
-            ```
-            Alternatively, you can activate it manually each time: `pyenv activate snapshotter-core-venv`.
-        3.  Verify that the virtual environment is active. Your shell prompt should indicate it.
+If you don't have `pyenv` installed, follow the [pyenv installation guide](https://github.com/pyenv/pyenv#installation).
 
-    *   **Option B: Letting Poetry create and manage the virtual environment**:
-        1.  If you prefer Poetry to handle virtual environment creation directly, navigate to the project root.
-        2.  To have Poetry create the virtual environment within your project directory (e.g., as `.venv`), run:
-            ```bash
-            poetry config virtualenvs.in-project true --local
-            ```
-        3.  Poetry will then create/use this `.venv` when you run `poetry install`. Activate it with `source .venv/bin/activate` or by using `poetry shell`.
+```bash
+# Install Python 3.12 (use the latest available patch version)
+pyenv install 3.12.11
 
-*   **Install Dependencies**:
-    *   With your chosen virtual environment **activated**, navigate to the project root directory.
-    *   Install the project dependencies using:
-        ```bash
-        poetry install --no-root --with dev
-        ```
-        *   `--no-root`: This flag prevents Poetry from installing the current project (snapshotter-core-edge) as a package in the virtual environment. This is typically used for applications rather than libraries.
-        *   `--with dev`: This ensures that development dependencies, including `pytest` and other testing tools, are installed.
+# Verify installation
+pyenv versions
+```
 
-*   **Using `poetry shell`**:
-    Regardless of how the virtual environment was initially created or activated, you can often use `poetry shell` from the project root. This command will activate the correct Poetry-managed virtual environment for you or use the already active compatible one.
+**2. Install Poetry**
+
+If you don't have Poetry installed, follow the [official Poetry installation guide](https://python-poetry.org/docs/#installation).
+
+```bash
+# Verify Poetry version (should be 2.0+)
+poetry --version
+```
+
+**3. Set Up Project Environment**
+
+Navigate to the project root directory and set up the Python version:
+
+```bash
+# Navigate to project root
+cd /path/to/snapshotter-core-edge
+
+# Set Python version for this project
+pyenv local 3.12.11
+
+# Verify correct Python version is active
+python --version  # Should show Python 3.12.11
+```
+
+**4. Install Dependencies**
+
+```bash
+# Install all dependencies including development tools
+poetry install
+
+# Verify installation
+poetry env info  # Shows virtual environment details
+```
+
+**5. Activate Environment**
+
+With Poetry 2.0, you have several options to work with the virtual environment:
+
+```bash
+# Option A: Use poetry run for individual commands
+poetry run python --version
+poetry run pytest tests/
+
+# Option B: Get activation command (recommended for development)
+poetry env activate
+# Then source the provided activation command
+
+# Option C: Spawn a new shell with environment activated (Requires the shell plugin)
+poetry shell
+```
+
+**6. Create Test Environment Configuration**
+
+Before running tests, create your test environment configuration:
+
+```bash
+# Copy the test environment template
+cp env.test.example .env.test
+
+# Edit .env.test with your test configuration values
+```
+
+### Test Configuration Fields
+
+The `.env.test` file contains all the configuration values needed for running tests. Here's a breakdown of each section and what values to use:
+
+#### **RPC Settings (Required)**
+These settings configure the main blockchain RPC endpoints for testing:
+
+```bash
+# Main RPC endpoint - use a reliable Ethereum RPC provider
+TEST_RPC_URL_FULL_NODE_1=https://eth-mainnet.alchemyapi.io/v2/YOUR_API_KEY
+# Archive node (optional) - for historical data queries
+TEST_RPC_URL_ARCHIVE_NODE_1=https://eth-mainnet.alchemyapi.io/v2/YOUR_ARCHIVE_KEY
+
+# Connection settings (defaults are usually fine)
+TEST_RPC_REQUEST_TIMEOUT=30          # Request timeout in seconds
+TEST_RPC_RETRY_COUNT=3               # Number of retry attempts
+TEST_RPC_MAX_CONNECTIONS=100         # Max concurrent connections
+TEST_RPC_MAX_KEEPALIVE_CONNECTIONS=50 # Max persistent connections
+TEST_RPC_KEEPALIVE_EXPIRY=300        # Connection keep-alive time
+```
+
+#### **Anchor RPC Settings **
+These configure the Powerloom anchor chain (if different from main RPC):
+
+```bash
+# Powerloom-specific anchor chain endpoint
+TEST_ANCHOR_RPC_URL_FULL_NODE_1=
+TEST_ANCHOR_RPC_URL_ARCHIVE_NODE_1=
+
+# Lower connection limits for anchor chain
+TEST_ANCHOR_RPC_MAX_CONNECTIONS=5
+TEST_ANCHOR_RPC_MAX_KEEPALIVE_CONNECTIONS=2
+```
+
+#### **IPFS Settings (Required)**
+Configure IPFS for data storage and retrieval:
+
+```bash
+# Local IPFS node (recommended for testing)
+TEST_IPFS_URL=/ip4/127.0.0.1/tcp/5001
+
+# Or remote IPFS service
+# TEST_IPFS_URL=/dns/your-ipfs-provider.com/tcp/443/https
+
+# IPFS connection settings
+TEST_IPFS_TIMEOUT=60                 # Request timeout
+TEST_IPFS_MAX_RETRIES=3              # Retry attempts
+```
+
+#### **Redis Settings (Required)**
+Configure Redis for caching and state management:
+
+```bash
+TEST_REDIS_HOST=localhost            # Redis server host
+TEST_REDIS_PORT=6379                 # Redis server port
+TEST_REDIS_DB=0                      # Database number (0-15)
+TEST_REDIS_PASSWORD=                 # Password (empty for no auth)
+TEST_REDIS_TIMEOUT=5                 # Connection timeout
+```
+
+#### **Core API Settings**
+Configure the snapshotter core API:
+
+```bash
+TEST_CORE_API_PORT=8002              # Port for core API server
+TEST_BLOCK_SHIFT_FOR_BITMAP_INDEX=22400000  # Block indexing offset
+```
+
+#### **Protocol Settings (Required)**
+Set the contract addresses and namespace:
+
+```bash
+# Your unique namespace identifier
+TEST_NAMESPACE=my_test_namespace
+
+# Smart contract addresses
+TEST_PROTOCOL_STATE_CONTRACT_ADDRESS=0x3B5A0FB70ef68B5dd677C7d614dFB89961f97401
+TEST_DATA_MARKET_CONTRACT_ADDRESS=0xae32c4FA72E2e5F53ed4D214E4aD049286Ded16f
+
+# Chain Wrapped ETH
+TEST_WETH_ADDRESS=0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2
+```
+
+#### **External API Settings (Optional)**
+Configure external data providers:
+
+```bash
+# Etherscan API
+TEST_ETHERSCAN_API_KEY=your_etherscan_api_key_here
+TEST_ETHERSCAN_URL=https://api.etherscan.io/v2/
+
+# CoinMarketCap API (for price data)
+COINMARKETCAP_API_KEY=your_cmc_api_key_here
+COINMARKETCAP_API_URL=https://pro-api.coinmarketcap.com
+COINMARKETCAP_API_PRICE_TOLERANCE=5  # Acceptable price variance %
+```
+
+**7. Run Tests**
+
+```bash
+# Run all tests
+poetry run pytest
+
+# Run specific test files
+poetry run pytest tests/shared_fixtures/test_config_loading.py
+
+# Run with verbose output
+poetry run pytest -v tests/shared_fixtures/test_config_loading.py::test_ipfs_settings_are_correct
+```
+
+### Environment Verification
+
+To verify your environment is set up correctly:
+
+```bash
+# Check Python version
+poetry run python --version
+
+# Check that pytest is available
+poetry run pytest --version
+
+# Verify test configuration loads correctly
+poetry run pytest tests/shared_fixtures/test_config_loading.py::test_app_settings_loaded_successfully -v
+```
 
 ### Test-Specific Environment Variables
 

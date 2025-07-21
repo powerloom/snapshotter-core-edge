@@ -207,7 +207,11 @@ async def test_get_submission_data_bulk_ensure_complete_true(
     """
     # Arrange
     cids = [f'invalid_cid{epoch_id}' for epoch_id in epoch_ids]
-    ipfs_reader.cat = AsyncMock(side_effect=Exception('Invalid IPFS Data'))
+    # Each CID will be retried 3 times due to @retry decorator, so we need 3 exceptions per CID
+    side_effects = []
+    for _ in cids:
+        side_effects.extend([Exception('Invalid IPFS Data')] * 3)
+    ipfs_reader.cat = AsyncMock(side_effect=side_effects)
 
     # Act
     result = await get_submission_data_bulk(
@@ -244,13 +248,17 @@ async def test_get_submission_data_bulk_ensure_complete_false(
     invalid_cid = 'invalid_cid'
     cids[-1] = invalid_cid
     ipfs_reader = AsyncMock()
-    # First calls return valid data, final call raises an exception
-    side_effect = [
-        json.dumps({'key': 'value'}).encode('utf-8')
-        for _ in range(len(cids) - 1)
-    ]
-    side_effect.append(Exception('Invalid IPFS Data'))
-    ipfs_reader.cat = AsyncMock(side_effect=side_effect)
+    
+    # Set up side effects: successful calls return data on first attempt,
+    # failing call gets 3 retry attempts
+    side_effects = []
+    for i, cid in enumerate(cids):
+        if i == len(cids) - 1:  # Last CID fails
+            side_effects.extend([Exception('Invalid IPFS Data')] * 3)
+        else:  # Successful CIDs
+            side_effects.append(json.dumps({'key': 'value'}).encode('utf-8'))
+    
+    ipfs_reader.cat = AsyncMock(side_effect=side_effects)
 
     result = await get_submission_data_bulk(
         redis_conn=mock_redis,
@@ -294,7 +302,11 @@ async def test_get_project_epoch_snapshot_bulk_ensure_complete_true(
     epoch_id_max = max(epoch_ids)
     expected_cids = [f'QmTestCID{project_id}{epoch_id}' for epoch_id in epoch_ids]
 
-    ipfs_reader.cat = AsyncMock(side_effect=Exception('Invalid IPFS Data'))
+    # Each CID will be retried 3 times due to @retry decorator
+    side_effects = []
+    for _ in expected_cids:
+        side_effects.extend([Exception('Invalid IPFS Data')] * 3)
+    ipfs_reader.cat = AsyncMock(side_effect=side_effects)
 
     # Mock get_project_finalized_cids_bulk to return predefined CIDs
     with patch('snapshotter.utils.data_utils.get_project_finalized_cids_bulk', AsyncMock(return_value=(expected_cids, epoch_id_min))):
@@ -333,13 +345,16 @@ async def test_get_project_epoch_snapshot_bulk_ensure_complete_false(
     epoch_id_max = max(epoch_ids)
     expected_cids = [f'QmTestCID{project_id}{epoch_id}' for epoch_id in epoch_ids]
 
-    side_effect = [
-        json.dumps({'key': 'value'}).encode('utf-8')
-        for _ in range(len(expected_cids) - 1)
-    ]
-    side_effect.append(Exception('Invalid IPFS Data'))
+    # Set up side effects: most calls succeed on first attempt, last one fails with retries
+    side_effects = []
+    for i, cid in enumerate(expected_cids):
+        if i == len(expected_cids) - 1:  # Last CID fails
+            side_effects.extend([Exception('Invalid IPFS Data')] * 3)
+        else:  # Successful CIDs
+            side_effects.append(json.dumps({'key': 'value'}).encode('utf-8'))
+    
     ipfs_reader = AsyncMock()
-    ipfs_reader.cat = AsyncMock(side_effect=side_effect)
+    ipfs_reader.cat = AsyncMock(side_effect=side_effects)
 
     expected_submission_data = [{'key': 'value'} for _ in range(len(epoch_ids) - 1)]
     expected_submission_data.append({})
