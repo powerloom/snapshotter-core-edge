@@ -340,18 +340,13 @@ class GenericAsyncWorker(multiprocessing.Process):
             name=last_submitted_snapshot_raw_data_key(project_id)
         )
         if last_submitted_data_raw:
-            try:
-                last_submitted_data = json.loads(last_submitted_data_raw)
-                snapshot_cid = last_submitted_data.get('snapshotCid')
-                epoch_id = last_submitted_data.get('epochId')
-                snapshot = json.loads(last_submitted_data.get('snapshot'))
-                if not snapshot_cid or epoch_id is None or snapshot is None:
-                    raise Exception(f"Malformed last submitted raw snapshot data for project {project_id}")
+            last_submitted_data = json.loads(last_submitted_data_raw)
+            snapshot_cid = last_submitted_data.get('snapshotCid')
+            epoch_id = last_submitted_data.get('epochId')
+            snapshot = json.loads(last_submitted_data.get('snapshot'))
+            if snapshot and epoch_id and snapshot_cid:
                 return snapshot_cid, epoch_id, snapshot
-            except Exception as e:
-                raise Exception(
-                    f"Failed to parse or retrieve last submitted raw snapshot data for project {project_id}: {e}"
-                ) from e
+
 
         # Try to get the last submitted snapshot data from Redis
         last_submitted_data_submitted = await self._redis_conn.get(
