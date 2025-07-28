@@ -56,6 +56,7 @@ from snapshotter.utils.models.proto.snapshot_submission.submission_pb2 import Sn
 from snapshotter.utils.redis.redis_conn import RedisPoolCache
 from snapshotter.utils.redis.redis_keys import epoch_id_project_to_state_mapping
 from snapshotter.utils.redis.redis_keys import last_submitted_snapshot_data_key
+from snapshotter.utils.redis.redis_keys import last_submitted_snapshot_raw_data_key
 from snapshotter.utils.data_utils import get_project_last_finalized_epoch
 from snapshotter.utils.data_utils import get_project_finalized_cid
 from snapshotter.utils.data_utils import get_submission_data
@@ -334,13 +335,21 @@ class GenericAsyncWorker(multiprocessing.Process):
         Raises:
             Exception: If no valid snapshot data can be found for the project.
         """
-        # Try to get the last submitted snapshot data from Redis
+
         last_submitted_data_raw = await self._redis_conn.get(
-            name=last_submitted_snapshot_data_key(project_id)
+            name=last_submitted_snapshot_raw_data_key(project_id)
         )
         if last_submitted_data_raw:
+            last_submitted_data = json.loads(last_submitted_data_raw)
+            return last_submitted_data.get('snapshotCid'), last_submitted_data.get('epochId'), last_submitted_data.get('snapshot')
+
+        # Try to get the last submitted snapshot data from Redis
+        last_submitted_data_submitted = await self._redis_conn.get(
+            name=last_submitted_snapshot_data_key(project_id)
+        )
+        if last_submitted_data_submitted:
             try:
-                last_submitted_data = json.loads(last_submitted_data_raw)
+                last_submitted_data = json.loads(last_submitted_data_submitted)
                 last_snapshot_cid = last_submitted_data.get('snapshotCid')
                 last_epoch_id = last_submitted_data.get('epochId')
                 if not last_snapshot_cid or last_epoch_id is None:
@@ -472,7 +481,9 @@ class GenericAsyncWorker(multiprocessing.Process):
                     'Exception submitting snapshot to collector for epoch {}: {}, Error: {},'
                     'sending failure notifications', epoch, snapshot, e,
                 )
-                await self._redis_conn.hset(
+                pipeline = self._redis_conn.pipeline()
+
+                pipeline.hset(
                     name=epoch_id_project_to_state_mapping(
                         epoch.epochId, SnapshotterStates.SNAPSHOT_SUBMIT_COLLECTOR.value,
                     ),
@@ -482,9 +493,12 @@ class GenericAsyncWorker(multiprocessing.Process):
                         ).model_dump_json(),
                     },
                 )
+                await pipeline.execute()
                 await self._send_failure_notifications(error=e, epoch_id=epoch.epochId, project_id=project_id)
             else:
-                await self._redis_conn.hset(
+                pipeline = self._redis_conn.pipeline()
+
+                pipeline.hset(
                     name=epoch_id_project_to_state_mapping(
                         epoch.epochId, SnapshotterStates.SNAPSHOT_SUBMIT_COLLECTOR.value,
                     ),
@@ -494,6 +508,15 @@ class GenericAsyncWorker(multiprocessing.Process):
                         ).model_dump_json(),
                     },
                 )
+                pipeline.set(
+                    name=last_submitted_snapshot_raw_data_key(project_id),
+                    value=json.dumps({
+                        'snapshotCid': snapshot_cid,
+                        'epochId': epoch.epochId,
+                        'snapshot': snapshot.model_dump_json(),
+                    }),
+                )
+                await pipeline.execute()
                 return snapshot_cid
 
     async def _init_redis_pool(self):
