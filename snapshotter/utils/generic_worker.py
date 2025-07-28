@@ -318,10 +318,10 @@ class GenericAsyncWorker(multiprocessing.Process):
         )
 
     @retry(
-        wait=wait_random_exponential(multiplier=1, max=10),
-        stop=stop_after_attempt(3),
-        retry=retry_if_exception_type(Exception),
-        reraise=True,  # Raise the last exception if all retries fail
+        wait=wait_random_exponential(multiplier=1, max=5),  # Exponential backoff for robust retry
+        stop=stop_after_attempt(5),  # Increase attempts for higher reliability
+        retry=retry_if_exception_type(Exception),  # Only retry on exceptions
+        reraise=True,  # Propagate the last exception if all retries fail
     )
     async def _get_last_snapshot(self, project_id: str):
         """
