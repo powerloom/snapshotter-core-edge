@@ -378,7 +378,7 @@ class GenericAsyncWorker(multiprocessing.Process):
             project_id,
         )
         if not last_snapshot_cid:
-            raise Exception(f"Last finalized snapshot CID not found for project {project_id}")
+            return None, None, None
 
         last_snapshot = await get_submission_data(
             last_snapshot_cid, self._ipfs_reader_client, False
@@ -425,24 +425,25 @@ class GenericAsyncWorker(multiprocessing.Process):
             # Ensure snapshot has 'previousSnapshots' attribute (Pydantic model)
             if hasattr(snapshot, 'previousSnapshots'):
                 last_snapshot_cid, last_epoch_id, last_snapshot = await self._get_last_snapshot(project_id)
-                # Initialize previous_snapshots as an empty list
-                previous_snapshots = []
                 if last_snapshot:
-                    # Safely extract previousSnapshots from last_snapshot, defaulting to empty list
-                    previous_snapshots = last_snapshot.get('previousSnapshots', [])
-                    # Ensure previous_snapshots is a list of tuples (epoch_id, snapshot_cid)
-                    previous_snapshots = [
-                        (int(epoch_id), snapshot_cid)
-                        for epoch_id, snapshot_cid in previous_snapshots
-                        if isinstance(epoch_id, (int, str)) and isinstance(snapshot_cid, str)
-                    ]
-                    # Enforce a maximum length of 200 for previous_snapshots
-                    if len(previous_snapshots) >= 200:
-                        previous_snapshots = previous_snapshots[1:]
-                # Only append if last_epoch_id and last_snapshot_cid are not None
-                if last_epoch_id is not None and last_snapshot_cid is not None:
-                    previous_snapshots.append((last_epoch_id, last_snapshot_cid))
-                snapshot.previousSnapshots = previous_snapshots
+                    # Initialize previous_snapshots as an empty list
+                    previous_snapshots = []
+                    if last_snapshot:
+                        # Safely extract previousSnapshots from last_snapshot, defaulting to empty list
+                        previous_snapshots = last_snapshot.get('previousSnapshots', [])
+                        # Ensure previous_snapshots is a list of tuples (epoch_id, snapshot_cid)
+                        previous_snapshots = [
+                            (int(epoch_id), snapshot_cid)
+                            for epoch_id, snapshot_cid in previous_snapshots
+                            if isinstance(epoch_id, (int, str)) and isinstance(snapshot_cid, str)
+                        ]
+                        # Enforce a maximum length of 200 for previous_snapshots
+                        if len(previous_snapshots) >= 200:
+                            previous_snapshots = previous_snapshots[1:]
+                    # Only append if last_epoch_id and last_snapshot_cid are not None
+                    if last_epoch_id is not None and last_snapshot_cid is not None:
+                        previous_snapshots.append((last_epoch_id, last_snapshot_cid))
+                    snapshot.previousSnapshots = previous_snapshots
 
         snapshot_json = json.dumps(snapshot.model_dump(by_alias=True), sort_keys=True, separators=(',', ':'))
         snapshot_bytes = snapshot_json.encode('utf-8')

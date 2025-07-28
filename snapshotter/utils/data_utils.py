@@ -111,6 +111,9 @@ async def get_project_finalized_cid(
     project_first_epoch = await get_project_first_epoch(
         redis_conn, state_contract_obj, rpc_helper, project_id,
     )
+    if project_first_epoch == 0:
+        logger.info(f'Project {project_id} has no first epoch')
+        return None
     if epoch_id < project_first_epoch:
         return None
 
