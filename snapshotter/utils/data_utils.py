@@ -552,7 +552,7 @@ async def w3_get_and_cache_finalized_cid_bulk_using_previous_snapshots(
                 if closest_epoch_cid not in processed_snapshot_cids:
                     logger.info(f"Processing closest epoch with data {closest_epoch_with_data[1]} for project {project_id}")
                     # process but don't recurse
-                    processed_closest_epoch = await process_snapshot_cid(redis_conn, ipfs_reader, project_id, closest_epoch_cid, closest_epoch_with_data[1], closest_epoch_with_data[1], rec_depth=MAX_RECURSION_DEPTH + 1)
+                    await process_snapshot_cid(redis_conn, ipfs_reader, project_id, closest_epoch_cid, closest_epoch_with_data[1], closest_epoch_with_data[1], rec_depth=MAX_RECURSION_DEPTH + 1)
                     processed_snapshot_cids.append(closest_epoch_cid)
                 
             cid, epoch_id = await w3_get_and_cache_finalized_cid(
@@ -560,37 +560,37 @@ async def w3_get_and_cache_finalized_cid_bulk_using_previous_snapshots(
             )
             cid_data_with_epochs.append((cid, epoch_id))
             missing_epochs.remove(epoch_to_fetch)
-            if (cid and "null" not in cid) or processed_closest_epoch:
-                if not missing_epochs:
-                    break
-                missing_epoch_list = sorted(list(missing_epochs))
-                redis_cache_data = await redis_conn.hmget(project_hmap_key, missing_epoch_list)
 
-                blank_epochs = await redis_bitmap.get_bits_in_range(
-                    redis_conn,
-                    blank_epochs_bitmap_key,
-                    missing_epoch_list
-                )
+            if not missing_epochs:
+                break
+            missing_epoch_list = sorted(list(missing_epochs))
+            redis_cache_data = await redis_conn.hmget(project_hmap_key, missing_epoch_list)
 
-                for epoch_id, is_blank in blank_epochs:
-                    if is_blank:
-                        cid_data_with_epochs.append((f'null_{epoch_id}', epoch_id))
-                        missing_epochs.remove(epoch_id)
+            blank_epochs = await redis_bitmap.get_bits_in_range(
+                redis_conn,
+                blank_epochs_bitmap_key,
+                missing_epoch_list
+            )
 
-                data = []
-                for data_raw_item in redis_cache_data:
-                    if data_raw_item:
-                        data.append(json.loads(data_raw_item))
-                    else:
-                        data.append(dict())
-                    
-                for snapshot_data, epoch_id_from_list in zip(data, missing_epoch_list):
-                    if "snapshot_cid" in snapshot_data:
-                        cid_data_with_epochs.append((snapshot_data["snapshot_cid"], epoch_id_from_list))
-                        if epoch_id_from_list in missing_epochs:
-                            missing_epochs.remove(epoch_id_from_list)
+            for epoch_id, is_blank in blank_epochs:
+                if is_blank:
+                    cid_data_with_epochs.append((f'null_{epoch_id}', epoch_id))
+                    missing_epochs.remove(epoch_id)
+
+            data = []
+            for data_raw_item in redis_cache_data:
+                if data_raw_item:
+                    data.append(json.loads(data_raw_item))
                 else:
-                    logger.debug(f"missing_epoch_list is empty after fetching CID for {epoch_to_fetch}. Skipping hmget for this iteration.")                    
+                    data.append(dict())
+                
+            for snapshot_data, epoch_id_from_list in zip(data, missing_epoch_list):
+                if "snapshot_cid" in snapshot_data:
+                    cid_data_with_epochs.append((snapshot_data["snapshot_cid"], epoch_id_from_list))
+                    if epoch_id_from_list in missing_epochs:
+                        missing_epochs.remove(epoch_id_from_list)
+            else:
+                logger.debug(f"missing_epoch_list is empty after fetching CID for {epoch_to_fetch}. Skipping hmget for this iteration.")                    
 
         return cid_data_with_epochs
 
