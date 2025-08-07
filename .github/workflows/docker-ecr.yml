@@ -22,10 +22,13 @@ jobs:
         uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: arn:aws:iam::402604160093:role/github-action-role
-          aws-region: us-east-1
+          aws-region: us-east-2
 
       - name: Login to Amazon ECR
         uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Verify identity
+        run: aws sts get-caller-identity
 
       - name: Build and push Docker image
         env:
