@@ -16,6 +16,7 @@ from pydantic import Field
 from rpc_helper.rpc import RpcHelper
 from typing import TypeVar
 from web3 import Web3
+import json
 
 from snapshotter.settings.config import settings
 from snapshotter.utils.data_utils import get_project_epoch_snapshot
@@ -25,6 +26,7 @@ from snapshotter.utils.default_logger import default_logger
 from snapshotter.utils.file_utils import read_json_file
 from snapshotter.utils.models.data_models import TaskStatusRequest
 from snapshotter.utils.redis.redis_conn import RedisPoolCache
+from snapshotter.utils.redis.redis_keys import last_submitted_snapshot_raw_data_key
 from computes.api.router import router as compute_router
 
 
@@ -539,3 +541,27 @@ async def get_time_series_data_for_project_id(
         }
 
     return data_list
+
+
+@app.get('/latest_epoch_info')
+async def get_latest_epoch_info(
+    request: Request,
+    response: Response,
+):
+
+    project_id = f'activePools:{settings.namespace}'
+
+    last_submitted_snapshot_data_raw = await request.app.state.redis_conn.get(last_submitted_snapshot_raw_data_key(project_id))
+    if last_submitted_snapshot_data_raw:
+        last_submitted_snapshot_data = json.loads(last_submitted_snapshot_data_raw)
+        snapshot_cid = last_submitted_snapshot_data['snapshotCid']
+        epoch_id = int(last_submitted_snapshot_data['epochId'])
+        snapshot = json.loads(last_submitted_snapshot_data['snapshot'])
+
+        data = {
+            'snapshot_cid': snapshot_cid,
+            'pools': snapshot['pools'],
+            'epoch_id': epoch_id,
+        }
+        return data
+    return None

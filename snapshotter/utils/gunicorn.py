@@ -5,16 +5,15 @@ from gunicorn.glogging import Logger
 
 from snapshotter.utils.default_logger import default_logger
 
-
 logger = default_logger.bind(module='Gunicorn')
 
 
 class InterceptHandler(logging.Handler):
     """
-    A custom logging handler that intercepts log records and forwards them to Loguru default_logger.
+    A logging handler that forwards standard logging records to the Loguru logger.
 
-    This handler is designed to bridge the gap between Python's standard logging
-    and the Loguru logger, allowing for seamless integration of both logging systems.
+    This handler ensures that all logs from Gunicorn and its workers are routed through
+    the Loguru-based default_logger, preserving formatting and context.
     """
 
     def emit(self, record):
@@ -24,49 +23,52 @@ class InterceptHandler(logging.Handler):
         :param record: The log record to be emitted
         :type record: logging.LogRecord
         """
-        # Get corresponding Loguru level if it exists
         try:
+            # Map standard logging level to Loguru level name
             level = logger.level(record.levelname).name
-        except ValueError:
+        except Exception:
             level = record.levelno
 
-        # Find caller from where originated the logged message
+        # Find the frame where the logging call was made, skipping logging internals
         frame, depth = logging.currentframe(), 2
-        while frame.f_code.co_filename == logging.__file__:
+        while frame and frame.f_code.co_filename == logging.__file__:
             frame = frame.f_back
             depth += 1
 
-        # Log the message using Loguru
         logger.opt(depth=depth, exception=record.exc_info).log(
             level,
             record.getMessage(),
         )
 
-
 class StubbedGunicornLogger(Logger):
     """
-    A custom logger for Gunicorn that stubs out the error and access loggers.
+    A custom Gunicorn logger that routes Gunicorn logs to Loguru via InterceptHandler.
 
-    This logger sets up a NullHandler for both the error and access loggers, effectively
-    disabling them.
+    This disables Gunicorn's default file logging and ensures all logs go through Loguru.
     """
 
     def setup(self, cfg):
         """
-        Set up the logger with NullHandlers and configure log levels.
+        Set up the logger to use InterceptHandler for both error and access logs.
 
         :param cfg: Gunicorn configuration object
         :type cfg: gunicorn.config.Config
         """
-        handler = logging.NullHandler()
+        handler = InterceptHandler()
 
         # Set up error logger
         self.error_logger = logging.getLogger('gunicorn.error')
+        self.error_logger.handlers = []
+        self.error_logger.propagate = False
         self.error_logger.addHandler(handler)
+        self.error_logger.setLevel(logging.DEBUG)
 
         # Set up access logger
         self.access_logger = logging.getLogger('gunicorn.access')
+        self.access_logger.handlers = []
+        self.access_logger.propagate = False
         self.access_logger.addHandler(handler)
+        self.access_logger.setLevel(logging.INFO)
 
 
 class StandaloneApplication(BaseApplication):
