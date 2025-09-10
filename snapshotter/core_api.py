@@ -565,3 +565,65 @@ async def get_latest_epoch_info(
         }
         return data
     return None
+
+@app.get('/get_previous_epoch_info/{epoch_id}')
+async def get_previous_epoch_info(
+    request: Request,
+    response: Response,
+    epoch_id: int,
+):
+    """
+    Get previous epoch info for a given epoch_id.
+    """
+    project_id = f'activePools:{settings.namespace}'
+
+    snapshot_response = await get_project_epoch_snapshot(
+        request.app.state.redis_conn,
+        request.app.state.protocol_state_contract,
+        request.app.state.anchor_rpc_helper,
+        request.app.state.ipfs_reader_client,
+        epoch_id,
+        project_id,
+        seek=False,
+        cleanup_previous_snapshots=True,
+    )
+
+    if snapshot_response.exact_match:
+        data = {
+            'snapshot_cid': snapshot_response.exact_match.snapshot_cid,
+            'epoch_id': snapshot_response.exact_match.epoch_id,
+            'pools': snapshot_response.exact_match.data['pools'],
+        }
+        return data
+    return None
+
+@app.get('/previous_snapshots_data/{pool_address}/{epoch_id}')
+async def get_previous_snapshots_data(
+    request: Request,
+    response: Response,
+    pool_address: str,
+    epoch_id: int,
+):
+    """
+    Get previous snapshots data for a given project_id and epoch_id.
+    """
+
+    project_id = f'baseSnapshot:{pool_address}:{settings.namespace}'
+
+    # get submitted snapshot data from redis
+
+    snapshot_response = await get_project_epoch_snapshot(
+        request.app.state.redis_conn,
+        request.app.state.protocol_state_contract,
+        request.app.state.anchor_rpc_helper,
+        request.app.state.ipfs_reader_client,
+        epoch_id,
+        project_id,
+        seek=False,
+        cleanup_previous_snapshots=False,
+    )
+
+    if snapshot_response.exact_match:
+        previous_snapshots = snapshot_response.exact_match.data['previousSnapshots']
+        return previous_snapshots
+    return []

@@ -902,7 +902,7 @@ async def get_submission_data_bulk(
 
 
 async def get_project_epoch_snapshot(
-    redis_conn: aioredis.Redis, state_contract_obj, rpc_helper, ipfs_reader, epoch_id, project_id, seek=False
+    redis_conn: aioredis.Redis, state_contract_obj, rpc_helper, ipfs_reader, epoch_id, project_id, seek=False, cleanup_previous_snapshots=True
 ) -> EpochSnapshotResponse:
     """
     Retrieves the epoch snapshot for a given project.
@@ -928,7 +928,7 @@ async def get_project_epoch_snapshot(
     """
     cid = await get_project_finalized_cid(redis_conn, state_contract_obj, rpc_helper, ipfs_reader, epoch_id, project_id)
     if cid and 'null' not in cid:
-        data = await get_submission_data(cid, ipfs_reader)
+        data = await get_submission_data(cid, ipfs_reader, cleanup_previous_snapshots)
         return EpochSnapshotResponse(
             exact_match=ExactEpochSnapshot(
                 epoch_id=epoch_id,
