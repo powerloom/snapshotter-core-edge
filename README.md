@@ -235,7 +235,7 @@ docker-compose --profile local up --build
 
 #### Transaction Processor Service
 
-The Transaction Processor Service (`snapshotter-periphery-txprocessor`)[https://github.com/powerloom/snapshotter-periphery-txprocessor/] processes transactions from cached blocks and extracts relevant information for snapshot generation.
+The Transaction Processor Service [snapshotter-periphery-txprocessor](https://github.com/powerloom/snapshotter-periphery-txprocessor/) processes transactions from cached blocks and extracts relevant information for snapshot generation.
 
 **Key Features:**
 - **Transaction Receipt Processing**: Fetches and caches detailed transaction receipts
@@ -259,7 +259,7 @@ The Transaction Processor Service (`snapshotter-periphery-txprocessor`)[https://
 
 #### Epoch Syncer Service
 
-The Epoch Syncer Service (`snapshotter-periphery-epochsyncer`)[https://github.com/powerloom/snapshotter-periphery-epochsyncer/] monitors blockchain events and ensures data availability before triggering snapshot generation.
+The Epoch Syncer Service [snapshotter-periphery-epochsyncer](https://github.com/powerloom/snapshotter-periphery-epochsyncer/) monitors blockchain events and ensures data availability before triggering snapshot generation.
 
 **Key Features:**
 - **Dual Chain Monitoring**: Monitors both source chain blocks and protocol state events
