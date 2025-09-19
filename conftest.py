@@ -1,7 +1,6 @@
 import sys
 import os
 import shutil
-import re
 import pytest
 from dotenv import load_dotenv
 import json
@@ -27,8 +26,9 @@ CONFIG_FILES_TO_MANAGE = [
     "projects.json",
     "auth_settings.json",
     "aggregator.json",
+    "event_filters.json",
 ]
-APP_CONFIG_DIR_NAME = "config"  # Relative to PROJECT_ROOT
+APP_CONFIG_DIR_NAME = "test_config"  # Relative to PROJECT_ROOT
 BACKUP_DIR_NAME = "tmp_config_backup_pytest"  # Created in tests/ directory
 ENV_TEST_FILE_NAME = ".env.test"  # Relative to PROJECT_ROOT
 
@@ -63,13 +63,13 @@ REPLACEMENTS_FOR_SETTINGS_JSON = [
     ("ipfs-writer-url", "TEST_IPFS_URL", "/ip4/127.0.0.1/tcp/5001", lambda v: v),
     ("ipfs-writer-key", "TEST_IPFS_API_KEY", "", lambda v: v),
     ("ipfs-writer-secret", "TEST_IPFS_API_SECRET", "", lambda v: v),
-    ("ipfs-reader-url", "TEST_IPFS_URL", "/ip4/127.0.0.1/tcp/5001/test_ipfs", lambda v: v),
+    ("ipfs-reader-url", "TEST_IPFS_URL", "/ip4/127.0.0.1/tcp/5001", lambda v: v),
     ("ipfs-reader-key", "TEST_IPFS_API_KEY", "", lambda v: v),
     ("ipfs-reader-secret", "TEST_IPFS_API_SECRET", "", lambda v: v),
     ("protocol-state-contract", "TEST_PROTOCOL_STATE_CONTRACT_ADDRESS", "0xTestProtocolStateContractPlaceholder", lambda v: v),
     ("data-market-contract", "TEST_DATA_MARKET_CONTRACT_ADDRESS", "0xTestDataMarketContractPlaceholder", lambda v: v),
     ("signer-account-private-key", "TEST_SIGNER_ACCOUNT_PRIVATE_KEY", "0xTestPrivateKeyPlaceholder", lambda v: v),
-    ("local-collector-port", "TEST_LOCAL_COLLECTOR_PORT", "50051", lambda v: v),
+    ("local-collector-port", "TEST_LOCAL_COLLECTOR_PORT", "50051", lambda v: str(v)),
     ("https://telegram-reporting-url", "TEST_TELEGRAM_REPORTING_URL", "", lambda v: v),
     ("telegram-chat-id", "TEST_TELEGRAM_CHAT_ID", "", lambda v: v),
     ("redis-host", "TEST_REDIS_HOST", "localhost", lambda v: v),
@@ -79,9 +79,9 @@ REPLACEMENTS_FOR_SETTINGS_JSON = [
     ("ipfs-s3-secret-key", "TEST_IPFS_S3_SECRET_KEY", "", lambda v: v),
 
     # Replacements requiring specific formatting (mimicking sed's behavior for JSON types)
+    ('"core-api-port"', "TEST_CORE_API_PORT", "8002", lambda v: str(v)),
     ('"redis-port"', "TEST_REDIS_PORT", "6379", lambda v: str(v)),
     ('"redis-password"', "TEST_REDIS_PASSWORD", "", lambda v: f'"{v}"' if v else "null"),
-    ('"core-api-port"', "TEST_CORE_API_PORT", "8002", lambda v: str(v)),
     ('"redis-db"', "TEST_REDIS_DB", "0", lambda v: str(v)),
     ('"block-shift-for-bitmap-index"', "TEST_BLOCK_SHIFT_FOR_BITMAP_INDEX", "22400000", lambda v: str(v)),
     ('"ipfs-s3-config-enabled"', "TEST_IPFS_S3_CONFIG_ENABLED", "false", lambda v: str(v).lower()),
@@ -162,25 +162,37 @@ def pytest_sessionstart(session):
 
     for file_base_name in CONFIG_FILES_TO_MANAGE:
         original_file_path = os.path.join(app_config_dir_abs, file_base_name)
-        example_file_path = os.path.join(app_config_dir_abs, file_base_name.replace(".json", ".example.json"))
+        # Look for example files in the main config directory, not the test directory
+        main_config_dir = os.path.join(PROJECT_ROOT, "config")
+        example_file_path = os.path.join(main_config_dir, file_base_name.replace(".json", ".example.json"))
         backup_file_path = os.path.join(backup_dir_abs, file_base_name)
 
-        if os.path.exists(original_file_path):
-            _log_info(f"  Backing up '{original_file_path}' to '{backup_file_path}'")
-            try:
-                shutil.copy2(original_file_path, backup_file_path)
-                _backed_up_files.add(file_base_name)
-            except Exception as e:
-                pytest.exit(f"Failed to backup {original_file_path}: {e}. Aborting.")
+        # Since we're using a test config directory, we don't need to backup anything
+        # Just copy the example files to create the test config files
         
         if os.path.exists(example_file_path):
-            _log_info(f"  Copying '{example_file_path}' to '{original_file_path}'")
+            _log_info(f"  Copying '{example_file_path}' to '{original_file_path}' for test configuration")
             try:
                 shutil.copy2(example_file_path, original_file_path)
             except Exception as e:
                 pytest.exit(f"Failed to copy {example_file_path} to {original_file_path}: {e}. Aborting.")
-        elif not os.path.exists(original_file_path):
-             _log_info(f"  Warning: Example file '{example_file_path}' not found, and no existing '{original_file_path}' to use as base for test config.")
+        else:
+             _log_info(f"  Warning: Example file '{example_file_path}' not found.")
+             # Try to create a minimal config file for testing
+             if file_base_name == "settings.json":
+                 _log_info(f"  Creating minimal settings.json for testing")
+                 minimal_settings = {
+                     "namespace": "test_namespace",
+                     "signer_private_key": "0x0000000000000000000000000000000000000000000000000000000000000001",
+                     "instance_id": "test_instance",
+                     "slot_id": 1,
+                     "logs": {"debug_mode": False, "write_to_files": False},
+                     "redis": {"host": "localhost", "port": 6379, "db": 0},
+                     "rpc": {"full_nodes": [{"url": "http://localhost:8545"}]},
+                     "anchor_chain_rpc": {"full_nodes": [{"url": "http://localhost:8546"}]}
+                 }
+                 with open(original_file_path, 'w') as f:
+                     json.dump(minimal_settings, f, indent=2)
 
     settings_json_target_path = os.path.join(app_config_dir_abs, "settings.json")
     if os.path.exists(settings_json_target_path):
@@ -200,37 +212,21 @@ def pytest_sessionstart(session):
 def pytest_sessionfinish(session, exitstatus):
     """
     Pytest hook that runs at the end of a test session.
-    - Restores original config files from backup.
-    - Cleans up temporary backup directory.
+    - Cleans up test configuration files.
     """
-    _log_info("\n--- Pytest Session Finish: Restoring original configurations ---")
+    _log_info("\n--- Pytest Session Finish: Cleaning up test configurations ---")
     app_config_dir_abs = os.path.join(PROJECT_ROOT, APP_CONFIG_DIR_NAME)
     backup_dir_abs = os.path.join(PROJECT_ROOT, "tests", BACKUP_DIR_NAME)
 
-    if not os.path.isdir(backup_dir_abs):
-        _log_info("  No backup directory found. Nothing to restore or clean.")
-        return
-
-    for file_base_name in CONFIG_FILES_TO_MANAGE:
-        original_file_path = os.path.join(app_config_dir_abs, file_base_name)
-        backup_file_path = os.path.join(backup_dir_abs, file_base_name)
-
-        if file_base_name in _backed_up_files:
-            if os.path.exists(backup_file_path):
-                _log_info(f"  Restoring '{original_file_path}' from '{backup_file_path}'")
-                try:
-                    shutil.move(backup_file_path, original_file_path)
-                except Exception as e:
-                    _log_info(f"    Error restoring {original_file_path} from {backup_file_path}: {e}")
-            else:
-                _log_info(f"    Warning: Backup for {file_base_name} was expected but not found at {backup_file_path}.")
-        elif os.path.exists(original_file_path):
-            _log_info(f"  Removing test-generated '{original_file_path}' (no original backup was made).")
-            try:
-                os.remove(original_file_path)
-            except Exception as e:
-                _log_info(f"    Error removing {original_file_path}: {e}")
+    # Since we're using a separate test config directory, just remove it
+    if os.path.exists(app_config_dir_abs):
+        _log_info(f"  Removing test config directory: {app_config_dir_abs}")
+        try:
+            shutil.rmtree(app_config_dir_abs)
+        except Exception as e:
+            _log_info(f"    Error removing test config directory {app_config_dir_abs}: {e}")
     
+    # Also clean up the backup directory if it exists and is empty
     if os.path.exists(backup_dir_abs):
         _log_info(f"  Cleaning up backup directory: {backup_dir_abs}")
         try:
@@ -242,4 +238,4 @@ def pytest_sessionfinish(session, exitstatus):
             _log_info(f"    Error removing backup directory {backup_dir_abs}: {e}. Please check manually.")
     
     _backed_up_files.clear()
-    _log_info("--- Original configurations restored ---") 
+    _log_info("--- Test configurations cleaned up ---") 

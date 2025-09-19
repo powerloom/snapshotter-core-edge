@@ -133,6 +133,13 @@ def last_submitted_snapshot_data_key(project_id):
     return f'lastSubmittedSnapshotData:{project_id}'
 
 
+def last_submitted_snapshot_raw_data_key(project_id):
+    """
+    Generate Redis key for last submitted snapshot raw data.
+    """
+    return f'lastSubmittedSnapshotRawData:{project_id}'
+
+
 def last_snapshot_processing_complete_timestamp_key():
     """
     Generate Redis key for last snapshot processing complete timestamp.

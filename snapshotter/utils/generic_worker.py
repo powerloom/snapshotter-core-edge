@@ -56,6 +56,7 @@ from snapshotter.utils.models.proto.snapshot_submission.submission_pb2 import Sn
 from snapshotter.utils.redis.redis_conn import RedisPoolCache
 from snapshotter.utils.redis.redis_keys import epoch_id_project_to_state_mapping
 from snapshotter.utils.redis.redis_keys import last_submitted_snapshot_data_key
+from snapshotter.utils.redis.redis_keys import last_submitted_snapshot_raw_data_key
 from snapshotter.utils.data_utils import get_project_last_finalized_epoch
 from snapshotter.utils.data_utils import get_project_finalized_cid
 from snapshotter.utils.data_utils import get_submission_data
@@ -159,6 +160,28 @@ def ipfs_upload_retry_state_callback(retry_state: tenacity.RetryCallState):
     if retry_state and retry_state.outcome.failed:
         logger.warning(
             f'Encountered ipfs upload exception: {retry_state.outcome.exception()} | args: {retry_state.args}, kwargs:{retry_state.kwargs}',
+        )
+
+
+def get_last_snapshot_retry_callback(retry_state: tenacity.RetryCallState):
+    """
+    Callback function to handle retry attempts for getting last snapshot.
+
+    Args:
+        retry_state (tenacity.RetryCallState): The current state of the retry attempt.
+
+    Returns:
+        None
+    """
+    if retry_state and retry_state.outcome.failed:
+        project_id = retry_state.args[0] if retry_state.args else 'unknown'
+        logger.warning(
+            f'Get last snapshot attempt {retry_state.attempt_number} failed for project {project_id}: {retry_state.outcome.exception()}',
+        )
+    else:
+        project_id = retry_state.args[0] if retry_state.args else 'unknown'
+        logger.info(
+            f'Get last snapshot attempt {retry_state.attempt_number} succeeded for project {project_id}',
         )
 
 
@@ -317,6 +340,133 @@ class GenericAsyncWorker(multiprocessing.Process):
             ),
         )
 
+    @retry(
+        wait=wait_random_exponential(multiplier=1, max=10),  # Exponential backoff with longer max wait
+        stop=stop_after_attempt(7),  # Increase attempts for higher reliability
+        retry=retry_if_exception_type(Exception),  # Only retry on exceptions
+        after=get_last_snapshot_retry_callback,  # Add retry callback for logging
+        reraise=True,  # Propagate the last exception if all retries fail
+    )
+    async def _get_last_snapshot(self, project_id: str):
+        """
+        Retrieve the most recent snapshot for the given project.
+
+        This method first attempts to fetch the last submitted snapshot data from Redis.
+        If not found, it falls back to retrieving the last finalized snapshot from the blockchain.
+        Returns a tuple of (snapshot_cid, epoch_id, snapshot_data).
+
+        Raises:
+            Exception: If no valid snapshot data can be found for the project.
+        """
+
+        last_submitted_data_raw = await self._redis_conn.get(
+            name=last_submitted_snapshot_raw_data_key(project_id)
+        )
+        if last_submitted_data_raw:
+            try:
+                last_submitted_data = json.loads(last_submitted_data_raw)
+                snapshot_cid = last_submitted_data.get('snapshotCid')
+                epoch_id = last_submitted_data.get('epochId')
+                snapshot_raw = last_submitted_data.get('snapshot')
+                if snapshot_raw:
+                    snapshot = json.loads(snapshot_raw)
+                    if snapshot and epoch_id and snapshot_cid:
+                        logger.debug(f'Found last submitted snapshot data in Redis for project {project_id}: epoch {epoch_id}, cid {snapshot_cid}')
+                        return snapshot_cid, epoch_id, snapshot
+            except (json.JSONDecodeError, KeyError) as e:
+                logger.warning(f'Failed to parse last submitted snapshot raw data for project {project_id}: {e}')
+                # Continue to next fallback method
+
+
+        # Try to get the last submitted snapshot data from Redis
+        last_submitted_data_submitted = await self._redis_conn.get(
+            name=last_submitted_snapshot_data_key(project_id)
+        )
+        if last_submitted_data_submitted:
+            try:
+                last_submitted_data = json.loads(last_submitted_data_submitted)
+                last_snapshot_cid = last_submitted_data.get('snapshotCid')
+                last_epoch_id = last_submitted_data.get('epochId')
+                if not last_snapshot_cid or last_epoch_id is None:
+                    logger.warning(
+                        f"Malformed last submitted snapshot data for project {project_id}: missing cid or epoch_id"
+                    )
+                    # Continue to next fallback method instead of raising
+                else:
+                    logger.debug(
+                        f'Attempting to fetch snapshot data from IPFS for project {project_id}: '
+                        f'epoch {last_epoch_id}, cid {last_snapshot_cid}'
+                    )
+                    last_snapshot = await get_submission_data(
+                        last_snapshot_cid, self._ipfs_reader_client, False
+                    )
+                    if last_snapshot:
+                        logger.debug(
+                            f'Successfully retrieved snapshot data from IPFS for project {project_id}: '
+                            f'epoch {last_epoch_id}'
+                        )
+                        return last_snapshot_cid, last_epoch_id, last_snapshot
+                    else:
+                        logger.warning(
+                            f"Snapshot data for CID {last_snapshot_cid} not found in IPFS for project {project_id}"
+                        )
+                        # Continue to next fallback method instead of raising
+            except (json.JSONDecodeError, KeyError) as e:
+                logger.warning(
+                    f'Failed to parse last submitted snapshot data for project {project_id}: {e}'
+                )
+                # Continue to next fallback method instead of raising
+            except Exception as e:
+                logger.warning(
+                    f'Failed to retrieve last submitted snapshot data for project {project_id}: {e}'
+                )
+                # Continue to next fallback method instead of raising
+
+        # Fallback: fetch last finalized snapshot for the project
+        logger.debug(f'Attempting to fetch last finalized epoch for project {project_id}')
+        last_epoch_id = await get_project_last_finalized_epoch(
+            self._redis_conn,
+            self._protocol_state_contract,
+            self._anchor_rpc_helper,
+            project_id,
+        )
+        if last_epoch_id is None:
+            raise Exception(f"Last finalized epoch not found for project {project_id}")
+
+        logger.debug(
+            f'Attempting to fetch finalized CID for project {project_id}, '
+            f'epoch {last_epoch_id}'
+        )
+        last_snapshot_cid = await get_project_finalized_cid(
+            self._redis_conn,
+            self._protocol_state_contract,
+            self._anchor_rpc_helper,
+            self._ipfs_reader_client,
+            last_epoch_id,
+            project_id,
+        )
+        if not last_snapshot_cid:
+            logger.warning(f'No finalized CID found for project {project_id}, epoch {last_epoch_id}')
+            return None, None, None
+
+        logger.debug(
+            f'Attempting to fetch snapshot data from IPFS for project {project_id}, '
+            f'epoch {last_epoch_id}, cid {last_snapshot_cid}'
+        )
+        last_snapshot = await get_submission_data(
+            last_snapshot_cid, self._ipfs_reader_client, False
+        )
+        if not last_snapshot:
+            raise Exception(
+                f"Snapshot data for finalized CID {last_snapshot_cid} not found in IPFS for project {project_id}"
+            )
+
+        logger.debug(
+            f'Successfully retrieved finalized snapshot data for project {project_id}, '
+            f'epoch {last_epoch_id}'
+        )
+        return last_snapshot_cid, last_epoch_id, last_snapshot
+
     async def _commit_payload(
             self,
             task_type: str,
@@ -349,34 +499,28 @@ class GenericAsyncWorker(multiprocessing.Process):
             project_config = self._aggregator_config_mapping.get(task_type)
         last_snapshot = None
         if project_config and project_config.keep_previous_snapshot_data:
-            # check if snapshot has previousSnapshots field it's a pydantic model
+            # Ensure snapshot has 'previousSnapshots' attribute (Pydantic model)
             if hasattr(snapshot, 'previousSnapshots'):
-                # try to fetch last submitted data from redis
-                last_submitted_data = await self._redis_conn.get(name=last_submitted_snapshot_data_key(project_id))
-                if last_submitted_data:
-                    last_submitted_data = json.loads(last_submitted_data)
-                    last_snapshot_cid = last_submitted_data['snapshotCid']
-                    last_epoch_id = last_submitted_data['epochId']
-                    last_snapshot = await get_submission_data(last_snapshot_cid, self._ipfs_reader_client, False)
-                else:
-                    # fetch last finalized snapshot for the project
-                    last_epoch_id = await get_project_last_finalized_epoch(self._redis_conn, self._protocol_state_contract, self._anchor_rpc_helper, project_id)
-                    if last_epoch_id:
-                        last_snapshot_cid = await get_project_finalized_cid(self._redis_conn, self._protocol_state_contract, self._anchor_rpc_helper, self._ipfs_reader_client, last_epoch_id, project_id)
-                        if last_snapshot_cid:
-                            last_snapshot = await get_submission_data(last_snapshot_cid, self._ipfs_reader_client, False)
-                
+                last_snapshot_cid, last_epoch_id, last_snapshot = await self._get_last_snapshot(project_id)
                 if last_snapshot:
-                    previous_snapshots = last_snapshot.get('previousSnapshots', [])
-                    if previous_snapshots:
-                        if len(previous_snapshots) > 200:
-                            previous_snapshots.pop(0)
-                        # convert previous_snapshots to list of tuples
-                        previous_snapshots = [(int(epoch_id), snapshot_cid) for epoch_id, snapshot_cid in previous_snapshots]
+                    # Initialize previous_snapshots as an empty list
+                    previous_snapshots = []
+                    if last_snapshot:
+                        # Safely extract previousSnapshots from last_snapshot, defaulting to empty list
+                        previous_snapshots = last_snapshot.get('previousSnapshots', [])
+                        # Ensure previous_snapshots is a list of tuples (epoch_id, snapshot_cid)
+                        previous_snapshots = [
+                            (int(epoch_id), snapshot_cid)
+                            for epoch_id, snapshot_cid in previous_snapshots
+                            if isinstance(epoch_id, (int, str)) and isinstance(snapshot_cid, str)
+                        ]
+                        # Enforce a maximum length of 200 for previous_snapshots
+                        if len(previous_snapshots) >= 200:
+                            previous_snapshots = previous_snapshots[1:]
+                    # Only append if last_epoch_id and last_snapshot_cid are not None
+                    if last_epoch_id is not None and last_snapshot_cid is not None:
                         previous_snapshots.append((last_epoch_id, last_snapshot_cid))
-                        snapshot.previousSnapshots = previous_snapshots
-                    else:
-                        snapshot.previousSnapshots = [(last_epoch_id, last_snapshot_cid)]
+                    snapshot.previousSnapshots = previous_snapshots
 
         snapshot_json = json.dumps(snapshot.model_dump(by_alias=True), sort_keys=True, separators=(',', ':'))
         snapshot_bytes = snapshot_json.encode('utf-8')
@@ -405,7 +549,9 @@ class GenericAsyncWorker(multiprocessing.Process):
                     'Exception submitting snapshot to collector for epoch {}: {}, Error: {},'
                     'sending failure notifications', epoch, snapshot, e,
                 )
-                await self._redis_conn.hset(
+                pipeline = self._redis_conn.pipeline()
+
+                pipeline.hset(
                     name=epoch_id_project_to_state_mapping(
                         epoch.epochId, SnapshotterStates.SNAPSHOT_SUBMIT_COLLECTOR.value,
                     ),
@@ -415,9 +561,12 @@ class GenericAsyncWorker(multiprocessing.Process):
                         ).model_dump_json(),
                     },
                 )
+                await pipeline.execute()
                 await self._send_failure_notifications(error=e, epoch_id=epoch.epochId, project_id=project_id)
             else:
-                await self._redis_conn.hset(
+                pipeline = self._redis_conn.pipeline()
+
+                pipeline.hset(
                     name=epoch_id_project_to_state_mapping(
                         epoch.epochId, SnapshotterStates.SNAPSHOT_SUBMIT_COLLECTOR.value,
                     ),
@@ -427,6 +576,15 @@ class GenericAsyncWorker(multiprocessing.Process):
                         ).model_dump_json(),
                     },
                 )
+                pipeline.set(
+                    name=last_submitted_snapshot_raw_data_key(project_id),
+                    value=json.dumps({
+                        'snapshotCid': snapshot_cid,
+                        'epochId': epoch.epochId,
+                        'snapshot': snapshot.model_dump_json(),
+                    }),
+                )
+                await pipeline.execute()
                 return snapshot_cid
 
     async def _init_redis_pool(self):

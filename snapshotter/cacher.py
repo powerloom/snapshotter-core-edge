@@ -429,11 +429,8 @@ class Cacher(multiprocessing.Process):
                                 active_pools[pool_address] -= frequency
                 # set data in redis
                 pipeline = self._redis_conn.pipeline()
-                pipeline.set(f"active_pool_data:{time_interval}:{msg_obj.epochId}:{settings.namespace}", json.dumps(active_pools))
-                pipeline.set(f"active_pool_data:{time_interval}:latest:epoch", msg_obj.epochId)
-                # remove old data
-                if last_indexed_epoch > 0:
-                    pipeline.delete(f"active_pool_data:{time_interval}:{last_indexed_epoch}:{settings.namespace}")
+                pipeline.set(f"active_pool_data:{time_interval}:{msg_obj.epochId}:{settings.namespace}", json.dumps(active_pools), ex=3600)
+                pipeline.set(f"active_pool_data:{time_interval}:latest:epoch", msg_obj.epochId, ex=3600)
                 pipeline.delete(f"active_pool_data:{time_interval}:processing")
                 await pipeline.execute()
 
@@ -501,11 +498,8 @@ class Cacher(multiprocessing.Process):
                                 active_tokens[token_address] -= frequency
                 # set data in redis
                 pipeline = self._redis_conn.pipeline()
-                pipeline.set(f"active_token_data:{time_interval}:{msg_obj.epochId}:{settings.namespace}", json.dumps(active_tokens))
-                pipeline.set(f"active_token_data:{time_interval}:latest:epoch", msg_obj.epochId)
-                # remove old data
-                if last_indexed_epoch > 0:
-                    pipeline.delete(f"active_token_data:{time_interval}:{last_indexed_epoch}:{settings.namespace}")
+                pipeline.set(f"active_token_data:{time_interval}:{msg_obj.epochId}:{settings.namespace}", json.dumps(active_tokens), ex=3600)
+                pipeline.set(f"active_token_data:{time_interval}:latest:epoch", msg_obj.epochId, ex=3600)
                 pipeline.delete(f"active_token_data:{msg_obj.projectId}:{time_interval}:processing")
                 await pipeline.execute()
 

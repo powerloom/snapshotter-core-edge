@@ -3,18 +3,6 @@ import os # For fetching environment variables to compare against
 from web3 import Web3
 from web3.contract.contract import Contract
 
-# Attempt to import the application's main settings object.
-# This is CRUCIAL and might need adjustment based on your project structure.
-try:
-    # Assuming the actual settings instance is named 'settings' within the config module
-    from snapshotter.settings.config import settings as app_config
-    # If your settings are loaded into a Pydantic model via a function,
-    # you might need to call that function here, e.g.:
-    # from snapshotter.settings.config import get_settings
-    # app_config = get_settings()
-except ImportError:
-    app_config = None # Handle case where import fails, tests will then fail explicitly
-
 # Import client classes and data models for type checking and instantiation
 from ipfs_client.settings.data_models import IPFSConfig
 from rpc_helper.utils.models.settings_model import RPCConfigBase
@@ -28,14 +16,14 @@ from redis.asyncio import Redis as AsyncIORedis
 def get_test_env_var(var_name, default=None):
     return os.getenv(var_name, default)
 
-def test_app_settings_loaded_successfully():
+def test_app_settings_loaded_successfully(app_config):
     """Checks if the application's settings object was imported."""
     assert app_config is not None, \
         "Failed to import 'app_config' from 'snapshotter.settings.config'. "\
         "Ensure this path is correct and conftest.py has prepared settings."
     print("\nPASSED: test_app_settings_loaded_successfully")
 
-def test_general_settings_are_correct():
+def test_general_settings_are_correct(app_config):
     """Tests if general settings in app_config match .env.test values."""
     assert app_config is not None, "app_config not loaded."
     
@@ -57,7 +45,7 @@ def test_general_settings_are_correct():
     print(f"  Namespace from app_config: {app_config.namespace}")
     print(f"  Protocol State Contract Address from app_config: {app_config.protocol_state.address}")
 
-def test_rpc_settings_are_correct():
+def test_rpc_settings_are_correct(app_config):
     """Tests if RPC settings in app_config match .env.test values."""
     assert app_config is not None, "app_config not loaded."
     assert hasattr(app_config, 'rpc'), "app_config missing 'rpc' attribute."
@@ -75,7 +63,7 @@ def test_rpc_settings_are_correct():
     print("\nPASSED: test_rpc_settings_are_correct")
     print(f"  RPC Full Node URL from app_config: {app_config.rpc.full_nodes[0].url}")
 
-def test_rpc_helper_instantiation():
+def test_rpc_helper_instantiation(app_config):
     """Tests if RpcHelper can be instantiated with app_config.rpc."""
     assert app_config is not None and hasattr(app_config, 'rpc'), "RPC config not available."
     try:
@@ -85,7 +73,7 @@ def test_rpc_helper_instantiation():
     except Exception as e:
         pytest.fail(f"Failed to instantiate RpcHelper with app_config.rpc: {e}")
 
-def test_anchor_rpc_settings_are_correct():
+def test_anchor_rpc_settings_are_correct(app_config):
     """Tests if Anchor RPC settings in app_config match .env.test values."""
     assert app_config is not None, "app_config not loaded."
     assert hasattr(app_config, 'anchor_chain_rpc'), "app_config missing 'anchor_chain_rpc' attribute."
@@ -99,7 +87,7 @@ def test_anchor_rpc_settings_are_correct():
     print("\nPASSED: test_anchor_rpc_settings_are_correct")
     print(f"  Anchor RPC Full Node URL from app_config: {app_config.anchor_chain_rpc.full_nodes[0].url}")
 
-def test_anchor_rpc_helper_instantiation():
+def test_anchor_rpc_helper_instantiation(app_config):
     """Tests if RpcHelper can be instantiated with app_config.anchor_chain_rpc for Anchor chain."""
     assert app_config is not None and hasattr(app_config, 'anchor_chain_rpc'), "Anchor RPC config not available."
     try:
@@ -109,12 +97,14 @@ def test_anchor_rpc_helper_instantiation():
     except Exception as e:
         pytest.fail(f"Failed to instantiate RpcHelper for anchor chain: {e}")
 
-def test_ipfs_settings_are_correct():
+def test_ipfs_settings_are_correct(app_config):
     """Tests if IPFS settings in app_config match .env.test values."""
     assert app_config is not None, "app_config not loaded."
     assert hasattr(app_config, 'ipfs'), "app_config missing 'ipfs' attribute."
+
+    print(f"app config: {app_config}")
     
-    expected_ipfs_url = get_test_env_var("TEST_IPFS_URL", "/ip4/127.0.0.1/tcp/5001/test_ipfs")
+    expected_ipfs_url = get_test_env_var("TEST_IPFS_URL", "/ip4/127.0.0.1/tcp/5001")
     
     assert isinstance(app_config.ipfs, IPFSConfig) # Assuming app_config.ipfs is an IPFSConfig model
     assert app_config.ipfs.url == expected_ipfs_url
@@ -122,7 +112,7 @@ def test_ipfs_settings_are_correct():
     print("\nPASSED: test_ipfs_settings_are_correct")
     print(f"  IPFS URL from app_config: {app_config.ipfs.url}")
 
-def test_ipfs_client_instantiation():
+def test_ipfs_client_instantiation(app_config):
     """Tests if AsyncIPFSClient can be instantiated with app_config.ipfs."""
     assert app_config is not None and hasattr(app_config, 'ipfs'), "IPFS config not available."
     assert app_config.ipfs.url, "IPFS URL is missing in config for client instantiation."
@@ -138,7 +128,7 @@ def test_ipfs_client_instantiation():
     except Exception as e:
         pytest.fail(f"Failed to instantiate AsyncIPFSClient with app_config.ipfs: {e}")
 
-def test_redis_settings_are_correct():
+def test_redis_settings_are_correct(app_config):
     """Tests if Redis settings in app_config match .env.test values."""
     assert app_config is not None, "app_config not loaded."
     assert hasattr(app_config, 'redis'), "app_config missing 'redis' object."
@@ -158,7 +148,7 @@ def test_redis_settings_are_correct():
     print(f"  Redis Host from app_config.redis_config: {redis_conf.host}, Port: {redis_conf.port}")
 
 @pytest.mark.asyncio
-async def test_redis_connection():
+async def test_redis_connection(app_config):
     """Tests if a Redis connection can be established and pinged using app_config."""
     assert app_config is not None and hasattr(app_config, 'redis'), "Redis config object not available in app_config."
     redis_conf = app_config.redis
@@ -177,7 +167,7 @@ async def test_redis_connection():
     except Exception as e:
         pytest.fail(f"Failed to connect to Redis or PING: {e}")
 
-def test_web3_instance_creation():
+def test_web3_instance_creation(app_config):
     """Tests if a Web3 instance can be created using RPC settings from app_config."""
     assert app_config is not None and hasattr(app_config, 'rpc'), "RPC config not available."
     assert len(app_config.rpc.full_nodes) > 0 and app_config.rpc.full_nodes[0].url, "RPC full_node URL missing."
@@ -190,7 +180,7 @@ def test_web3_instance_creation():
     except Exception as e:
         pytest.fail(f"Failed to create or connect Web3 instance: {e}")
 
-def test_protocol_state_contract_instantiation():
+def test_protocol_state_contract_instantiation(app_config):
     """
     Tests if a Web3 contract instance for ProtocolState can be created
     using address from app_config and a manually specified/loaded ABI.
