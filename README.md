@@ -1,19 +1,8 @@
 ## Table of Contents
 - [Table of Contents](#table-of-contents)
 - [Overview](#overview)
-  - [Architecture](#architecture)
-    - [Core Components](#core-components)
-    - [Enhanced Distributed Architecture](#enhanced-distributed-architecture)
-  - [Peripheral Services](#peripheral-services)
-    - [Block Fetcher Service](#block-fetcher-service)
-    - [Transaction Processor Service](#transaction-processor-service)
-    - [Epoch Syncer Service](#epoch-syncer-service)
-    - [Rate Limiter Service](#rate-limiter-service)
-- [Setup](#setup)
-  - [Quick Start](#quick-start)
-- [Increase IPFS memory limits (for complex use cases)](#increase-ipfs-memory-limits-for-complex-use-cases)
 - [Major Components](#major-components)
-  - [Epoch Syncer Service](#epoch-syncer-service-1)
+  - [Epoch Syncer Service](#epoch-syncer-service)
   - [Processor Distributor](#processor-distributor)
   - [Worker Services](#worker-services)
     - [Snapshot Workers](#snapshot-workers)
@@ -26,11 +15,19 @@
     - [Time Series Data Endpoint](#time-series-data-endpoint)
     - [Authentication API Endpoints](#authentication-api-endpoints)
     - [Uniswap V3 API Endpoints](#uniswap-v3-api-endpoints)
+  - [Periphery Services](#periphery-services)
+    - [Block Fetcher Service](#block-fetcher-service)
+    - [Transaction Processor Service](#transaction-processor-service)
+    - [Epoch Syncer Service](#epoch-syncer-service-1)
+    - [Rate Limiter Service](#rate-limiter-service)
+- [Setup](#setup)
+  - [Quick Start](#quick-start)
+- [Increase IPFS memory limits (for complex use cases)](#increase-ipfs-memory-limits-for-complex-use-cases)
 - [Development setup and instructions](#development-setup-and-instructions)
   - [Configuration](#configuration)
     - [3. Environment Variables](#3-environment-variables)
     - [4. Automatic Service Generation](#4-automatic-service-generation)
-  - [Peripheral Services Configuration](#peripheral-services-configuration)
+  - [Periphery Services Configuration](#periphery-services-configuration)
     - [Block Fetcher Service Configuration](#block-fetcher-service-configuration)
     - [Transaction Processor Service Configuration](#transaction-processor-service-configuration)
     - [Epoch Syncer Service Configuration](#epoch-syncer-service-configuration)
@@ -52,367 +49,24 @@
   - [Test-Specific Environment Variables](#test-specific-environment-variables)
   - [Running the Configuration Loading Test](#running-the-configuration-loading-test)
   - [Troubleshooting](#troubleshooting)
-    - [Debugging Tips](#debugging-tips)
   - [API Documentation](#api-documentation)
-- [Compute Module Development](#compute-module-development)
-  - [Creating Custom Compute Modules](#creating-custom-compute-modules)
-    - [Module Structure](#module-structure)
-    - [Base Compute Module Template](#base-compute-module-template)
-    - [Aggregation Module Template](#aggregation-module-template)
-    - [Configuration](#configuration-1)
-    - [Best Practices](#best-practices)
-    - [Using RPC Helper](#using-rpc-helper)
-- [Case Studies](#case-studies)
-  - [1. Uniswap V3 Data Snapshotting: A Case Study](#1-uniswap-v3-data-snapshotting-a-case-study)
-    - [Extending the Uniswap V3 Implementation](#extending-the-uniswap-v3-implementation)
-      - [Step 1: Review Base Snapshot Logic for Trade Information](#step-1-review-base-snapshot-logic-for-trade-information)
-      - [Step 2: Review an Aggregation (e.g., All Trades)](#step-2-review-an-aggregation-eg-all-trades)
-      - [Step 3: Exercise: Create a New 24-Hour Top Pools Aggregate](#step-3-exercise-create-a-new-24-hour-top-pools-aggregate)
 - [Find us](#find-us)
 
 ## Overview
 
-A snapshotter peer as part of Powerloom Protocol does exactly what the name suggests: It synchronizes with other snapshotter peers over a smart contract running on Powerloom Prost chain. It follows an architecture that is driven by state transitions which makes it easy to understand and modify.
+Snapshotter Core Edge is the next iteration of Snapshotter Core ([Pooler](https://github.com/PowerLoom/snapshotter-core)) repository. 
 
-Because of its decentralized nature, the snapshotter specification and its implementations share some powerful features that can adapt to your specific information requirements on blockchain applications:
-
-* Each data point is calculated, updated, and synchronized with other snapshotter peers participating in the network
-* synchronization of data points is defined as a function of an epoch ID(identifier) where epoch refers to an equally spaced collection of blocks on the data source blockchain (for eg, Ethereum Mainnet/Polygon Mainnet/Polygon Testnet -- Mumbai). This simplifies the building of use cases that are stateful (i.e. can be accessed according to their state at a given height of the data source chain), synchronized, and depend on reliable data. For example,
-    * dashboards by offering higher-order aggregate datapoints
-    * trading strategies and bots
-* a snapshotter peer can load past epochs, indexes, and aggregates from a decentralized state and have access to a rich history of data
-    * all the datasets are decentralized on IPFS/Filecoin
-    * the power of these decentralized storage networks can be leveraged fully by applying the [principle of composability](#aggregation-and-data-composition---snapshot-generation-of-higher-order-datapoints-on-base-snapshots)
-
-**Key Architecture Changes:**
+**Key Architecture Improvements:**
 * **Message Queue**: The system now uses Redis with Dramatiq instead of RabbitMQ for improved performance and simplified deployment
-* **Modular Services**: Peripheral services (Block Fetcher, Transaction Processor, Epoch Syncer) are now separate components that work together
+* **Modular Services**: New Periphery services (Block Fetcher, Transaction Processor, Epoch Syncer) are introduced and are separate components that work together to provide efficient blockchain data processing.
 * **Dynamic Worker Generation**: Worker services are automatically generated based on your project and aggregator configurations
-* **Streamlined Directory Structure**: Compute modules are now in `/computes/` and configurations in `/config/`
+* **Streamlined Directory Structure**: Compute modules linked to [snapshotter-computes](https://github.com/PowerLoom/snapshotter-computes/) and configurations in [snapshotter-configs](https://github.com/PowerLoom/snapshotter-configs/) live in `/computes` and `/config` respectively
 
-### Architecture
-
-The Snapshotter Peer is thoughtfully designed with a modular and highly configurable architecture, allowing for easy customization and seamless integration. The system now features an enhanced distributed architecture with specialized peripheral services that handle specific aspects of blockchain data processing.
-
-#### Core Components
-
-1. **Main Snapshotter Codebase**:
-   - This foundational component defines all the essential interfaces and handles a wide range of tasks, from listening to epoch release events to distributing tasks and managing snapshot submissions.
-   - Uses Redis with Dramatiq for efficient message passing between components
-   - Implements multiple specialized workers: Processor Distributor, Snapshot Workers, Aggregation Workers, and Cacher
-
-2. **Configuration Files**:
-   - Configuration files are now located in the `/config` directory within the main repository
-   - Key configuration files include:
-     - `projects.json`: Defines base snapshot computation tasks
-     - `aggregator.json`: Specifies aggregation tasks over base snapshots
-     - `preloader.json`: Configures data preloading tasks
-     - `settings.json`: Main system configuration
-     - `auth_settings.json`: Authentication configuration
-
-3. **Compute Modules**:
-   - The computation logic now resides in the `/computes` directory within the main repository
-   - Includes modules for:
-     - Base snapshots (pair_total_reserves.py, trades.py, etc.)
-     - Aggregations (in `/aggregates/` subdirectory)
-     - Preloaders (in `/preloaders/` subdirectory)
-   - Each module implements specific computation logic for different project types
-
-#### Enhanced Distributed Architecture
-
-The Snapshotter has evolved into a distributed system with specialized services and workers that communicate through Redis with Dramatiq:
-
-```
-┌─────────────────────────────────────────────────────────────────────────┐
-│                         Snapshotter Core Architecture                     │
-├─────────────────────────────────────────────────────────────────────────┤
-│                                                                          │
-│  ┌──────────────┐    ┌──────────────┐    ┌──────────────┐             │
-│  │   Protocol   │    │    Epoch     │    │  Processor   │             │
-│  │    State     │───▶│   Syncer     │───▶│ Distributor  │             │
-│  │   Contract   │    │   Service    │    │              │             │
-│  └──────────────┘    └──────────────┘    └──────────────┘             │
-│         │                    │                    │                      │
-│         │                    ▼                    ▼                      │
-│         │           ┌──────────────┐    ┌──────────────┐               │
-│         │           │    Block     │    │     TX       │               │
-│         │           │   Fetcher    │    │  Processor   │               │
-│         │           │   Service    │    │   Service    │               │
-│         │           └──────────────┘    └──────────────┘               │
-│         │                    │                    │                      │
-│         │                    ▼                    ▼                      │
-│         │           ┌────────────────────────────────┐                  │
-│         │           │    Redis Cache & Message Queue │                  │
-│         │           │ (Blocks, TXs, Dramatiq Queues)│                  │
-│         │           └────────────────────────────────┘                  │
-│         │                           │                                    │
-│         │                           ▼                                    │
-│         │           ┌────────────────────────────────┐                  │
-│         │           │      Worker Services           │                  │
-│         │           │  ┌─────────┐ ┌─────────┐      │                  │
-│         │           │  │Snapshot │ │Aggregate│      │                  │
-│         │           │  │Workers  │ │Workers  │      │                  │
-│         │           │  └─────────┘ └─────────┘      │                  │
-│         │           │       ┌──────────┐            │                  │
-│         │           │       │  Cacher  │            │                  │
-│         │           │       └──────────┘            │                  │
-│         │           └────────────────────────────────┘                  │
-│         │                           │                                    │
-│         ▼                           ▼                                    │
-│  ┌──────────────┐         ┌──────────────┐                            │
-│  │   Core API   │         │   Snapshot   │                            │
-│  │   Service    │         │  Submission  │                            │
-│  └──────────────┘         └──────────────┘                            │
-│                                                                          │
-└─────────────────────────────────────────────────────────────────────────┘
-
-                    ┌──────────────────┐
-                    │   Rate Limiter   │
-                    │     Service      │
-                    └──────────────────┘
-                            │
-                            ▼
-                    (All RPC Requests)
-```
-
-**Message Flow Architecture:**
-- **Redis + Dramatiq**: Replaced RabbitMQ with Redis-backed Dramatiq for simpler, more efficient message passing
-- **Event-Driven Processing**: Events flow from Protocol State → Epoch Syncer → Processor Distributor → Workers
-- **Dynamic Worker Pools**: Multiple instances of each worker type can be spawned based on configuration
-
-The architecture has been designed to facilitate the seamless interchange of configuration and modules. The compute modules and configurations are now part of the main repository, making it easier to manage and deploy. The system automatically generates worker services based on your project and aggregator configurations.
-
-**Key Architectural Components:**
-
-1. **Processor Distributor**: Central coordinator that receives events and distributes work to appropriate workers
-2. **Snapshot Workers**: Process base snapshot tasks defined in `projects.json`
-3. **Aggregation Workers**: Handle aggregation tasks defined in `aggregator.json`
-4. **Cacher**: Manages snapshot data caching and state updates
-5. **Peripheral Services**: Block Fetcher, TX Processor, and Epoch Syncer handle blockchain data ingestion
-
-### Peripheral Services
-
-The Snapshotter ecosystem now includes several specialized peripheral services that handle specific aspects of blockchain data processing. These services work together to provide efficient, scalable, and reliable data collection and processing.
-
-#### Block Fetcher Service
-
-The Block Fetcher Service (`snapshotter-periphery-blockfetcher`) is responsible for continuously fetching blockchain blocks and caching them in Redis for downstream processing.
-
-**Key Features:**
-- **Continuous Block Monitoring**: Tracks the latest blocks on the source blockchain
-- **Efficient Caching**: Stores complete block data in Redis for quick access
-- **Configurable Polling**: Adjustable polling intervals for different network conditions
-- **Test Mode**: Special mode for development and testing with single block processing
-- **Graceful Shutdown**: Handles shutdown signals properly to ensure data consistency
-
-**Architecture:**
-```
-┌─────────────────┐     ┌─────────────────┐     ┌─────────────────┐
-│  Blockchain RPC │◄────┤  Block Fetcher  │────▶│  Redis Cache    │
-│                 │     │    Service      │     │                 │
-└─────────────────┘     └─────────────────┘     └─────────────────┘
-```
-
-**Local Testing:**
-```bash
-cd snapshotter-periphery-blockfetcher
-docker-compose --profile local up --build
-```
-
-#### Transaction Processor Service
-
-The Transaction Processor Service (`snapshotter-periphery-txprocessor`) processes transactions from cached blocks and extracts relevant information for snapshot generation.
-
-**Key Features:**
-- **Transaction Receipt Processing**: Fetches and caches detailed transaction receipts
-- **Event Log Extraction**: Extracts and indexes event logs from transactions
-- **Redis-based Queue System**: Consumes processing tasks from Redis queues
-- **Parallel Processing**: Handles multiple transactions concurrently for efficiency
-- **Comprehensive Logging**: Detailed logging for monitoring and debugging
-
-**Architecture:**
-```
-┌─────────────────┐     ┌─────────────────┐     ┌─────────────────┐
-│  Redis Queue    │────▶│  TX Processor   │────▶│  Redis Cache    │
-│  (Block Data)   │     │    Service      │     │  (TX Receipts)  │
-└─────────────────┘     └─────────────────┘     └─────────────────┘
-                                │
-                                ▼
-                        ┌─────────────────┐
-                        │  Blockchain RPC │
-                        └─────────────────┘
-```
-
-#### Epoch Syncer Service
-
-The Epoch Syncer Service (`snapshotter-periphery-epochsyncer`) monitors blockchain events and ensures data availability before triggering snapshot generation.
-
-**Key Features:**
-- **Dual Chain Monitoring**: Monitors both source chain blocks and protocol state events
-- **Cache Verification**: Ensures both block and transaction data are cached before processing
-- **Event Detection**: Detects `DayStartedEvent` and `SnapshotBatchSubmitted` events
-- **Dramatiq Integration**: Uses Dramatiq for reliable message queue processing
-- **Adaptive Polling**: Automatically adjusts polling intervals based on throughput
-- **Complete Cache Validation**: Verifies both block and transaction cache completeness
-
-**Architecture:**
-```
-┌─────────────────┐     ┌─────────────────┐     ┌─────────────────┐
-│                 │     │                 │     │                 │
-│  Blockchain RPC │◄────┤  EpochSyncer    │◄────┤  Rate Limiter   │
-│                 │     │                 │     │                 │
-└─────────────────┘     └────────┬────────┘     └─────────────────┘
-                                 │
-                                 ▼
-┌─────────────────┐     ┌─────────────────┐     
-│                 │     │                 │     
-│  Redis Cache    │◄────┤  Cache Checker  │     
-│                 │     │  (Background)   │     
-└─────────────────┘     └────────┬────────┘     
-                                 │
-                                 ▼
-                        ┌─────────────────┐
-                        │                 │
-                        │  Dramatiq       │
-                        │  Workers        │
-                        │                 │
-                        └─────────────────┘
-```
-
-**Key Components:**
-1. **Source Chain Block Detection**: Monitors source blockchain for new blocks
-2. **Protocol Event Detection**: Monitors protocol state contract for epoch events
-3. **Cache Completeness Verification**: Ensures all required data is cached
-4. **Message Queue Integration**: Sends messages to downstream workers via Dramatiq
-
-#### Rate Limiter Service
-
-The Rate Limiter Service (`rate-limiter`) provides centralized rate limiting for all RPC calls across the Snapshotter ecosystem.
-
-**Key Features:**
-- **Multiple Rate Limits**: Configure different rate limits for different keys
-- **Statistics Tracking**: Track hourly and daily usage for each key
-- **In-Memory Storage**: Fast, efficient rate limit checking
-- **RESTful API**: Simple HTTP API for rate limit management
-- **Health Monitoring**: Built-in health check endpoint
-
-**API Endpoints:**
-
-| Endpoint | Method | Description |
-|----------|---------|-------------|
-| `/check/{key}` | GET | Check if a key is within its rate limit |
-| `/configure` | POST | Configure a custom rate limit for a key |
-| `/stats/{key}` | GET | Get usage statistics for a key |
-| `/health` | GET | Health check endpoint |
-
-**Rate Limit Format:**
-```
-{number}/{unit}
-```
-Where:
-- `number`: A positive integer
-- `unit`: One of "second", "minute", "hour", "day"
-
-Examples: `10/second`, `100/minute`, `1000/hour`, `5000/day`
-
-**Usage Example:**
-```bash
-# Check rate limit
-curl http://localhost:8000/check/my-api-key
-
-# Configure custom rate limit
-curl -X POST http://localhost:8000/configure \
-  -H "Content-Type: application/json" \
-  -d '{"key": "my-api-key", "limit": "100/minute"}'
-
-# Get statistics
-curl http://localhost:8000/stats/my-api-key
-```
-
-## Setup
-
-The snapshotter is a distributed system with multiple moving parts. The easiest way to get started is by using the Docker-based setup.
-
-### Quick Start
-
-1. **Clone the repository**:
-   ```bash
-   git clone https://github.com/PowerLoom/snapshotter-core-edge.git
-   cd snapshotter-core-edge
-   ```
-
-2. **Run the bootstrap script** to set up peripheral services:
-   ```bash
-   ./bootstrap.sh
-   ```
-
-3. **Configure your environment**:
-   ```bash
-   cp env.example .env
-   # Edit .env with your settings
-   ```
-
-4. **Build and run**:
-   ```bash
-   ./build.sh
-   ```
-
-The `bootstrap.sh` script automatically:
-- Sets up all peripheral services (Block Fetcher, TX Processor, Epoch Syncer)
-- Configures Redis and IPFS
-- Generates the docker-compose.yaml with all required services
-- Creates worker services based on your project configuration
-
-**Note** - RPC usage is highly use-case specific. If your use case is complicated and needs to make a lot of RPC calls, it is recommended to run your own RPC node instead of using third-party RPC services as it can be expensive.
-
-
-## Increase IPFS memory limits (for complex use cases)
-
-If you want to increase the memory limits for IPFS, you can do so by running the following commands, this will reset on system restart though:
-
-```bash
-sudo sysctl -w net.core.rmem_max=8388608
-sudo sysctl -w net.core.wmem_max=8388608
-sudo sysctl -w net.ipv4.udp_mem='8388608 8388608 8388608'
-sudo sysctl -w net.core.netdev_max_backlog=5000
-sudo sysctl -w net.ipv4.tcp_rmem='4096 87380 8388608'
-sudo sysctl -w net.ipv4.tcp_wmem='4096 87380 8388608'
-```
-
-To make these changes permanent, add or modify the following lines in /etc/sysctl.conf:
-
-```
-net.core.rmem_max=8388608
-net.core.wmem_max=8388608
-net.ipv4.udp_mem=8388608 8388608 8388608
-net.core.netdev_max_backlog=5000
-net.ipv4.tcp_rmem=4096 87380 8388608
-net.ipv4.tcp_wmem=4096 87380 8388608
-```
-
-Apply the changes with:
-
-```bash
-sudo sysctl -p
-```
-
-Restart the docker service
-
-```bash
-sudo systemctl restart docker
-```
-
-Finally, bring up your Docker Compose stack again:
-
-```bash
-./clean_stop.sh
-./build.sh
-```
 ## Major Components
 
 ### Epoch Syncer Service
 
-The Epoch Syncer service (peripheral service) replaces the previous System Event Detector and provides enhanced functionality:
+The Epoch Syncer service (Periphery service) replaces the previous System Event Detector and provides enhanced functionality:
 - Monitors both source chain blocks and protocol state events
 - Verifies data availability in Redis cache before triggering snapshot generation
 - Ensures all required blocks, transactions, and receipts are cached
@@ -430,11 +84,11 @@ The Processor Distributor, defined in [`processor_distributor.py`](snapshotter/p
   - Preloader configuration in `config/preloader.json`
   - Project configuration in `config/projects.json`
   - Aggregator configuration in `config/aggregator.json`
-* For [`EpochReleased` events](#epoch-generation):
+* For `EpochReleased` events:
   - Executes preloaders if configured to prepare data
   - Distributes work to snapshot workers for each project type
   - Each project type has its own dedicated worker pool
-* For [`ProcessingComplete` events](#base-snapshot-generation):
+* For `ProcessingComplete` events:
   - Triggers aggregation workers to process completed base snapshots
   - Routes messages based on aggregation dependencies
 
@@ -549,6 +203,224 @@ The Uniswap V3 compute modules expose a rich set of endpoints for accessing deta
 | `/dailyActivePools` | GET | Get a paginated list of daily active pools with frequencies. |
 
 
+
+### Periphery Services
+
+The Snapshotter includes several specialized Periphery services that handle specific aspects of blockchain data processing. These services work together to provide efficient, scalable, and reliable data collection and processing.
+
+#### Block Fetcher Service
+
+The Block Fetcher Service (`snapshotter-periphery-blockfetcher`)[https://github.com/powerloom/snapshotter-periphery-blockfetcher/] is responsible for continuously fetching blockchain blocks and caching them in Redis for downstream processing.
+
+**Key Features:**
+- **Continuous Block Monitoring**: Tracks the latest blocks on the source blockchain
+- **Efficient Caching**: Stores complete block data in Redis for quick access
+- **Configurable Polling**: Adjustable polling intervals for different network conditions
+- **Test Mode**: Special mode for development and testing with single block processing
+- **Graceful Shutdown**: Handles shutdown signals properly to ensure data consistency
+
+**Architecture:**
+```
+┌─────────────────┐     ┌─────────────────┐     ┌─────────────────┐
+│  Blockchain RPC │◄────┤  Block Fetcher  │────▶│  Redis Cache    │
+│                 │     │    Service      │     │                 │
+└─────────────────┘     └─────────────────┘     └─────────────────┘
+```
+
+**Local Testing:**
+```bash
+cd snapshotter-periphery-blockfetcher
+docker-compose --profile local up --build
+```
+
+#### Transaction Processor Service
+
+The Transaction Processor Service (`snapshotter-periphery-txprocessor`)[https://github.com/powerloom/snapshotter-periphery-txprocessor/] processes transactions from cached blocks and extracts relevant information for snapshot generation.
+
+**Key Features:**
+- **Transaction Receipt Processing**: Fetches and caches detailed transaction receipts
+- **Event Log Extraction**: Extracts and indexes event logs from transactions
+- **Redis-based Queue System**: Consumes processing tasks from Redis queues
+- **Parallel Processing**: Handles multiple transactions concurrently for efficiency
+- **Comprehensive Logging**: Detailed logging for monitoring and debugging
+
+**Architecture:**
+```
+┌─────────────────┐     ┌─────────────────┐     ┌─────────────────┐
+│  Redis Queue    │────▶│  TX Processor   │────▶│  Redis Cache    │
+│  (Block Data)   │     │    Service      │     │  (TX Receipts)  │
+└─────────────────┘     └─────────────────┘     └─────────────────┘
+                                │
+                                ▼
+                        ┌─────────────────┐
+                        │  Blockchain RPC │
+                        └─────────────────┘
+```
+
+#### Epoch Syncer Service
+
+The Epoch Syncer Service (`snapshotter-periphery-epochsyncer`)[https://github.com/powerloom/snapshotter-periphery-epochsyncer/] monitors blockchain events and ensures data availability before triggering snapshot generation.
+
+**Key Features:**
+- **Dual Chain Monitoring**: Monitors both source chain blocks and protocol state events
+- **Cache Verification**: Ensures both block and transaction data are cached before processing
+- **Event Detection**: Detects `DayStartedEvent` and `SnapshotBatchSubmitted` events
+- **Dramatiq Integration**: Uses Dramatiq for reliable message queue processing
+- **Adaptive Polling**: Automatically adjusts polling intervals based on throughput
+- **Complete Cache Validation**: Verifies both block and transaction cache completeness
+
+**Architecture:**
+```
+┌─────────────────┐     ┌─────────────────┐     ┌─────────────────┐
+│                 │     │                 │     │                 │
+│  Blockchain RPC │◄────┤  EpochSyncer    │◄────┤  Rate Limiter   │
+│                 │     │                 │     │                 │
+└─────────────────┘     └────────┬────────┘     └─────────────────┘
+                                 │
+                                 ▼
+┌─────────────────┐     ┌─────────────────┐     
+│                 │     │                 │     
+│  Redis Cache    │◄────┤  Cache Checker  │     
+│                 │     │  (Background)   │     
+└─────────────────┘     └────────┬────────┘     
+                                 │
+                                 ▼
+                        ┌─────────────────┐
+                        │                 │
+                        │  Dramatiq       │
+                        │  Workers        │
+                        │                 │
+                        └─────────────────┘
+```
+
+**Key Components:**
+1. **Source Chain Block Detection**: Monitors source blockchain for new blocks
+2. **Protocol Event Detection**: Monitors protocol state contract for epoch events
+3. **Cache Completeness Verification**: Ensures all required data is cached
+4. **Message Queue Integration**: Sends messages to downstream workers via Dramatiq
+
+#### Rate Limiter Service
+
+The Rate Limiter Service (`rate-limiter`)[https://github.com/powerloom/rate-limiter/] provides centralized rate limiting for all RPC calls across the Snapshotter ecosystem.
+
+**Key Features:**
+- **Multiple Rate Limits**: Configure different rate limits for different keys
+- **Statistics Tracking**: Track hourly and daily usage for each key
+- **In-Memory Storage**: Fast, efficient rate limit checking
+- **RESTful API**: Simple HTTP API for rate limit management
+- **Health Monitoring**: Built-in health check endpoint
+
+**API Endpoints:**
+
+| Endpoint | Method | Description |
+|----------|---------|-------------|
+| `/check/{key}` | GET | Check if a key is within its rate limit |
+| `/configure` | POST | Configure a custom rate limit for a key |
+| `/stats/{key}` | GET | Get usage statistics for a key |
+| `/health` | GET | Health check endpoint |
+
+**Rate Limit Format:**
+```
+{number}/{unit}
+```
+Where:
+- `number`: A positive integer
+- `unit`: One of "second", "minute", "hour", "day"
+
+Examples: `10/second`, `100/minute`, `1000/hour`, `5000/day`
+
+**Usage Example:**
+```bash
+# Check rate limit
+curl http://localhost:8000/check/my-api-key
+
+# Configure custom rate limit
+curl -X POST http://localhost:8000/configure \
+  -H "Content-Type: application/json" \
+  -d '{"key": "my-api-key", "limit": "100/minute"}'
+
+# Get statistics
+curl http://localhost:8000/stats/my-api-key
+```
+
+## Setup
+
+The snapshotter is a distributed system with multiple moving parts. The easiest way to get started is by using the Docker-based setup.
+
+### Quick Start
+
+1. **Clone the repository**:
+   ```bash
+   git clone https://github.com/PowerLoom/snapshotter-core-edge.git
+   cd snapshotter-core-edge
+   ```
+2. **Configure your environment**:
+   ```bash
+   cp env.example .env
+   # Edit .env with your settings
+   ```
+
+3. **Run the bootstrap script** to set up Periphery services:
+   ```bash
+   ./bootstrap.sh
+   ```
+
+4. **Build and run**:
+   ```bash
+   ./build.sh
+   ```
+
+The `bootstrap.sh` script automatically:
+- Sets up all Periphery services (Block Fetcher, TX Processor, Epoch Syncer)
+- Configures Redis and IPFS
+- Generates the docker-compose.yaml with all required services
+- Creates worker services based on your project configuration
+
+**Note** - RPC usage is highly use-case specific. If your use case is complicated and needs to make a lot of RPC calls, it is recommended to run your own RPC node instead of using third-party RPC services as it can be expensive.
+
+
+## Increase IPFS memory limits (for complex use cases)
+
+If you want to increase the memory limits for IPFS, you can do so by running the following commands, this will reset on system restart though:
+
+```bash
+sudo sysctl -w net.core.rmem_max=8388608
+sudo sysctl -w net.core.wmem_max=8388608
+sudo sysctl -w net.ipv4.udp_mem='8388608 8388608 8388608'
+sudo sysctl -w net.core.netdev_max_backlog=5000
+sudo sysctl -w net.ipv4.tcp_rmem='4096 87380 8388608'
+sudo sysctl -w net.ipv4.tcp_wmem='4096 87380 8388608'
+```
+
+To make these changes permanent, add or modify the following lines in /etc/sysctl.conf:
+
+```
+net.core.rmem_max=8388608
+net.core.wmem_max=8388608
+net.ipv4.udp_mem=8388608 8388608 8388608
+net.core.netdev_max_backlog=5000
+net.ipv4.tcp_rmem=4096 87380 8388608
+net.ipv4.tcp_wmem=4096 87380 8388608
+```
+
+Apply the changes with:
+
+```bash
+sudo sysctl -p
+```
+
+Restart the docker service
+
+```bash
+sudo systemctl restart docker
+```
+
+Finally, bring up your Docker Compose stack again:
+
+```bash
+./clean_stop.sh
+./build.sh
+```
 ## Development setup and instructions
 ### Configuration
 The snapshotter needs the following config files to be present:
@@ -606,11 +478,11 @@ When you run `./build.sh`, it:
 For example, if you have project types `trade_volume` and `pair_reserves`, the build script will create:
 - `snapshotter-worker-trade-volume` service
 - `snapshotter-worker-pair-reserves` service
-- Plus all the peripheral services (block fetcher, tx processor, epoch syncer)
+- Plus all the Periphery services (block fetcher, tx processor, epoch syncer)
 
-### Peripheral Services Configuration
+### Periphery Services Configuration
 
-The new distributed architecture requires configuration for each peripheral service. These services work together to provide efficient blockchain data processing.
+The new distributed architecture requires configuration for each Periphery service. These services work together to provide efficient blockchain data processing.
 
 #### Block Fetcher Service Configuration
 
@@ -692,7 +564,7 @@ PORT=8000
 
 #### Docker Compose Configuration
 
-For local development, each peripheral service includes a Docker Compose configuration. To run services locally:
+For local development, each Periphery service includes a Docker Compose configuration. To run services locally:
 
 ```bash
 # Block Fetcher
@@ -715,7 +587,7 @@ docker run -p 8000:8000 rate-limiter
 
 #### Integration with Core Snapshotter
 
-The peripheral services integrate with the core snapshotter through:
+The Periphery services integrate with the core snapshotter through:
 
 1. **Shared Redis Cache**: All services use the same Redis instance for data sharing
 2. **Message Queues**: Services communicate through Redis-based queues and Dramatiq
@@ -982,27 +854,6 @@ A dedicated test suite verifies that the test configuration mechanism (driven by
     *   The `conftest.py` automatically adds the project root to `sys.path`. If module import issues persist, verify the `PROJECT_ROOT` definition in `tests/shared_fixtures/conftest.py` correctly points to your project's top-level directory.
 *   **Errors during config file population/restoration**: The print statements from `pytest_sessionstart` and `pytest_sessionfinish` in `conftest.py` should provide details on which file operations are failing. Check file permissions and paths.
 
-#### Debugging Tips
-
-1. **Check Service Dependencies**:
-```bash
-   # Verify all services are running
-   docker ps
-   
-   # Check service logs
-   docker logs <container_name> --tail 100 -f
-   ```
-
-2. **Verify Data Flow**:
-   - Check Redis for cached blocks: `redis-cli keys "block:*"`
-   - Verify transaction data: `redis-cli keys "tx:*"`
-   - Monitor epoch events: Check Epoch Syncer logs
-
-3. **Common Issues**:
-   - **Cache Misses**: Ensure Block Fetcher is running and catching up
-   - **Rate Limiting**: Check Rate Limiter stats and adjust limits
-   - **Message Queue Backlog**: Monitor Dramatiq queue sizes
-   - **RPC Errors**: Verify RPC endpoints and rate limits
 
 ### API Documentation
 
@@ -1020,315 +871,11 @@ This interface allows you to:
 
 ![Snapshotter API SwaggerUI](snapshotter/static/docs/assets/SnapshotterSwaggerUI.png)
 
-## Compute Module Development
-
-### Creating Custom Compute Modules
-
-Compute modules are the core of the snapshotter's data processing capabilities. They define how data is extracted, transformed, and aggregated from blockchain sources.
-
-#### Module Structure
-
-All compute modules should be placed in the `/computes` directory with the following structure:
-
-```
-computes/
-├── __init__.py
-├── your_base_module.py          # Base snapshot modules
-├── aggregates/
-│   ├── __init__.py
-│   └── your_aggregate_module.py # Aggregation modules
-└── preloaders/
-    ├── __init__.py
-    └── your_preloader_module.py # Preloader modules
-```
-
-#### Base Compute Module Template
-
-Create a new file in `/computes/your_module.py`:
-
-```python
-from typing import List, Tuple
-from redis.asyncio import Redis as AIORedis
-from rpc_helper.rpc import RpcHelper
-from ipfs_client.main import AsyncIPFSClient
-
-from snapshotter.utils.callback_helpers import GenericProcessorSnapshot
-from snapshotter.utils.models.message_models import SnapshotProcessMessage
-# Import your Pydantic model for the snapshot
-from computes.utils.models.message_models import UniswapBaseSnapshot 
-
-class YourCompute(GenericProcessorSnapshot):
-    def __init__(self) -> None:
-        super().__init__()
-        # Optional: Initialize a logger
-        # from snapshotter.utils.default_logger import logger
-        # self._logger = logger.bind(module="YourCompute")
-        
-    async def compute(
-        self,
-        epoch: SnapshotProcessMessage,
-        redis_conn: AIORedis,
-        rpc_helper: RpcHelper,
-        anchor_rpc_helper: RpcHelper,
-        ipfs_reader: AsyncIPFSClient,
-        protocol_state_contract,
-        task_type: str,
-    ) -> List[Tuple[str, UniswapBaseSnapshot]]:
-        """
-        Main computation logic for your snapshot.
-        
-        Args:
-            epoch: Contains epoch_id, begin, end block numbers.
-            redis_conn: Async Redis connection for caching.
-            rpc_helper: Helper for source chain RPC calls.
-            anchor_rpc_helper: Helper for anchor chain RPC calls.
-            ipfs_reader: Async IPFS client.
-            protocol_state_contract: Protocol state contract instance.
-            task_type: Task type string for project ID generation.
-            
-        Returns:
-            A list of tuples, where each tuple contains:
-            - A project ID string.
-            - A Pydantic model instance representing the snapshot data.
-        """
-        min_block = epoch.begin
-        max_block = epoch.end
-        
-        # Your computation logic here to generate snapshot data
-        # For example, for a pool-specific snapshot:
-        pool_address = "0x..." # This would typically come from the task or config
-        project_id = task_type.format(poolAddress=pool_address, Namespace=settings.namespace)
-
-        # snapshot_data = ... your logic to build the snapshot object ...
-        
-        # Example with a placeholder:
-        from computes.utils.models.message_models import EpochBaseSnapshot
-        snapshot_data = UniswapBaseSnapshot(
-            address=pool_address,
-            epoch=EpochBaseSnapshot(begin=min_block, end=max_block),
-            # ... fill in all other required fields ...
-            timestamps={},
-            token0="0x...",
-            token1="0x...",
-            token0Reserves={},
-            token1Reserves={},
-            token0ReservesUSD={},
-            token1ReservesUSD={},
-            token0Prices={},
-            token1Prices={},
-            token0PricesUSD={},
-            token1PricesUSD={},
-            totalTrade=0.0,
-            totalFee=0.0,
-            token0TradeVolume=0.0,
-            token1TradeVolume=0.0,
-            token0TradeVolumeUSD=0.0,
-            token1TradeVolumeUSD=0.0,
-        )
-
-        return [(project_id, snapshot_data)]
-```
-
-#### Aggregation Module Template
-
-Create aggregation modules in `/computes/aggregates/your_aggregator.py`:
-
-```python
-from typing import List, Tuple
-from ipfs_client.main import AsyncIPFSClient
-from redis.asyncio import Redis as AIORedis
-from rpc_helper.rpc import RpcHelper
-
-from snapshotter.utils.callback_helpers import GenericProcessorSnapshot
-from snapshotter.utils.models.message_models import CalculateAggregateMessage
-from snapshotter.utils.data_utils import get_submission_data_bulk
-# Import your Pydantic models
-from computes.utils.models.message_models import AllUniswapTradesSnapshot, UniswapTradesSnapshot, EpochBaseSnapshot
-from snapshotter.settings.config import settings
-
-class YourAggregator(GenericProcessorSnapshot):
-    def __init__(self) -> None:
-        super().__init__()
-        
-    async def compute(
-        self,
-        msg_obj: CalculateAggregateMessage,
-        redis_conn: AIORedis,
-        rpc_helper: RpcHelper,
-        anchor_rpc_helper: RpcHelper,
-        ipfs_reader: AsyncIPFSClient,
-        protocol_state_contract,
-        task_type: str,
-    ) -> List[Tuple[str, AllUniswapTradesSnapshot]]:
-        """
-        Aggregation logic over base snapshots.
-        
-        Args:
-            msg_obj: Message containing base snapshots to aggregate.
-            
-        Returns:
-            A list of tuples, where each tuple contains:
-            - An aggregate project ID string.
-            - A Pydantic model instance for the aggregated snapshot.
-        """
-        # Example: Aggregating all trade snapshots for an epoch
-        aggregate_project_id = task_type.format(Namespace=settings.namespace)
-        
-        # Fetch all base snapshot data from IPFS using CIDs from the message
-        all_cids = [cid for _, cid in msg_obj.processed_message.payload]
-        all_snapshot_data = await get_submission_data_bulk(
-            redis_conn, all_cids, ipfs_reader, None, ensure_complete=True,
-        )
-
-        # Create the aggregate snapshot object
-        aggregated_snapshot = AllUniswapTradesSnapshot(
-            epoch=EpochBaseSnapshot(begin=msg_obj.begin, end=msg_obj.end),
-            tradeData={},
-            previousSnapshots=[]
-        )
-
-        # Process each base snapshot and add it to the aggregate
-        all_project_ids = [project_id for project_id, _ in msg_obj.processed_message.payload]
-        for project_id, snapshot_data in zip(all_project_ids, all_snapshot_data):
-            base_snapshot = UniswapTradesSnapshot(**snapshot_data)
-            pool_address = project_id.split(":")[1]
-            aggregated_snapshot.tradeData[pool_address] = base_snapshot
-            
-        return [(aggregate_project_id, aggregated_snapshot)]
-```
-
-#### Configuration
-
-1. **Register in projects.json**:
-```json
-{
-  "your_project_type": {
-    "module": "computes.your_module",
-    "class_name": "YourCompute"
-  }
-}
-```
-
-2. **Register aggregator in aggregator.json**:
-```json
-{
-  "your_aggregator": {
-    "module": "computes.aggregates.your_aggregator",
-    "class_name": "YourAggregator",
-    "dependencies": ["your_project_type"]
-  }
-}
-```
-
-3. **Run build.sh** to generate worker services:
-```bash
-./build.sh
-```
-
-This will automatically create worker services for your compute modules.
-
-#### Best Practices
-
-1. **Use Type Hints**: Always use proper type annotations
-2. **Error Handling**: Implement robust error handling for RPC failures
-3. **Caching**: Utilize Redis for caching frequently accessed data
-4. **Logging**: Use appropriate logging levels for debugging
-5. **Testing**: Write unit tests for your compute logic
-6. **Performance**: Batch RPC calls when possible
-7. **Data Models**: Use Pydantic models for structured output
-
-#### Using RPC Helper
-
-The RPC Helper provides utilities for blockchain interactions:
-
-```python
-# Get block data
-block = await rpc_helper.get_block(block_number)
-
-# Get transaction receipts
-receipts = await rpc_helper.get_transaction_receipts(tx_hashes)
-
-# Call contract methods
-result = await rpc_helper.call_contract_method(
-    contract_address,
-    abi,
-    method_name,
-    *args
-)
-```
-
-## Case Studies
-
-### 1. Uniswap V3 Data Snapshotting: A Case Study
-
-This implementation of a Snapshotter peer is tailored for Uniswap V3, providing rich, aggregated data points that can power a comprehensive Uniswap V3 dashboard. It demonstrates how to capture and compose data for key metrics like:
-
-- **Total Value Locked (TVL)**
-- **Trade Volume, Liquidity Reserves, and Fees**
-  - Grouped by individual liquidity pools (pair contracts)
-  - Aggregated over various time frames (e.g., 24 hours, 7 days)
-- **Token Prices** including ETH price feeds.
-- **Active Pools and Tokens**
-- **Transactions** containing `Swap`, `Mint`, and `Burn` events.
-
-#### Extending the Uniswap V3 Implementation
-
-This section explores how to build upon the base snapshots to create new, higher-order data points.
-
-##### Step 1: Review Base Snapshot Logic for Trade Information
-
-- **Required Reading**:
-  - [Base Snapshot Generation](#base-snapshot-generation)
-  - [Configuration (`config/projects.json`)](#configuration)
-  - [Aggregation and Data Composition](#aggregation-and-data-composition---snapshot-generation-of-higher-order-data-points-on-base-snapshots)
-
-As seen in `config/projects.example.json`, each project configuration specifies:
-- `project_name`: A unique identifier for the snapshot task (e.g., `baseSnapshot:{poolAddress}:{Namespace}`).
-- `processor`: The compute module responsible for the logic. For example, `computes.pair_total_reserves` with class `PairTotalReservesProcessor`.
-
-The core logic resides in the `compute` function of the processor class (e.g., `TradesProcessor` in `computes/trades.py`), which implements the `GenericProcessorSnapshot` interface.
-
-Key concepts for writing extraction logic:
-- **`compute` function**: The entry point for snapshot logic, receiving `epoch`, `redis_conn`, `rpc_helper`, etc.
-- **Output Models**: It's best practice to use Pydantic models (like `UniswapBaseSnapshot` from `computes/utils/models/message_models.py`) to structure the output data. This model captures state information like reserves, prices, and trade volumes within an epoch's block range.
-
-##### Step 2: Review an Aggregation (e.g., All Trades)
-
-The `config/aggregator.example.json` defines how to aggregate base snapshots. For instance, the `allTradesSnapshot` aggregates data from `tradesSnapshot:{poolAddress}:{Namespace}`.
-
-- The `AllTradesProcessor` in `computes/aggregates/all_trades.py` is triggered after the base trade snapshots are finalized.
-- It fetches the data for all individual pool trade snapshots from IPFS.
-- It then combines them into a single `AllUniswapTradesSnapshot`, which contains a dictionary mapping each pool address to its trade data for that epoch.
-
-This demonstrates the power of data composition, where granular base snapshots are rolled up into comprehensive, aggregated views.
-
-##### Step 3: Exercise: Create a New 24-Hour Top Pools Aggregate
-
-As an exercise, you can create a new aggregator that identifies the top 5 pools by trading volume over the last 24 hours.
-
-1.  **Add a new entry to `config/aggregator.json`**:
-    - Define a new `project_name` like `top_pools_24h_volume:{Namespace}`.
-    - Set its dependency to `allTradesSnapshot:{Namespace}`.
-    - Point the `processor` to a new module you'll create, e.g., `computes.aggregates.top_pools_by_volume`.
-
-2.  **Create the new aggregator module**:
-    - Create `computes/aggregates/top_pools_by_volume.py`.
-    - Implement a processor class that inherits from `GenericProcessorSnapshot`.
-    - In the `compute` method:
-        - It will receive the `AllUniswapTradesSnapshot` data.
-        - Iterate through the `tradeData` dictionary.
-        - For each pool, you'll need to aggregate its volume over the last 24 hours. This will involve fetching previous `allTradesSnapshot` CIDs for past epochs that fall within the 24-hour window. You can use `get_tail_epoch_id` and `get_project_epoch_snapshot_bulk` utilities for this.
-        - Sum up the `totalTrade` from each snapshot for each pool.
-        - Sort the pools by their 24-hour volume and take the top 5.
-        - Define a Pydantic model for the output and return the snapshot.
-
-This exercise showcases how you can build increasingly sophisticated data points by composing and aggregating existing snapshots.
-
 
 ## Find us
 
 * [Discord](https://powerloom.io/discord)
-* [Twitter](https://twitter.com/PowerLoomHQ)
+* [Twitter](https://twitter.com/powerloom)
 * [Github](https://github.com/PowerLoom)
 * [Careers](https://wellfound.com/company/powerloom/jobs)
 * [Blog](https://blog.powerloom.io/)
