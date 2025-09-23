@@ -24,6 +24,7 @@ class RedisBitmap:
     # Production safety limits
     DEFAULT_MAX_RANGE_SIZE = 1024 * 1024 * 10  # 10MB maximum range
     DEFAULT_MAX_BATCH_SIZE = 1000000  # 1M bits maximum per batch
+    DEFAULT_MAX_EPOCHS_TO_KEEP = 100000  # 100K epochs maximum to keep
     
     def __init__(
         self, 
@@ -484,6 +485,179 @@ class RedisBitmap:
             self.logger.error(f"Failed to count bits: {e}")
             raise RedisBitmapError(f"Failed to count bits: {e}") from e
 
+    async def cleanup_old_bits(
+        self,
+        redis_conn: aioredis.Redis,
+        key: str,
+        current_epoch_id: int,
+        max_epochs_to_keep: int = None
+    ) -> int:
+        """
+        Automatically cleanup bits older than the specified number of epochs to keep.
+
+        This method efficiently removes old epoch bits to prevent unbounded growth of the bitmap.
+        It calculates the cutoff epoch based on current_epoch_id and max_epochs_to_keep, then
+        clears all bits representing epochs older than the cutoff.
+
+        Args:
+            redis_conn (aioredis.Redis): Redis connection instance
+            key (str): Redis key of the bitmap to clean up
+            current_epoch_id (int): The current epoch ID for reference
+            max_epochs_to_keep (int, optional): Maximum number of epochs to keep.
+                                               Defaults to DEFAULT_MAX_EPOCHS_TO_KEEP
+
+        Returns:
+            int: Number of bytes cleared from the bitmap
+
+        Raises:
+            TypeError: If parameters have wrong types
+            ValueError: If epoch parameters are invalid
+            RedisBitmapError: If Redis operation fails
+            RedisConnectionError: If connection fails
+        """
+        self._validate_connection(redis_conn)
+        self._validate_key(key)
+
+        if not isinstance(current_epoch_id, int):
+            raise TypeError("current_epoch_id must be an integer")
+
+        if max_epochs_to_keep is None:
+            max_epochs_to_keep = self.DEFAULT_MAX_EPOCHS_TO_KEEP
+
+        if not isinstance(max_epochs_to_keep, int) or max_epochs_to_keep <= 0:
+            raise ValueError("max_epochs_to_keep must be a positive integer")
+
+        if current_epoch_id - self.epoch_offset < 0:
+            raise ValueError(f"current_epoch_id {current_epoch_id} must be >= epoch_offset {self.epoch_offset}")
+
+        try:
+            # Calculate the cutoff epoch - epochs older than this will be cleared
+            cutoff_epoch_id = current_epoch_id - max_epochs_to_keep
+
+            # If cutoff is before our epoch_offset, nothing to clean
+            if cutoff_epoch_id <= self.epoch_offset:
+                self.logger.debug(
+                    f"No cleanup needed: cutoff_epoch_id {cutoff_epoch_id} <= epoch_offset {self.epoch_offset}"
+                )
+                return 0
+
+            # Calculate bit positions for cleanup
+            cutoff_bit_position = cutoff_epoch_id - self.epoch_offset
+            
+            if cutoff_bit_position <= 0:
+                self.logger.debug("No bits to clean up")
+                return 0
+
+            # Get current bitmap size to avoid clearing beyond existing data
+            current_size = await redis_conn.strlen(key)
+            if current_size == 0:
+                self.logger.debug(f"Bitmap key '{key}' is empty, nothing to clean")
+                return 0
+
+            # Calculate how many complete bytes we can safely clear
+            complete_bytes_to_clear = cutoff_bit_position // 8
+            remaining_bits_in_partial_byte = cutoff_bit_position % 8
+            
+            bytes_affected = 0
+            
+            # Clear complete bytes if any
+            if complete_bytes_to_clear > 0:
+                bytes_to_clear = min(complete_bytes_to_clear, current_size)
+                if bytes_to_clear > 0:
+                    self.logger.info(
+                        f"Cleaning up bitmap '{key}': clearing {bytes_to_clear} complete bytes "
+                        f"(epochs {self.epoch_offset} to {self.epoch_offset + (bytes_to_clear * 8) - 1})"
+                    )
+                    
+                    # Clear complete bytes with zeros
+                    zero_bytes = b'\x00' * bytes_to_clear
+                    await redis_conn.setrange(key, 0, zero_bytes)
+                    bytes_affected += bytes_to_clear
+            
+            # Handle partial byte if there are remaining bits to clear
+            if remaining_bits_in_partial_byte > 0 and complete_bytes_to_clear < current_size:
+                byte_position = complete_bytes_to_clear
+                
+                # Read the current byte
+                current_byte_data = await redis_conn.getrange(key, byte_position, byte_position)
+                if current_byte_data and len(current_byte_data) > 0:
+                    current_byte = current_byte_data[0]
+                    
+                    # Create mask to clear only the old bits in this byte
+                    # remaining_bits_in_partial_byte tells us how many bits to clear (from MSB)
+                    mask = (0xFF >> remaining_bits_in_partial_byte)  # Keep the rightmost bits
+                    new_byte = current_byte & mask
+                    
+                    # Write back the modified byte
+                    await redis_conn.setrange(key, byte_position, bytes([new_byte]))
+                    
+                    if new_byte != current_byte:
+                        bytes_affected += 1
+                        self.logger.info(
+                            f"Cleaned partial byte at position {byte_position}: "
+                            f"cleared {remaining_bits_in_partial_byte} bits "
+                            f"(epochs {self.epoch_offset + complete_bytes_to_clear * 8} to {cutoff_epoch_id - 1})"
+                        )
+
+            # If we cleared the entire bitmap, we might want to delete the key entirely
+            # to free up memory, but we'll leave it as zeros to maintain the data structure
+
+            self.logger.info(f"Successfully cleaned up {bytes_affected} bytes from bitmap '{key}'")
+            return bytes_affected
+
+        except ConnectionError as e:
+            self.logger.error(f"Redis connection failed while cleaning up old bits: {e}")
+            raise RedisConnectionError(f"Connection failed: {e}") from e
+        except RedisError as e:
+            self.logger.error(f"Failed to cleanup old bits: {e}")
+            raise RedisBitmapError(f"Failed to cleanup old bits: {e}") from e
+
+    async def set_bit_with_auto_cleanup(
+        self,
+        redis_conn: aioredis.Redis,
+        key: str,
+        epoch_id: int,
+        max_epochs_to_keep: int = None
+    ) -> bool:
+        """
+        Set a bit and automatically cleanup old bits if needed.
+
+        This convenience method combines setting a bit with automatic cleanup of old data.
+        It first sets the bit for the given epoch_id, then performs cleanup of epochs
+        older than max_epochs_to_keep based on the current epoch_id.
+
+        Args:
+            redis_conn (aioredis.Redis): Redis connection
+            key (str): Redis key for the bitmap
+            epoch_id (int): Non-negative integer representing the bit position
+            max_epochs_to_keep (int, optional): Maximum epochs to keep.
+                                               Defaults to DEFAULT_MAX_EPOCHS_TO_KEEP
+
+        Returns:
+            bool: True if the bit was newly set, False if it was already set
+
+        Raises:
+            TypeError: If parameters have wrong types
+            ValueError: If epoch_id is invalid
+            RedisBitmapError: If the Redis operation fails
+            RedisConnectionError: If connection fails
+        """
+        # Set the bit first
+        bit_was_set = await self.set_bit(redis_conn, key, epoch_id)
+
+        # Perform cleanup using the current epoch_id as reference
+        try:
+            bytes_cleaned = await self.cleanup_old_bits(
+                redis_conn, key, epoch_id, max_epochs_to_keep
+            )
+            if bytes_cleaned > 0:
+                self.logger.info(f"Auto-cleanup removed {bytes_cleaned} bytes of old data")
+        except Exception as e:
+            # Log cleanup errors but don't fail the set operation
+            self.logger.warning(f"Auto-cleanup failed: {e}")
+
+        return bit_was_set
+
 
 class RedisBitmapError(Exception):
     """
@@ -503,4 +677,3 @@ class RedisConnectionError(RedisBitmapError):
     connection timeouts, authentication failures, or network problems.
     """
     pass
-
