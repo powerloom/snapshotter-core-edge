@@ -422,9 +422,7 @@ async def w3_get_and_cache_finalized_cid(
 
                 blank_epochs = sorted(list(all_previous_snapshot_keys))
                 await redis_bitmap.set_bits_in_range(redis_conn, blank_epochs_bitmap_key, blank_epochs)
-                # cleanup every 100 epochs
-                if epoch_id % 100 == 0:
-                    await redis_bitmap.cleanup_old_bits(redis_conn, blank_epochs_bitmap_key, epoch_id)
+                await redis_bitmap.cleanup_old_bits(redis_conn, blank_epochs_bitmap_key, epoch_id)
             if expiry_keys:
                 expiry_data = {key: expiry_time for key in expiry_keys}
                 pipeline.zadd(
@@ -448,8 +446,7 @@ async def w3_get_and_cache_finalized_cid(
     else:
         logger.info(f'Setting blank epoch {epoch_id} in bitmap for project {project_id}')
         await redis_bitmap.set_bit(redis_conn, blank_epochs_bitmap_key, epoch_id)
-        if epoch_id % 100 == 0:
-            await redis_bitmap.cleanup_old_bits(redis_conn, blank_epochs_bitmap_key, epoch_id)
+        await redis_bitmap.cleanup_old_bits(redis_conn, blank_epochs_bitmap_key, epoch_id)
         await pipeline.execute()
         return null_cid, epoch_id
 
@@ -701,8 +698,7 @@ async def w3_get_and_cache_finalized_cid_bulk(
                 blank_epochs_bitmap_key,
                 blank_epochs,
             )
-            if max(epoch_ids) % 100 == 0:
-                await redis_bitmap.cleanup_old_bits(redis_conn, blank_epochs_bitmap_key, max(epoch_ids))
+            await redis_bitmap.cleanup_old_bits(redis_conn, blank_epochs_bitmap_key, max(epoch_ids))
 
         # Add to expiry tracking sorted set with TTL
         if expiry_keys:
@@ -1613,8 +1609,7 @@ async def process_snapshot_cid(redis_conn: aioredis.Redis, ipfs_reader: AsyncIPF
 
                 epochs_to_set = sorted(list(all_previous_snapshot_keys))
                 await redis_bitmap.set_bits_in_range(redis_conn, blank_epochs_bitmap_key, epochs_to_set)
-                if epoch_id % 100 == 0:
-                    await redis_bitmap.cleanup_old_bits(redis_conn, blank_epochs_bitmap_key, epoch_id)
+                await redis_bitmap.cleanup_old_bits(redis_conn, blank_epochs_bitmap_key, epoch_id)
 
                 if len(snapshot_data["previousSnapshots"]) > 0:
                     first_prev_epoch_id = snapshot_data["previousSnapshots"][0][0]
