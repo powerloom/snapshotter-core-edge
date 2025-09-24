@@ -19,7 +19,7 @@ RUN poetry install --no-root
 # Copy the rest of the application's files
 COPY . .
 
-RUN git clone https://github.com/powerloom/snapshotter-computes /computes
+RUN git clone --branch bds_eth_uniswapv3_core --single-branch --depth 1 https://github.com/powerloom/snapshotter-computes /computes
 
 # Make the shell scripts executable
 RUN chmod +x ./snapshotter_autofill.sh ./init_processes.sh ./bootstrap.sh
