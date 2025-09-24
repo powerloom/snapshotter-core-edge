@@ -39,8 +39,10 @@ jobs:
           ECR_REPOSITORY: snapshotter-core-edge
           IMAGE_TAG: latest
         run: |
+          SHORT_SHA=$(git rev-parse --short HEAD)
           docker buildx build \
             --platform linux/amd64,linux/arm64 \
             --push \
             -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG \
+            -t $ECR_REGISTRY/$ECR_REPOSITORY:$SHORT_SHA \
             .
