@@ -790,7 +790,7 @@ class GenericAsyncWorker(multiprocessing.Process):
         Initializes the gRPC channel and stub for communication with the collector.
         """
         self._grpc_channel = Channel(
-            host='host.docker.internal',
+            host='snapshotter-local-collector',
             port=settings.local_collector_port,
             ssl=False,
         )
