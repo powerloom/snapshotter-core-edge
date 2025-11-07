@@ -56,6 +56,11 @@ x-snapshotter-base: &snapshotter-base
     retries: 3
     start_period: 60s # Give container time to start and report first health status
   restart: unless-stopped
+  logging:
+    driver: "json-file"
+    options:
+      max-size: ${DOCKER_LOG_MAX_SIZE:-50m}
+      max-file: ${DOCKER_LOG_MAX_FILES:-3}
   ulimits:
       nofile:
         soft: 1000000
@@ -75,6 +80,11 @@ services:
       - DEFAULT_RATE_LIMIT=${DEFAULT_RATE_LIMIT:-1000}
     command: poetry run uvicorn app:app --host 0.0.0.0 --port 8000
     restart: unless-stopped
+    logging:
+      driver: "json-file"
+      options:
+        max-size: ${DOCKER_LOG_MAX_SIZE:-50m}
+        max-file: ${DOCKER_LOG_MAX_FILES:-3}
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 30s
@@ -115,6 +125,11 @@ services:
       - DATA_MARKET_IN_REQUEST=${DATA_MARKET_IN_REQUEST:-false}
       - CONNECTION_REFRESH_INTERVAL_SEC=${CONNECTION_REFRESH_INTERVAL_SEC:-300}
     restart: on-failure:10
+    logging:
+      driver: "json-file"
+      options:
+        max-size: ${DOCKER_LOG_MAX_SIZE:-50m}
+        max-file: ${DOCKER_LOG_MAX_FILES:-3}
     # Increase file descriptors limit for better performance
     ulimits:
       nofile:
@@ -221,6 +236,11 @@ services:
       # Volume path relative to the docker-compose file location
       - ./logs/snapshotter-periphery-blockfetcher:/app/logs
     restart: unless-stopped
+    logging:
+      driver: "json-file"
+      options:
+        max-size: ${DOCKER_LOG_MAX_SIZE:-50m}
+        max-file: ${DOCKER_LOG_MAX_FILES:-3}
     profiles: ["new"]
   tx_processor:
     # Build context pointing to the parent directory and then txprocessor
@@ -255,6 +275,11 @@ services:
       - ./computes:/app/computes:ro
       - ./logs/snapshotter-periphery-txprocessor:/app/logs
     restart: unless-stopped
+    logging:
+      driver: "json-file"
+      options:
+        max-size: ${DOCKER_LOG_MAX_SIZE:-50m}
+        max-file: ${DOCKER_LOG_MAX_FILES:-3}
     ulimits:
       nofile:
         soft: 1000000
@@ -302,6 +327,11 @@ services:
     volumes:
       - ./logs/snapshotter-periphery-epochsyncer:/app/logs
     restart: unless-stopped
+    logging:
+      driver: "json-file"
+      options:
+        max-size: ${DOCKER_LOG_MAX_SIZE:-50m}
+        max-file: ${DOCKER_LOG_MAX_FILES:-3}
   # IPFS Service with improved configuration
   ipfs:
     image: ipfs/kubo:master-latest
@@ -330,6 +360,11 @@ services:
       timeout: 10s
       retries: 3
     restart: unless-stopped
+    logging:
+      driver: "json-file"
+      options:
+        max-size: ${DOCKER_LOG_MAX_SIZE:-50m}
+        max-file: ${DOCKER_LOG_MAX_FILES:-3}
     ulimits:
       nofile:
         soft: 1000000
@@ -357,6 +392,11 @@ services:
       retries: 3
       start_period: 30s
     restart: on-failure
+    logging:
+      driver: "json-file"
+      options:
+        max-size: ${DOCKER_LOG_MAX_SIZE:-50m}
+        max-file: ${DOCKER_LOG_MAX_FILES:-3}
     volumes:
       - ./redis-data:/data
     # Add optional password and memory configurations
