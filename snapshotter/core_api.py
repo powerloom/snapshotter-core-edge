@@ -576,7 +576,31 @@ async def get_previous_epoch_info(
     """
     Get previous epoch info for a given epoch_id.
     """
-    # fetch from Redis for now 
+    # onchain logic
+    project_id = f'activePools:{settings.namespace}'
+
+    snapshot_response = await get_project_epoch_snapshot(
+        request.app.state.redis_conn,
+        request.app.state.protocol_state_contract,
+        request.app.state.anchor_rpc_helper,
+        request.app.state.ipfs_reader_client,
+        epoch_id,
+        project_id,
+        seek=False,
+        cleanup_previous_snapshots=True,
+    )
+
+    if snapshot_response.exact_match:
+        data = {
+            'snapshot_cid': snapshot_response.exact_match.snapshot_cid,
+            'epoch_id': snapshot_response.exact_match.epoch_id,
+            'pools': snapshot_response.exact_match.data['pools'],
+        }
+        return data
+    return None
+    # cache logic.
+    # TODO: fill up CID from cached set appropriate for active pools
+        # fetch from Redis for now 
     key = f"active_pools_per_block:{epoch_id}:{settings.namespace}"
     active_pools = {}
     # Retrieve all pools and their activity scores for this block
@@ -605,28 +629,6 @@ async def get_previous_epoch_info(
         'pools': active_pools.keys() if active_pools else [],
     }
 
-    # onchain logic. To be first fixed to generate activePools:{dataSource}:{namespace} formatted projectID
-    project_id = f'activePools:{settings.namespace}'
-
-    snapshot_response = await get_project_epoch_snapshot(
-        request.app.state.redis_conn,
-        request.app.state.protocol_state_contract,
-        request.app.state.anchor_rpc_helper,
-        request.app.state.ipfs_reader_client,
-        epoch_id,
-        project_id,
-        seek=False,
-        cleanup_previous_snapshots=True,
-    )
-
-    if snapshot_response.exact_match:
-        data = {
-            'snapshot_cid': snapshot_response.exact_match.snapshot_cid,
-            'epoch_id': snapshot_response.exact_match.epoch_id,
-            'pools': snapshot_response.exact_match.data['pools'],
-        }
-        return data
-    return None
 
 @app.get('/previous_snapshots_data/{pool_address}/{epoch_id}')
 async def get_previous_snapshots_data(
