@@ -4,6 +4,7 @@ This module contains the core API endpoints for the Snapshotter service.
 It includes functionality for health checks, epoch information retrieval,
 project data fetching, and task status checking.
 """
+import asyncio
 from fastapi import FastAPI
 from fastapi import Request
 from fastapi import Response
@@ -575,13 +576,18 @@ async def get_previous_epoch_info(
     """
     Get previous epoch info for a given epoch_id.
     """
-    project_id = f'activePools:{settings.namespace}'
     # fetch from Redis for now 
     key = f"active_pools_per_block:{epoch_id}:{settings.namespace}"
     active_pools = {}
     # Retrieve all pools and their activity scores for this block
     block_active_pools = await request.app.state.redis_conn.zrange(key, 0, -1, withscores=True)
-    
+    # retry 2 times if no data is found with 500ms delay between retries
+    for i in range(2):
+        rest_logger.info(f"Retrying to get active pools for epoch {epoch_id}, attempt {i+1}")
+        if block_active_pools:
+            break
+        await asyncio.sleep(0.5)
+        block_active_pools = await request.app.state.redis_conn.zrange(key, 0, -1, withscores=True)
     # Process each pool's activity data
     for pool_address, score in block_active_pools:
         # Decode and normalize pool address
@@ -598,6 +604,9 @@ async def get_previous_epoch_info(
         'epoch_id': epoch_id,
         'pools': active_pools.keys() if active_pools else [],
     }
+
+    # onchain logic. To be first fixed to generate activePools:{dataSource}:{namespace} formatted projectID
+    project_id = f'activePools:{settings.namespace}'
 
     snapshot_response = await get_project_epoch_snapshot(
         request.app.state.redis_conn,
