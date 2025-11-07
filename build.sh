@@ -192,15 +192,19 @@ else
     export SNAPSHOTTER_IMAGE="ghcr.io/powerloom/snapshotter-core:${IMAGE_TAG}"
 fi
 
-# check if python is installed
-if ! command -v python &> /dev/null; then
-    echo "python could not be found, please install it"
+# check if python3 is installed (python3 is preferred, fallback to python)
+if command -v python3 &> /dev/null; then
+    PYTHON_CMD="python3"
+elif command -v python &> /dev/null; then
+    PYTHON_CMD="python"
+else
+    echo "python3 or python could not be found, please install it"
     exit 1
 fi
 
 # generate the docker-compose.yaml file
 echo "Generating docker-compose.yaml file..."
-python scripts/generate_docker_compose.py
+$PYTHON_CMD scripts/generate_docker_compose.py
 
 PROFILES=""
 [ "$IPFS_URL" = "/dns/ipfs/tcp/5001" ] && PROFILES="$PROFILES --profile ipfs"
