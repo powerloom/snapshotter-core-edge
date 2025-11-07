@@ -1,17 +1,9 @@
 #!/bin/bash
 source .env
 
-rm -rf ipfs-data
+# rm -rf ipfs-data # why?
 rm -rf ipfs-export
-rm -rf redis_data
-
-# cleanup logs
-rm -rf logs
-mkdir logs
-cd logs
-mkdir snapshotter
-mkdir local-collector
-cd ..
+# rm -rf redis_data # no
 
 rm -rf snapshotter-periphery-blockfetcher
 rm -rf snapshotter-periphery-txprocessor
