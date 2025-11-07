@@ -550,7 +550,7 @@ async def get_latest_epoch_info(
     response: Response,
 ):
 
-    project_id = f'activePools:{settings.namespace}'
+    project_id = f'activePools:{settings.data_market}:{settings.namespace}'
 
     last_submitted_snapshot_data_raw = await request.app.state.redis_conn.get(last_submitted_snapshot_raw_data_key(project_id))
     if last_submitted_snapshot_data_raw:
@@ -577,7 +577,7 @@ async def get_previous_epoch_info(
     Get previous epoch info for a given epoch_id.
     """
     # onchain logic
-    project_id = f'activePools:{settings.namespace}'
+    project_id = f'activePools:{settings.data_market}:{settings.namespace}'
 
     snapshot_response = await get_project_epoch_snapshot(
         request.app.state.redis_conn,
