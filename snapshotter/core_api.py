@@ -576,6 +576,28 @@ async def get_previous_epoch_info(
     Get previous epoch info for a given epoch_id.
     """
     project_id = f'activePools:{settings.namespace}'
+    # fetch from Redis for now 
+    key = f"active_pools_per_block:{epoch_id}:{settings.namespace}"
+    active_pools = {}
+    # Retrieve all pools and their activity scores for this block
+    block_active_pools = await request.app.state.redis_conn.zrange(key, 0, -1, withscores=True)
+    
+    # Process each pool's activity data
+    for pool_address, score in block_active_pools:
+        # Decode and normalize pool address
+        pool_address = pool_address.decode('utf-8')
+        pool_address = Web3.to_checksum_address(pool_address)
+        
+        # Accumulate activity score for this pool
+        if pool_address not in active_pools:
+            active_pools[pool_address] = 0
+        active_pools[pool_address] += int(score)
+  
+    return {
+        'snapshot_cid': 'dummyCid',
+        'epoch_id': epoch_id,
+        'pools': active_pools.keys() if active_pools else [],
+    }
 
     snapshot_response = await get_project_epoch_snapshot(
         request.app.state.redis_conn,
