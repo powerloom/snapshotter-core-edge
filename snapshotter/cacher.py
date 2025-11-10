@@ -401,36 +401,51 @@ class Cacher(multiprocessing.Process):
         if last_indexed_epoch > tail_epoch_id:
             epochs_to_correct = msg_obj.epochId - last_indexed_epoch
             # fetch indexed data
-            self._logger.info(f"Correcting indexed data for epochs {last_indexed_epoch} to {msg_obj.epochId} for time interval {time_interval}")
+            self._logger.info(f"Correcting indexed data for epochs {last_indexed_epoch} to {msg_obj.epochId} for time interval {time_interval}, epochs_to_correct: {epochs_to_correct}")
             active_pools = await self._redis_conn.get(f"active_pool_data:{time_interval}:{last_indexed_epoch}:{settings.namespace}")
             if active_pools:
                 active_pools = json.loads(active_pools)
-                # fetch snapshots for epochs_to_correct
-                self._logger.info(f"Fetching new snapshots for epochs {last_indexed_epoch} to {last_indexed_epoch + epochs_to_correct}")
-                new_snapshots = await get_project_epoch_snapshot_bulk(
-                    self._redis_conn, self._protocol_state_contract, self._anchor_rpc_helper, self._ipfs_reader_client, last_indexed_epoch + 1, msg_obj.epochId, project_id,
-                )
-                old_snapshots = await get_project_epoch_snapshot_bulk(
-                    self._redis_conn, self._protocol_state_contract, self._anchor_rpc_helper, self._ipfs_reader_client, tail_epoch_id - epochs_to_correct, tail_epoch_id - 1, project_id,
-                )
+                # Only fetch snapshots if epochs_to_correct > 0
+                if epochs_to_correct > 0:
+                    # fetch snapshots for epochs_to_correct
+                    self._logger.info(f"Fetching new snapshots for epochs {last_indexed_epoch + 1} to {msg_obj.epochId}")
+                    new_snapshots = await get_project_epoch_snapshot_bulk(
+                        self._redis_conn, self._protocol_state_contract, self._anchor_rpc_helper, self._ipfs_reader_client, last_indexed_epoch + 1, msg_obj.epochId, project_id,
+                    )
+                    old_snapshots = await get_project_epoch_snapshot_bulk(
+                        self._redis_conn, self._protocol_state_contract, self._anchor_rpc_helper, self._ipfs_reader_client, tail_epoch_id - epochs_to_correct, tail_epoch_id - 1, project_id,
+                    )
+                    
+                    # add new snapshots to indexed data
+                    for snapshot in new_snapshots:
+                        if snapshot:
+                            for pool_address, frequency in snapshot['pools'].items():
+                                if pool_address not in active_pools:
+                                    active_pools[pool_address] = 0
+                                active_pools[pool_address] += frequency
+                    # remove old snapshots from indexed data
+                    for snapshot in old_snapshots:
+                        if snapshot:
+                            for pool_address, frequency in snapshot['pools'].items():
+                                if pool_address in active_pools:
+                                    active_pools[pool_address] -= frequency
+                                    # Remove pools with zero or negative frequency
+                                    if active_pools[pool_address] <= 0:
+                                        del active_pools[pool_address]
+                else:
+                    # epochs_to_correct == 0, use cached data as-is
+                    self._logger.info(f"No epochs to correct (epochs_to_correct={epochs_to_correct}), using cached data directly")
                 
-                # add new snapshots to indexed data
-                for snapshot in new_snapshots:
-                    if snapshot:
-                        for pool_address, frequency in snapshot['pools'].items():
-                            if pool_address not in active_pools:
-                                active_pools[pool_address] = 0
-                            active_pools[pool_address] += frequency
-                # remove old snapshots from indexed data
-                for snapshot in old_snapshots:
-                    if snapshot:
-                        for pool_address, frequency in snapshot['pools'].items():
-                            if pool_address in active_pools:
-                                active_pools[pool_address] -= frequency
                 # set data in redis
                 pipeline = self._redis_conn.pipeline()
                 pipeline.set(f"active_pool_data:{time_interval}:{msg_obj.epochId}:{settings.namespace}", json.dumps(active_pools), ex=3600)
                 pipeline.set(f"active_pool_data:{time_interval}:latest:epoch", msg_obj.epochId, ex=3600)
+                pipeline.delete(f"active_pool_data:{time_interval}:processing")
+                await pipeline.execute()
+            else:
+                # No cached data found, need to fetch all snapshots from scratch
+                self._logger.warning(f"No cached data found for epoch {last_indexed_epoch}, cannot process incremental update")
+                pipeline = self._redis_conn.pipeline()
                 pipeline.delete(f"active_pool_data:{time_interval}:processing")
                 await pipeline.execute()
 
