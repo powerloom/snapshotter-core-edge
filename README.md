@@ -458,11 +458,88 @@ The system uses specialized workers for different tasks, all communicating throu
 - **Implementation**: [`snapshotter/utils/aggregation_worker.py`](snapshotter/utils/aggregation_worker.py)
 
 #### Cacher Worker
-- **Purpose**: Manage snapshot data caching and state updates
-- **Events Handled**: `SnapshotSubmitted`, `SnapshotFinalized`, `SnapshotBatchSubmitted`
-- **Queue**: Listen on: `f'powerloom-cacher_{settings.namespace}_{settings.instance_id}'`
-- **Functionality**: Maintains project data in Redis with TTL management
-- **Implementation**: [`snapshotter/cacher.py`](snapshotter/cacher.py)
+
+The Cacher is a critical component that manages snapshot data caching, state updates, and maintains aggregated data structures for efficient API access. It operates asynchronously in an event-driven manner, processing snapshot lifecycle events and maintaining Redis caches.
+
+**Purpose:**
+- Process snapshot lifecycle events (`SnapshotSubmitted`, `SnapshotFinalized`, `SnapshotBatchSubmitted`)
+- Maintain project data in Redis with TTL management
+- Build and maintain aggregated data structures (e.g., active pools, active tokens, trade volumes)
+- Cache snapshot CIDs and metadata for fast retrieval
+- Manage IPFS unpinning schedules
+
+**Architecture:**
+```
+┌─────────────────┐     ┌─────────────────┐     ┌─────────────────┐
+│  Snapshot       │────▶│     Cacher      │────▶│  Redis Cache    │
+│  Workers        │     │     Worker      │     │  (State & Data) │
+└─────────────────┘     └─────────────────┘     └─────────────────┘
+         │                       │                        │
+         │                       ▼                        │
+         │              ┌─────────────────┐               │
+         │              │   IPFS Reader   │               │
+         │              │   (CID Fetch)   │               │
+         │              └─────────────────┘               │
+         │                                                 │
+         └─────────────────────────────────────────────────┘
+                    (Event-Driven Processing)
+```
+
+**Events Handled:**
+
+1. **`SnapshotSubmitted`**: 
+   - Updates Redis with snapshot CID and status
+   - Adds snapshot to project hashmap for epoch tracking
+   - Processes special project types (activePools, activeTokens, baseSnapshot)
+   - Triggers incremental cache updates for aggregated data
+   - Adds snapshot CID to IPFS unpin queue (if enabled)
+
+2. **`SnapshotFinalized`**: 
+   - Updates snapshot status to `FINALIZED` in Redis
+   - Updates last finalized epoch tracking
+   - Manages snapshot expiry tracking
+
+3. **`SnapshotBatchSubmitted`**: 
+   - Processes batch snapshot submissions
+   - Updates batch-level tracking and state
+
+**Special Processing:**
+
+The Cacher includes specialized handlers for aggregated data projects:
+
+- **Active Pools (`activePools:*`)**: 
+  - Maintains a rolling 24-hour window of active pools
+  - Incrementally updates pool frequencies as new snapshots arrive
+  - Uses efficient sliding window algorithm: adds new epochs, removes old ones
+  - Caches aggregated data for fast API access via `/dailyActivePools` endpoint
+
+- **Active Tokens (`activeTokens:*`)**: 
+  - Similar to active pools, maintains 24-hour active tokens
+  - Tracks token frequencies across epochs
+  - Powers `/dailyActiveTokens` API endpoint
+
+- **Trade Volume (`baseSnapshot:*`)**: 
+  - Aggregates trade volumes over 24-hour and 7-day windows
+  - Maintains time-series data for volume calculations
+
+**CID Caching:**
+
+A separate `CidCacher` process handles background CID caching:
+- Periodically processes CIDs from Redis queue
+- Fetches snapshot data from IPFS
+- Caches lightweight snapshot data in Redis for fast access
+- Reduces IPFS load by caching frequently accessed snapshots
+
+**Queue**: Listen on: `f'powerloom-cacher_{settings.namespace}_{settings.instance_id}'`
+
+**Implementation**: [`snapshotter/cacher.py`](snapshotter/cacher.py)
+
+**Key Features:**
+- **Event-Driven**: Processes events asynchronously without blocking snapshot generation
+- **Incremental Updates**: Efficiently updates aggregated data structures incrementally
+- **TTL Management**: Automatically expires old data based on configured TTLs
+- **Pipeline Operations**: Uses Redis pipelines for batch operations and improved performance
+- **Error Handling**: Robust error handling with detailed logging for debugging
 
 Upon receiving a message from the processor distributor, the workers validate inputs and call the `compute()` function on the configured compute class to generate snapshots.
 

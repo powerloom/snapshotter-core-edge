@@ -373,7 +373,10 @@ class Cacher(multiprocessing.Process):
         This method updates the Redis database with the active pools information.
         Only maintaining 24h cache for active pools.
         """
-        self._logger.debug(f'ActivePoolsEvent caught with message {msg_obj}')
+        self._logger.info(
+            f'Processing active pools snapshot - project: {msg_obj.projectId}, '
+            f'epoch: {msg_obj.epochId}, CID: {msg_obj.snapshotCid[:16]}...'
+        )
         time_interval = 86400
 
         # check if we are already processing this message
@@ -396,19 +399,28 @@ class Cacher(multiprocessing.Process):
             self._redis_conn, self._protocol_state_contract, self._anchor_rpc_helper, msg_obj.epochId, time_interval, project_id,
         )
 
-        self._logger.info(f"Last indexed epoch: {last_indexed_epoch}, tail epoch id: {tail_epoch_id}, current epoch: {msg_obj.epochId}")
+        epochs_to_correct = msg_obj.epochId - last_indexed_epoch if last_indexed_epoch > tail_epoch_id else 0
+        self._logger.info(
+            f'Active pools processing - last_indexed: {last_indexed_epoch}, '
+            f'tail_epoch: {tail_epoch_id}, current: {msg_obj.epochId}, '
+            f'epochs_to_correct: {epochs_to_correct}'
+        )
 
         if last_indexed_epoch > tail_epoch_id:
-            epochs_to_correct = msg_obj.epochId - last_indexed_epoch
             # fetch indexed data
-            self._logger.info(f"Correcting indexed data for epochs {last_indexed_epoch} to {msg_obj.epochId} for time interval {time_interval}, epochs_to_correct: {epochs_to_correct}")
+            self._logger.info(
+                f'Correcting indexed data for epochs {last_indexed_epoch} to {msg_obj.epochId} '
+                f'for time interval {time_interval}, epochs_to_correct: {epochs_to_correct}'
+            )
             active_pools = await self._redis_conn.get(f"active_pool_data:{time_interval}:{last_indexed_epoch}:{settings.namespace}")
             if active_pools:
                 active_pools = json.loads(active_pools)
                 # Only fetch snapshots if epochs_to_correct > 0
                 if epochs_to_correct > 0:
                     # fetch snapshots for epochs_to_correct
-                    self._logger.info(f"Fetching new snapshots for epochs {last_indexed_epoch + 1} to {msg_obj.epochId}")
+                    self._logger.info(
+                        f'Fetching new snapshots for epochs {last_indexed_epoch + 1} to {msg_obj.epochId}'
+                    )
                     new_snapshots = await get_project_epoch_snapshot_bulk(
                         self._redis_conn, self._protocol_state_contract, self._anchor_rpc_helper, self._ipfs_reader_client, last_indexed_epoch + 1, msg_obj.epochId, project_id,
                     )
@@ -434,7 +446,10 @@ class Cacher(multiprocessing.Process):
                                         del active_pools[pool_address]
                 else:
                     # epochs_to_correct == 0, use cached data as-is
-                    self._logger.info(f"No epochs to correct (epochs_to_correct={epochs_to_correct}), using cached data directly")
+                    self._logger.info(
+                        f'No epochs to correct (epochs_to_correct={epochs_to_correct}), '
+                        f'using cached data directly with {len(active_pools)} pools'
+                    )
                 
                 # set data in redis
                 pipeline = self._redis_conn.pipeline()
@@ -442,9 +457,16 @@ class Cacher(multiprocessing.Process):
                 pipeline.set(f"active_pool_data:{time_interval}:latest:epoch", msg_obj.epochId, ex=3600)
                 pipeline.delete(f"active_pool_data:{time_interval}:processing")
                 await pipeline.execute()
+                self._logger.info(
+                    f'Active pools cache updated - epoch: {msg_obj.epochId}, '
+                    f'total pools: {len(active_pools)}'
+                )
             else:
                 # No cached data found, need to fetch all snapshots from scratch
-                self._logger.warning(f"No cached data found for epoch {last_indexed_epoch}, cannot process incremental update")
+                self._logger.warning(
+                    f'No cached data found for epoch {last_indexed_epoch}, '
+                    f'cannot process incremental update for project {msg_obj.projectId}'
+                )
                 pipeline = self._redis_conn.pipeline()
                 pipeline.delete(f"active_pool_data:{time_interval}:processing")
                 await pipeline.execute()
@@ -668,9 +690,12 @@ class Cacher(multiprocessing.Process):
             event_data (str): JSON string containing the snapshot submission data.
         """
         try:
-            self._logger.info(f'SnapshotSubmittedEvent caught with message {event_data}')
             msg_obj: SnapshotSubmittedMessage = (
                 SnapshotSubmittedMessage.model_validate_json(event_data)
+            )
+            self._logger.debug(
+                f'SnapshotSubmittedEvent - project: {msg_obj.projectId}, '
+                f'epoch: {msg_obj.epochId}, CID: {msg_obj.snapshotCid[:16]}...'
             )
 
             # Create a pipeline for batch processing
@@ -678,7 +703,7 @@ class Cacher(multiprocessing.Process):
             
             # Add snapshot cid to unpin zset if enabled
             if settings.ipfs_unpinning.enabled:
-                self._logger.info("Adding snapshot cid to unpin zset")
+                self._logger.debug(f"Adding snapshot CID {msg_obj.snapshotCid[:16]}... to unpin zset")
                 pipeline.zadd(
                     name=snapshots_to_unpin_zset_name(),
                     mapping={msg_obj.snapshotCid: int(time.time()) + settings.ipfs_unpinning.unpin_after},
@@ -729,11 +754,22 @@ class Cacher(multiprocessing.Process):
             await pipeline.execute()
 
             if msg_obj.projectId.startswith('activePools:'):
-                self._logger.info(f'ActivePoolsEvent caught with message, sending it to active pools processor {msg_obj}')
+                self._logger.info(
+                    f'ActivePoolsEvent - project: {msg_obj.projectId}, '
+                    f'epoch: {msg_obj.epochId}, CID: {msg_obj.snapshotCid[:16]}...'
+                )
                 await self._create_tracked_task(self._process_active_pools_message(msg_obj))
             elif msg_obj.projectId.startswith('activeTokens:'):
+                self._logger.info(
+                    f'ActiveTokensEvent - project: {msg_obj.projectId}, '
+                    f'epoch: {msg_obj.epochId}, CID: {msg_obj.snapshotCid[:16]}...'
+                )
                 await self._create_tracked_task(self._process_active_tokens_message(msg_obj))
             elif msg_obj.projectId.startswith('baseSnapshot:'):
+                self._logger.debug(
+                    f'BaseSnapshotEvent - project: {msg_obj.projectId}, '
+                    f'epoch: {msg_obj.epochId}'
+                )
                 await self._create_tracked_task(
                     self._process_trade_volume_from_base_snapshot_message(msg_obj, 86400)
                 )

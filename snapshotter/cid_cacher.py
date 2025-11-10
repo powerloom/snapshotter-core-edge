@@ -4,6 +4,7 @@ import multiprocessing
 import resource
 import traceback
 import os
+import time
 from rpc_helper.rpc import RpcHelper
 from signal import SIGINT
 from signal import signal
@@ -174,12 +175,19 @@ class CidCacher(multiprocessing.Process):
                 [cid_cache(cid) for cid in cids]
             )
             existing_cids = [cid for cid, data in zip(cids, cid_data) if data is not None]
-            cids = [cid for cid in cids if cid not in existing_cids]
-            self._logger.info(f'Skipping {len(existing_cids)} CIDs that are already cached')
+            cids_to_fetch = [cid for cid in cids if cid not in existing_cids]
+            
+            # Only log skipping if there are significant numbers, use DEBUG for routine operations
+            if len(existing_cids) > 0:
+                self._logger.debug(f'Skipping {len(existing_cids)} CIDs that are already cached (fetching {len(cids_to_fetch)} new)')
+
+            if not cids_to_fetch:
+                self._logger.debug(f'All {len(cids)} CIDs already cached, skipping fetch')
+                return 0
 
             tasks = [
                 get_submission_data(cid, self._ipfs_reader_client, True)
-                for cid in cids
+                for cid in cids_to_fetch
             ]
 
             results = await asyncio.gather(
@@ -189,10 +197,12 @@ class CidCacher(multiprocessing.Process):
 
             pipeline = self._redis_conn.pipeline()
             batch_cached_count = 0
+            error_count = 0
 
-            for cid, result in zip(cids, results):
+            for cid, result in zip(cids_to_fetch, results):
                 if isinstance(result, Exception):
-                    self._logger.error(f'Error processing CID {cid}: {result}')
+                    self._logger.debug(f'Error processing CID {cid}: {result}')
+                    error_count += 1
                     continue
 
                 snapshot_data = result
@@ -211,10 +221,20 @@ class CidCacher(multiprocessing.Process):
             if batch_cached_count > 0:
                 await pipeline.execute()
 
+            # Log summary with context
             if batch_cached_count > 0:
-                self._logger.info(f'Successfully cached {batch_cached_count} out of {len(cids)} CIDs')
-            elif len(cids) > 0:
-                self._logger.warning(f'No CIDs were cached from {len(cids)} provided')
+                self._logger.info(
+                    f'CID cache update: cached {batch_cached_count} new CIDs '
+                    f'(skipped {len(existing_cids)} already cached'
+                    f'{f", {error_count} errors" if error_count > 0 else ""})'
+                )
+            elif len(cids_to_fetch) > 0:
+                self._logger.warning(
+                    f'CID cache update: failed to cache any of {len(cids_to_fetch)} CIDs'
+                    f'{f" ({error_count} errors)" if error_count > 0 else ""}'
+                )
+            
+            return batch_cached_count
 
         except Exception as e:
             self._logger.error(f'Error caching CIDs: {e}')
@@ -226,16 +246,43 @@ class CidCacher(multiprocessing.Process):
         """
         self._logger.info('Starting periodic CID caching')
         
+        total_processed = 0
+        total_cached = 0
+        batch_count = 0
+        last_summary_time = time.time()
+        summary_interval = 60  # Log summary every 60 seconds
+        
         while not self._shutdown_initiated:
             try:
                 cids_to_cache = await self._redis_conn.spop(cids_to_cache_set(), count=200)
-                self._logger.info(f'Popped {len(cids_to_cache)} CIDs from Redis set')
+                batch_count += 1
                 # convert bytes to strings if necessary
                 cids_to_cache = [cid.decode('utf-8') if isinstance(cid, bytes) else cid for cid in cids_to_cache]
+                
                 if cids_to_cache:
-                    await self._cache_cids(cids_to_cache)
+                    total_processed += len(cids_to_cache)
+                    self._logger.debug(f'Processing batch {batch_count}: {len(cids_to_cache)} CIDs')
+                    cached_count = await self._cache_cids(cids_to_cache)
+                    if cached_count:
+                        total_cached += cached_count
                 else:
-                    self._logger.info(f'No CIDs to cache, sleeping for {self._caching_interval} seconds')
+                    # Only log sleep message at DEBUG level, or periodically
+                    current_time = time.time()
+                    if current_time - last_summary_time >= summary_interval:
+                        if total_processed > 0:
+                            self._logger.info(
+                                f'CID cache summary: processed {total_processed} CIDs, '
+                                f'cached {total_cached} new in {batch_count} batches '
+                                f'(last {summary_interval}s)'
+                            )
+                        else:
+                            self._logger.debug(f'No CIDs to cache, sleeping for {self._caching_interval} seconds')
+                        total_processed = 0
+                        total_cached = 0
+                        batch_count = 0
+                        last_summary_time = current_time
+                    else:
+                        self._logger.debug(f'No CIDs to cache, sleeping for {self._caching_interval} seconds')
                     await asyncio.sleep(self._caching_interval)
                 
             except asyncio.CancelledError:
