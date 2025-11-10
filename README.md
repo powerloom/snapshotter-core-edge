@@ -457,6 +457,10 @@ The system uses specialized workers for different tasks, all communicating throu
 - **Compute Logic**: Execute modules from `/computes/aggregates/` directory
 - **Implementation**: [`snapshotter/utils/aggregation_worker.py`](snapshotter/utils/aggregation_worker.py)
 
+> [!NOTE] 
+> Upon receiving a message from the processor distributor, the above workers validate inputs and call the `compute()` function on the configured compute class to generate snapshots.
+
+
 #### Cacher Worker
 
 The Cacher is a critical component that manages snapshot data caching, state updates, and maintains aggregated data structures for efficient API access. It operates asynchronously in an event-driven manner, processing snapshot lifecycle events and maintaining Redis caches.
@@ -541,7 +545,6 @@ A separate `CidCacher` process handles background CID caching:
 - **Pipeline Operations**: Uses Redis pipelines for batch operations and improved performance
 - **Error Handling**: Robust error handling with detailed logging for debugging
 
-Upon receiving a message from the processor distributor, the workers validate inputs and call the `compute()` function on the configured compute class to generate snapshots.
 
 ### Core API
 
