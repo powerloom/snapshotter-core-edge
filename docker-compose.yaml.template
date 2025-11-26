@@ -95,7 +95,8 @@ services:
     image: ${SNAPSHOTTER_COLLECTOR_IMAGE:-ghcr.io/powerloom/snapshotter-lite-local-collector:dockerify}
     profiles: ["local-collector"]
     ports:
-      - ${LOCAL_COLLECTOR_PORT:-50051}:${LOCAL_COLLECTOR_PORT:-50051}
+      - "127.0.0.1:${LOCAL_COLLECTOR_PORT:-50051}:${LOCAL_COLLECTOR_PORT:-50051}"
+      - "127.0.0.1:${LOCAL_COLLECTOR_P2P_PORT:-9100}:${LOCAL_COLLECTOR_P2P_PORT:-9100}"
     volumes:
       - ./logs/local-collector:/root/.pm2/logs
     environment:
@@ -113,6 +114,8 @@ services:
       - REDIS_HOST=${REDIS_HOST:-redis}
       - REDIS_PORT=${REDIS_PORT:-6379}
       - LOCAL_COLLECTOR_PORT
+      - LOCAL_COLLECTOR_P2P_PORT=${LOCAL_COLLECTOR_P2P_PORT:-9100}
+      - LOCAL_COLLECTOR_PRIVATE_KEY
       - RELAYER_PRIVATE_KEY
       # Configurable stream processing parameters with sensible defaults
       - BLOCK_TIME=${BLOCK_TIME:-15}
@@ -124,6 +127,14 @@ services:
       - STREAM_POOL_HEALTH_CHECK_INTERVAL=${STREAM_POOL_HEALTH_CHECK_INTERVAL:-60000}
       - DATA_MARKET_IN_REQUEST=${DATA_MARKET_IN_REQUEST:-false}
       - CONNECTION_REFRESH_INTERVAL_SEC=${CONNECTION_REFRESH_INTERVAL_SEC:-300}
+      - WRITE_SEMAPHORE_TIMEOUT_SEC=${WRITE_SEMAPHORE_TIMEOUT_SEC:-5}
+      # Gossipsub configuration
+      - RENDEZVOUS_POINT=${RENDEZVOUS_POINT:-powerloom-snapshot-sequencer-network}
+      - GOSSIPSUB_SNAPSHOT_SUBMISSION_PREFIX=${GOSSIPSUB_SNAPSHOT_SUBMISSION_PREFIX:-/powerloom/snapshot-submissions}
+      - BOOTSTRAP_NODE_ADDRS
+      - PUBLIC_IP
+      - CONN_MANAGER_LOW_WATER=${CONN_MANAGER_LOW_WATER:-10000}
+      - CONN_MANAGER_HIGH_WATER=${CONN_MANAGER_HIGH_WATER:-40000}
     restart: on-failure:10
     logging:
       driver: "json-file"
