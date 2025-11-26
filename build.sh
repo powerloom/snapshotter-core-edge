@@ -163,7 +163,7 @@ ARG1=${1:-yes_collector}
 if [ "$DEVMODE" = "true" ]; then
     echo "Building local collector..."
     rm -rf snapshotter-lite-local-collector
-    git clone https://github.com/powerloom/snapshotter-lite-local-collector.git --single-branch --branch feat/non-blocking-grpc-sem-acq
+    git clone https://github.com/powerloom/snapshotter-lite-local-collector.git --single-branch --branch feat/non-blocking-grpc-sem-acq-full-node
     (cd ./snapshotter-lite-local-collector/ && chmod +x build-docker.sh && ./build-docker.sh)
 
     echo "Building snapshotter..."
