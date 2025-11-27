@@ -61,6 +61,7 @@
     - [Aggregation Module Template](#aggregation-module-template)
     - [Configuration](#configuration-1)
     - [Best Practices](#best-practices)
+    - [Regenerating Protobuf Files](#regenerating-protobuf-files)
     - [Using RPC Helper](#using-rpc-helper)
 - [Case Studies](#case-studies)
   - [1. Uniswap V3 Data Snapshotting: A Case Study](#1-uniswap-v3-data-snapshotting-a-case-study)
@@ -1316,6 +1317,43 @@ This will automatically create worker services for your compute modules.
 5. **Testing**: Write unit tests for your compute logic
 6. **Performance**: Batch RPC calls when possible
 7. **Data Models**: Use Pydantic models for structured output
+
+#### Regenerating Protobuf Files
+
+When modifying the protobuf definition file (`snapshotter/utils/models/proto/snapshot_submission/submission.proto`), you need to regenerate the Python protobuf files.
+
+**Prerequisites:**
+```bash
+# Install required Python packages
+pip install grpcio-tools
+pip install 'grpclib[protobuf]'
+```
+
+**Regeneration Steps:**
+
+1. **Navigate to the proto directory:**
+   ```bash
+   cd snapshotter/utils/models/proto/snapshot_submission
+   ```
+
+2. **Regenerate Python protobuf files:**
+   ```bash
+   python -m grpc_tools.protoc -I. --python_out=. --grpclib_python_out=. submission.proto
+   ```
+
+3. **Fix the import path in the generated `submission_grpc.py` file:**
+   
+   The generated file will have an incorrect import path. Change:
+   ```python
+   import submission_pb2
+   ```
+   
+   To:
+   ```python
+   from snapshotter.utils.models.proto.snapshot_submission import submission_pb2 as submission_pb2
+   ```
+
+**Note:** The protobuf files are used for gRPC communication between the snapshotter node and the local collector. After regenerating, ensure the local collector's protobuf files are also regenerated to maintain compatibility.
 
 #### Using RPC Helper
 

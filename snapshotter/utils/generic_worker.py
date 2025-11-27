@@ -731,6 +731,7 @@ class GenericAsyncWorker(multiprocessing.Process):
         msg = SnapshotSubmission(
             request=request_msg, signature=signature,
             header=current_block_hash, dataMarket=settings.data_market,
+            nodeVersion=settings.node_version, protocolState=settings.protocol_state.address,
         )
         self._logger.info(
             'Snapshot submission created: {}', msg,

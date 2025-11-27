@@ -157,6 +157,34 @@ else
     echo "STREAM_POOL_HEALTH_CHECK_INTERVAL not found in .env, setting to default value ${STREAM_POOL_HEALTH_CHECK_INTERVAL}";
 fi
 
+if [ "$LOCAL_COLLECTOR_PRIVATE_KEY" ]; then
+    echo "Found LOCAL_COLLECTOR_PRIVATE_KEY... proceeding with build...";
+else
+    echo "LOCAL_COLLECTOR_PRIVATE_KEY not found in .env, please set this in your .env!";
+    exit 1;
+fi
+
+if ["$GOSSIPSUB_SNAPSHOT_SUBMISSION_PREFIX" ]; then
+    echo "Found GOSSIPSUB_SNAPSHOT_SUBMISSION_PREFIX ${GOSSIPSUB_SNAPSHOT_SUBMISSION_PREFIX}"
+else
+    echo "GOSSIPSUB_SNAPSHOT_SUBMISSION_PREFIX not found in .env, please set this in your .env!";
+    exit 1;
+fi
+
+if [ "$RENDEZVOUS_POINT" ]; then
+    echo "Found RENDEZVOUS_POINT ${RENDEZVOUS_POINT}"
+else
+    echo "RENDEZVOUS_POINT not found in .env, please set this in your .env!";
+    exit 1;
+fi
+
+if ["$BOOTSTRAP_NODE_ADDRS" ]; then
+    echo "Found BOOTSTRAP_NODE_ADDRS ${BOOTSTRAP_NODE_ADDRS}"
+else
+    echo "BOOTSTRAP_NODE_ADDRS not found in .env, please set this in your .env!";
+    exit 1;
+fi
+
 # Get the first command line argument
 ARG1=${1:-yes_collector}
 
