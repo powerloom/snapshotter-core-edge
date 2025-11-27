@@ -164,7 +164,7 @@ else
     exit 1;
 fi
 
-if ["$GOSSIPSUB_SNAPSHOT_SUBMISSION_PREFIX" ]; then
+if [ "$GOSSIPSUB_SNAPSHOT_SUBMISSION_PREFIX" ]; then
     echo "Found GOSSIPSUB_SNAPSHOT_SUBMISSION_PREFIX ${GOSSIPSUB_SNAPSHOT_SUBMISSION_PREFIX}"
 else
     echo "GOSSIPSUB_SNAPSHOT_SUBMISSION_PREFIX not found in .env, please set this in your .env!";
@@ -178,7 +178,7 @@ else
     exit 1;
 fi
 
-if ["$BOOTSTRAP_NODE_ADDRS" ]; then
+if [ "$BOOTSTRAP_NODE_ADDRS" ]; then
     echo "Found BOOTSTRAP_NODE_ADDRS ${BOOTSTRAP_NODE_ADDRS}"
 else
     echo "BOOTSTRAP_NODE_ADDRS not found in .env, please set this in your .env!";
