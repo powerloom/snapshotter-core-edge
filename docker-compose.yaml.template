@@ -99,8 +99,8 @@ services:
     image: ${SNAPSHOTTER_COLLECTOR_IMAGE:-ghcr.io/powerloom/snapshotter-lite-local-collector:dockerify}
     profiles: ["local-collector"]
     ports:
+      - "0.0.0.0:${LOCAL_COLLECTOR_P2P_PORT:-9100}:${LOCAL_COLLECTOR_P2P_PORT:-9100}"
       - "127.0.0.1:${LOCAL_COLLECTOR_PORT:-50051}:${LOCAL_COLLECTOR_PORT:-50051}"
-      - "127.0.0.1:${LOCAL_COLLECTOR_P2P_PORT:-9100}:${LOCAL_COLLECTOR_P2P_PORT:-9100}"
     networks:
       - ipfs-redis
     volumes:
