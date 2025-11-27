@@ -3,6 +3,8 @@ version: '3.9'
 # Shared base configuration for worker services to reduce duplication
 x-snapshotter-base: &snapshotter-base
   image: ${SNAPSHOTTER_IMAGE:-ghcr.io/powerloom/snapshotter-core:dockerify}
+  networks:
+    - ipfs-redis
   depends_on:
     snapshotter-local-collector:
       condition: service_started
@@ -76,6 +78,8 @@ services:
 
   rate-limiter:
     image: ${RATE_LIMITER_IMAGE:-ghcr.io/powerloom/rate-limiter:dockerify}
+    networks:
+      - ipfs-redis
     environment:
       - DEFAULT_RATE_LIMIT=${DEFAULT_RATE_LIMIT:-1000}
     command: poetry run uvicorn app:app --host 0.0.0.0 --port 8000
@@ -97,6 +101,8 @@ services:
     ports:
       - "127.0.0.1:${LOCAL_COLLECTOR_PORT:-50051}:${LOCAL_COLLECTOR_PORT:-50051}"
       - "127.0.0.1:${LOCAL_COLLECTOR_P2P_PORT:-9100}:${LOCAL_COLLECTOR_P2P_PORT:-9100}"
+    networks:
+      - ipfs-redis
     volumes:
       - ./logs/local-collector:/root/.pm2/logs
     environment:
@@ -214,6 +220,8 @@ services:
     build:
       context: snapshotter-periphery-blockfetcher
       dockerfile: Dockerfile
+    networks:
+      - ipfs-redis
     environment:
       - NAMESPACE
       - SOURCE_RPC_URL=${SOURCE_RPC_URL}
@@ -258,6 +266,8 @@ services:
     build:
       context: snapshotter-periphery-txprocessor
       dockerfile: Dockerfile
+    networks:
+      - ipfs-redis
     environment:
       - NAMESPACE
       - RPC_URL=${SOURCE_RPC_URL}
@@ -305,6 +315,8 @@ services:
     build:
       context: snapshotter-periphery-epochsyncer
       dockerfile: Dockerfile
+    networks:
+      - ipfs-redis
     environment:
       - NAMESPACE
       - INSTANCE_ID=${SIGNER_ACCOUNT_ADDRESS}
@@ -417,3 +429,6 @@ services:
 # DO NOT EDIT BELOW THIS LINE - DYNAMIC CONFIGURATION
 # Generated worker services start
 # Generated worker services end
+networks:
+  ipfs-redis:
+    external: true
