@@ -375,8 +375,8 @@ services:
       - ./ipfs-export:/export
     ports:
       - "4001:4001"  # Swarm listening port
-      - "5001:5001"  # API server
-      - "8080:8080"  # Gateway
+      - "127.0.0.1:5001:5001"  # API server
+      - "127.0.0.1:8080:8080"  # Gateway
     healthcheck:
       test: ["CMD", "ipfs", "id"]
       interval: 30s
