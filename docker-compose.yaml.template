@@ -110,8 +110,8 @@ services:
       test: ["CMD", "curl", "-f", "http://localhost:${LOCAL_COLLECTOR_HEALTH_CHECK_PORT:-8080}/ready"]
       interval: 5s
       timeout: 3s
-      retries: 3
-      start_period: 10s # Service ready once initialized (mesh forms gradually)
+      retries: 10
+      start_period: 5s # Service ready as soon as HTTP server starts (mesh forms in background)
     environment:
       # Use a secrets management approach for sensitive information
       # Consider using Docker secrets or .env file for these
