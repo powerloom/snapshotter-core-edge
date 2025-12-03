@@ -7,7 +7,7 @@ x-snapshotter-base: &snapshotter-base
     - ipfs-redis
   depends_on:
     snapshotter-local-collector:
-      condition: service_started
+      condition: service_healthy
   volumes:
     - ./logs/snapshotter:/logs
     - ./config:/config
@@ -101,10 +101,17 @@ services:
     ports:
       - "0.0.0.0:${LOCAL_COLLECTOR_P2P_PORT:-9100}:${LOCAL_COLLECTOR_P2P_PORT:-9100}"
       - "127.0.0.1:${LOCAL_COLLECTOR_PORT:-50051}:${LOCAL_COLLECTOR_PORT:-50051}"
+      - "127.0.0.1:${LOCAL_COLLECTOR_HEALTH_CHECK_PORT:-8080}:${LOCAL_COLLECTOR_HEALTH_CHECK_PORT:-8080}"
     networks:
       - ipfs-redis
     volumes:
       - ./logs/local-collector:/root/.pm2/logs
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:${LOCAL_COLLECTOR_HEALTH_CHECK_PORT:-8080}/ready"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s # Give mesh time to form during startup
     environment:
       # Use a secrets management approach for sensitive information
       # Consider using Docker secrets or .env file for these
@@ -143,6 +150,8 @@ services:
       - CONN_MANAGER_HIGH_WATER=${CONN_MANAGER_HIGH_WATER:-40000}
       # Slack alerting for local collector (mesh monitoring, errors, etc.)
       - SLACK_WEBHOOK_URL=${LOCAL_COLLECTOR_SLACK_WEBHOOK_URL}
+      # Health check server port
+      - HEALTH_CHECK_PORT=${LOCAL_COLLECTOR_HEALTH_CHECK_PORT:-8080}
     restart: on-failure:10
     logging:
       driver: "json-file"
