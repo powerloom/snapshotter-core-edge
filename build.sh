@@ -185,6 +185,9 @@ else
     exit 1;
 fi
 
+# Optional: Slack webhook URL for local collector alerts
+[ -n "$LOCAL_COLLECTOR_SLACK_WEBHOOK_URL" ] && echo "Found LOCAL_COLLECTOR_SLACK_WEBHOOK_URL (Slack alerts enabled for local collector)"
+
 # Get the first command line argument
 ARG1=${1:-yes_collector}
 

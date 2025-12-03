@@ -141,6 +141,8 @@ services:
       - PUBLIC_IP
       - CONN_MANAGER_LOW_WATER=${CONN_MANAGER_LOW_WATER:-10000}
       - CONN_MANAGER_HIGH_WATER=${CONN_MANAGER_HIGH_WATER:-40000}
+      # Slack alerting for local collector (mesh monitoring, errors, etc.)
+      - SLACK_WEBHOOK_URL=${LOCAL_COLLECTOR_SLACK_WEBHOOK_URL}
     restart: on-failure:10
     logging:
       driver: "json-file"
