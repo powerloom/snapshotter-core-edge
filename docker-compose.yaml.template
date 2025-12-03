@@ -108,10 +108,10 @@ services:
       - ./logs/local-collector:/root/.pm2/logs
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:${LOCAL_COLLECTOR_HEALTH_CHECK_PORT:-8080}/ready"]
-      interval: 10s
-      timeout: 5s
-      retries: 10
-      start_period: 90s # Give mesh time to form during startup (degraded state is acceptable for readiness)
+      interval: 5s
+      timeout: 3s
+      retries: 3
+      start_period: 10s # Service ready once initialized (mesh forms gradually)
     environment:
       # Use a secrets management approach for sensitive information
       # Consider using Docker secrets or .env file for these
@@ -152,6 +152,8 @@ services:
       - SLACK_WEBHOOK_URL=${LOCAL_COLLECTOR_SLACK_WEBHOOK_URL}
       # Health check server port
       - HEALTH_CHECK_PORT=${LOCAL_COLLECTOR_HEALTH_CHECK_PORT:-8080}
+      # Log level (inherits from core-edge LOG_LEVEL, defaults to info)
+      - LOG_LEVEL=${LOG_LEVEL:-info}
     restart: on-failure:10
     logging:
       driver: "json-file"
