@@ -211,6 +211,58 @@ class UnifiedCache(multiprocessing.Process):
         self._active_tasks.add((current_time, new_task))
         new_task.add_done_callback(lambda _: self._active_tasks.discard((current_time, new_task)))
 
+    async def _get_project_epoch_snapshot_bulk_locked(
+        self, project_id: str, epoch_id_min: int, epoch_id_max: int
+    ):
+        """
+        Wrapper around get_project_epoch_snapshot_bulk with per-project locking
+        to prevent concurrent bulk fetches for the same project.
+        """
+        lock_key = f"bulk_fetch_processing:{project_id}"
+        
+        # Try to acquire lock atomically (SET with NX - only set if not exists)
+        lock_acquired = await self._redis_conn.set(lock_key, "true", ex=600, nx=True)
+        
+        if not lock_acquired:
+            # Lock already held, wait for it to be released
+            self._logger.debug(
+                f"Bulk fetch already in progress for project {project_id}, "
+                f"waiting for completion (epochs {epoch_id_min} to {epoch_id_max})"
+            )
+            # Wait for lock to be released (with timeout)
+            wait_start = time.time()
+            while await self._redis_conn.exists(lock_key):
+                if time.time() - wait_start > 300:  # 5 minute timeout
+                    self._logger.warning(
+                        f"Timeout waiting for bulk fetch lock for project {project_id}"
+                    )
+                    return []
+                await asyncio.sleep(1)
+            
+            # Try to acquire lock again after waiting
+            lock_acquired = await self._redis_conn.set(lock_key, "true", ex=600, nx=True)
+            if not lock_acquired:
+                # Still couldn't acquire, another process got it
+                self._logger.debug(
+                    f"Could not acquire bulk fetch lock for project {project_id} after waiting"
+                )
+                return []
+        
+        try:
+            # Perform the bulk fetch
+            return await get_project_epoch_snapshot_bulk(
+                self._redis_conn,
+                self._protocol_state_contract,
+                self._anchor_rpc_helper,
+                self._ipfs_reader_client,
+                epoch_id_min,
+                epoch_id_max,
+                project_id,
+            )
+        finally:
+            # Release lock
+            await self._redis_conn.delete(lock_key)
+
     async def get_cached_data(self, project_id: str, epoch_id: Optional[int] = None) -> Optional[Dict]:
         """
         Get cached data for a project/epoch combination.
@@ -701,11 +753,11 @@ class UnifiedCache(multiprocessing.Process):
                     self._logger.info(
                         f'Fetching new snapshots for epochs {last_indexed_epoch + 1} to {msg_obj.epochId}'
                     )
-                    new_snapshots = await get_project_epoch_snapshot_bulk(
-                        self._redis_conn, self._protocol_state_contract, self._anchor_rpc_helper, self._ipfs_reader_client, last_indexed_epoch + 1, msg_obj.epochId, project_id,
+                    new_snapshots = await self._get_project_epoch_snapshot_bulk_locked(
+                        project_id, last_indexed_epoch + 1, msg_obj.epochId
                     )
-                    old_snapshots = await get_project_epoch_snapshot_bulk(
-                        self._redis_conn, self._protocol_state_contract, self._anchor_rpc_helper, self._ipfs_reader_client, tail_epoch_id - epochs_to_correct, tail_epoch_id - 1, project_id,
+                    old_snapshots = await self._get_project_epoch_snapshot_bulk_locked(
+                        project_id, tail_epoch_id - epochs_to_correct, tail_epoch_id - 1
                     )
 
                     # add new snapshots to indexed data
@@ -788,11 +840,11 @@ class UnifiedCache(multiprocessing.Process):
                 active_tokens = json.loads(active_tokens)
                 # fetch snapshots for epochs_to_correct
                 self._logger.info(f"Fetching new snapshots for epochs {last_indexed_epoch} to {last_indexed_epoch + epochs_to_correct}")
-                new_snapshots = await get_project_epoch_snapshot_bulk(
-                    self._redis_conn, self._protocol_state_contract, self._anchor_rpc_helper, self._ipfs_reader_client, last_indexed_epoch + 1, msg_obj.epochId, project_id,
+                new_snapshots = await self._get_project_epoch_snapshot_bulk_locked(
+                    project_id, last_indexed_epoch + 1, msg_obj.epochId
                 )
-                old_snapshots = await get_project_epoch_snapshot_bulk(
-                    self._redis_conn, self._protocol_state_contract, self._anchor_rpc_helper, self._ipfs_reader_client, tail_epoch_id - epochs_to_correct, tail_epoch_id - 1, project_id,
+                old_snapshots = await self._get_project_epoch_snapshot_bulk_locked(
+                    project_id, tail_epoch_id - epochs_to_correct, tail_epoch_id - 1
                 )
 
                 # add new snapshots to indexed data
@@ -871,16 +923,13 @@ class UnifiedCache(multiprocessing.Process):
                     )
 
                     # Fetch new snapshots to add
-                    new_snapshots = await get_project_epoch_snapshot_bulk(
-                        self._redis_conn, self._protocol_state_contract, self._anchor_rpc_helper,
-                        self._ipfs_reader_client, last_indexed_epoch + 1, msg_obj.epochId, msg_obj.projectId
+                    new_snapshots = await self._get_project_epoch_snapshot_bulk_locked(
+                        msg_obj.projectId, last_indexed_epoch + 1, msg_obj.epochId
                     )
 
                     # Fetch old snapshots to remove
-                    old_snapshots = await get_project_epoch_snapshot_bulk(
-                        self._redis_conn, self._protocol_state_contract, self._anchor_rpc_helper,
-                        self._ipfs_reader_client, tail_epoch_id - epochs_to_correct,
-                        tail_epoch_id - 1, msg_obj.projectId
+                    old_snapshots = await self._get_project_epoch_snapshot_bulk_locked(
+                        msg_obj.projectId, tail_epoch_id - epochs_to_correct, tail_epoch_id - 1
                     )
 
                     # Add volume from new snapshots
@@ -905,9 +954,8 @@ class UnifiedCache(multiprocessing.Process):
                     f"No cached data found for project {msg_obj.projectId}, "
                     f"calculating full volume from {tail_epoch_id} to {msg_obj.epochId}"
                 )
-                snapshots = await get_project_epoch_snapshot_bulk(
-                    self._redis_conn, self._protocol_state_contract, self._anchor_rpc_helper,
-                    self._ipfs_reader_client, tail_epoch_id, msg_obj.epochId, msg_obj.projectId
+                snapshots = await self._get_project_epoch_snapshot_bulk_locked(
+                    msg_obj.projectId, tail_epoch_id, msg_obj.epochId
                 )
                 for snapshot in snapshots:
                     if snapshot and 'totalTrade' in snapshot:
@@ -920,9 +968,8 @@ class UnifiedCache(multiprocessing.Process):
                 f"Performing fresh calculation for project {msg_obj.projectId} "
                 f"from {tail_epoch_id} to {msg_obj.epochId}"
             )
-            snapshots = await get_project_epoch_snapshot_bulk(
-                self._redis_conn, self._protocol_state_contract, self._anchor_rpc_helper,
-                self._ipfs_reader_client, tail_epoch_id, msg_obj.epochId, msg_obj.projectId
+            snapshots = await self._get_project_epoch_snapshot_bulk_locked(
+                msg_obj.projectId, tail_epoch_id, msg_obj.epochId
             )
             for snapshot in snapshots:
                 if snapshot and 'totalTrade' in snapshot:
