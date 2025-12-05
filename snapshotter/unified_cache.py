@@ -23,9 +23,12 @@ Architecture:
 import json
 import asyncio
 import multiprocessing
+import queue
+import resource
 import threading
 import time
 import traceback
+import os
 from typing import Dict, List, Set, Optional, Tuple, Any, Union
 from uuid import uuid4
 from ipfs_client.main import AsyncIPFSClientSingleton
@@ -33,19 +36,37 @@ from ipfs_client.dag import IPFSAsyncClientError
 from redis import asyncio as aioredis
 
 import dramatiq
+import uvloop
 from dramatiq.brokers.redis import RedisBroker
 from dramatiq.middleware import AsyncIO
 from dramatiq.worker import Worker
+from eth_utils.address import to_checksum_address
+from eth_utils.crypto import keccak
+from rpc_helper.rpc import RpcHelper
+from signal import SIGINT, SIGTERM, SIGQUIT
+from signal import signal
+from socket import gethostname
 
 from snapshotter.settings.config import settings
 from snapshotter.utils.default_logger import default_logger
-from snapshotter.utils.redis.redis_conn import RedisPoolCache
-from snapshotter.utils.redis.redis_keys import cid_cache, project_data_hmap, last_submitted_snapshot_data_key, data_expiry_zset, project_last_finalized_epoch_hmap, cids_to_cache_set
-from snapshotter.utils.dramatiq_queues import CACHER_QUEUE_NAME
-from snapshotter.utils.rpc import RpcHelper
 from snapshotter.utils.file_utils import read_json_file
-from eth_utils.address import to_checksum_address
-from snapshotter.utils.data_utils import get_submission_data, PROJECT_DATA_ENTRY_EXPIRY, get_project_config
+from snapshotter.utils.models.data_models import SnapshotStatus, SnapshotterStates, SnapshotterStateUpdate
+from snapshotter.utils.models.message_models import SnapshotBatchSubmittedMessage
+from snapshotter.utils.models.message_models import SnapshotFinalizedMessage
+from snapshotter.utils.models.message_models import SnapshotSubmittedMessage
+from snapshotter.utils.redis.redis_conn import RedisPoolCache
+from snapshotter.utils.redis.redis_keys import (
+    cid_cache, project_data_hmap, last_submitted_snapshot_data_key, 
+    data_expiry_zset, project_last_finalized_epoch_hmap, cids_to_cache_set,
+    snapshots_to_unpin_zset_name, service_health_timestamps_key,
+    epoch_id_project_to_state_mapping
+)
+from snapshotter.utils.dramatiq_queues import CACHER_QUEUE_NAME
+from snapshotter.utils.data_utils import (
+    get_submission_data, PROJECT_DATA_ENTRY_EXPIRY, get_project_config,
+    get_tail_epoch_id, get_project_epoch_snapshot_bulk, process_snapshot_cid,
+    get_source_chain_block_time, get_source_chain_epoch_size
+)
 
 # Configure Redis broker for Dramatiq (same as original cacher)
 redis_broker = RedisBroker(host=settings.redis.host, port=settings.redis.port, db=settings.redis.db)
@@ -62,100 +83,133 @@ dramatiq.set_broker(redis_broker)
 
 class UnifiedCache(multiprocessing.Process):
     """
-    Simplified Unified Cache Service
+    Unified Cache Service - Replaces cacher + cid_cacher
 
-    Replaces the complex multi-layer caching system with a single service that:
-    - Handles all data caching (replaces CID cacher + data cacher)
-    - Uses cache-on-demand strategy with background refresh
-    - Provides simple get/set API for data access
-    - Eliminates redundant caching layers and complexity
+    Handles all snapshot caching functionality:
+    - Event-driven snapshot processing
+    - CID batch caching
+    - Health reporting
+    - Data cleanup
     """
 
-    # Class variable to store the event loop (same as original cacher)
-    _event_loop = None
+    # Class attributes (same as original cacher)
+    _aioredis_pool: RedisPoolCache
+    _redis_conn: aioredis.Redis
+    _rpc_helper: RpcHelper
+    _anchor_rpc_helper: RpcHelper
+    _snapshot_build_awaited_project_ids: Dict[int, Set[str]]
+    _slot_id_to_snapshotters: Dict[int, Dict[str, str]]
+    _slot_id_to_timeslot: Dict[int, int]
+    _registered_slots: List[int]
+    _last_synced_slot_info: int
+    _source_chain_epoch_size: int
+    _source_chain_id: int
+    _event_loop = None  # Class variable to store the event loop
+    _active_tasks: Set[Tuple[float, asyncio.Task]]
 
     def __init__(self, name, **kwargs):
-        super().__init__(name=name, **kwargs)
-        self._unique_id = f'{name}-' + str(uuid4())[:8]
-        self._logger = default_logger.bind(module=f'UnifiedCache:{settings.namespace}')
+        super(UnifiedCache, self).__init__(name=name, **kwargs)
+        self._unique_id = f'{name}-' + keccak(text=str(uuid4())).hex()[:8]
+        self._logger = default_logger.bind(
+            module=f'UnifiedCache:{settings.namespace}-{settings.instance_id}',
+        )
+        self._q = queue.Queue()
         self._shutdown_initiated = False
+        self._initialized = False
 
-        # Core components
-        self._aioredis_pool: Optional[RedisPoolCache] = None
-        self._redis_conn: Optional[aioredis.Redis] = None
-        self._ipfs_singleton: Optional[AsyncIPFSClientSingleton] = None
-        self._ipfs_reader_client = None
+        self._last_epoch_processing_health_check = 0
+        self._preloader_compute_mapping = dict()
+        self._snapshot_build_awaited_project_ids = dict()
 
-        # RPC and contract components (for transaction decoding)
-        self._rpc_helper: Optional[RpcHelper] = None
-        self._anchor_rpc_helper: Optional[RpcHelper] = None
-        self._protocol_state_contract = None
-
-        # Cache performance tracking
-        self._cache_hit_stats: Dict[str, int] = {}
-        self._cache_miss_stats: Dict[str, int] = {}
-
-        # Active tasks for background processing
+        # Task tracking (same as original cacher)
         self._active_tasks: Set[Tuple[float, asyncio.Task]] = set()
-        self._task_cleanup_interval = 30  # seconds
+        self._task_timeout = settings.async_task_config.task_timeout
+        self._task_cleanup_interval = settings.async_task_config.task_cleanup_interval
 
-        # Event processing
-        self._event_queue = asyncio.Queue()
-        self._processed_epochs: Set[int] = set()
-
-        # Dramatiq worker thread (same as original cacher)
-        self._worker_thread: Optional[threading.Thread] = None
-
-        # Register the handle_event method as a Dramatiq actor (same as original cacher)
+        # Register the handle_event method as a Dramatiq actor
         self._handle_event_actor = dramatiq.actor(
             queue_name=CACHER_QUEUE_NAME,
             actor_name='handleEvent',
         )(self.handle_event)
 
+        # Initialize reporting and notification related attributes
+        self._hostname = gethostname()
+        self._health_report_interval = settings.health_report_interval
+        self._worker_thread: Optional[threading.Thread] = None
+        self._project_data_entry_expiry = 60 * 60 * 24 * 7  # 7 days in seconds
+        self._cleanup_interval = 60 * 60
+        self._caching_interval = 60
+        self._cid_cache_expiry = PROJECT_DATA_ENTRY_EXPIRY
+
     def _signal_handler(self, signum, frame):
-        """
-        Signal handler method that handles shutdown when a SIGINT, SIGTERM, or SIGQUIT signal is received.
-
-        Args:
-            signum (int): The signal number.
-            frame (frame): The current stack frame at the time the signal was received.
-        """
-        import signal
-        if signum in [signal.SIGINT, signal.SIGTERM, signal.SIGQUIT]:
+        """Signal handler for graceful shutdown"""
+        if signum in [SIGINT, SIGTERM, SIGQUIT]:
             self._shutdown_initiated = True
-            self._logger.info(f'Shutdown initiated by signal {signum}')
+            self._logger.info('Shutdown initiated')
 
-            # Cancel all active tasks gracefully
-            if hasattr(self, '_event_loop') and self._event_loop:
-                self._event_loop.call_soon_threadsafe(self._event_loop.stop)  # Track processed epochs to avoid duplicates
-
-    async def _init_components(self):
-        """Initialize Redis and IPFS connections"""
-        # Redis
+    async def _init_redis_pool(self):
+        """Initialize Redis connection pool"""
         self._aioredis_pool = RedisPoolCache()
         await self._aioredis_pool.populate()
         self._redis_conn = self._aioredis_pool._aioredis_pool
 
-        # IPFS
+    async def _init_ipfs_client(self):
+        """Initialize IPFS client"""
         self._ipfs_singleton = AsyncIPFSClientSingleton(settings.ipfs)
         await self._ipfs_singleton.init_sessions()
+        self._ipfs_writer_client = self._ipfs_singleton._ipfs_write_client
         self._ipfs_reader_client = self._ipfs_singleton._ipfs_read_client
 
-        # RPC helpers (for transaction decoding like original cacher)
+    async def _init_rpc_helper(self):
+        """Initialize RPC helpers"""
         self._rpc_helper = RpcHelper(settings.rpc)
         await self._rpc_helper.init()
-
-        self._anchor_rpc_helper = RpcHelper(settings.anchor_chain_rpc)
+        self._anchor_rpc_helper = RpcHelper(rpc_settings=settings.anchor_chain_rpc)
         await self._anchor_rpc_helper.init()
 
-        # Protocol state contract (for transaction decoding like original cacher)
+    async def _init_protocol_meta(self):
+        """Initialize protocol metadata"""
         protocol_abi = read_json_file(settings.protocol_state.abi, self._logger)
         self._protocol_state_contract = self._anchor_rpc_helper.get_current_node()['web3_client'].eth.contract(
             address=to_checksum_address(settings.protocol_state.address),
-            abi=protocol_abi
+            abi=protocol_abi,
         )
 
-        self._logger.info("Unified cache components initialized")
+        self._source_chain_block_time = await get_source_chain_block_time(
+            redis_conn=self._redis_conn,
+            rpc_helper=self._anchor_rpc_helper,
+            state_contract_obj=self._protocol_state_contract,
+        )
+
+        self._source_chain_epoch_size = await get_source_chain_epoch_size(
+            redis_conn=self._redis_conn,
+            rpc_helper=self._anchor_rpc_helper,
+            state_contract_obj=self._protocol_state_contract,
+        )
+
+        self._max_epochs_to_process = int(self._project_data_entry_expiry / (self._source_chain_epoch_size * self._source_chain_block_time))
+        self._logger.info(f"Max epochs to process: {self._max_epochs_to_process}")
+
+    async def init_worker(self):
+        """Initialize worker (same as original cacher)"""
+        if not self._initialized:
+            await self._init_redis_pool()
+            self._logger.debug('Initialized Redis pool')
+            await self._init_rpc_helper()
+            self._logger.debug('Initialized RPC helper')
+            await self._init_protocol_meta()
+            await self._init_ipfs_client()
+            asyncio.create_task(self._cleanup_tasks())
+            asyncio.create_task(self._cleanup_expired_project_data())
+
+        self._initialized = True
+
+    async def _create_tracked_task(self, task):
+        """Create and track an async task (same as original cacher)"""
+        current_time = time.time()
+        new_task = asyncio.create_task(task)
+        self._active_tasks.add((current_time, new_task))
+        new_task.add_done_callback(lambda _: self._active_tasks.discard((current_time, new_task)))
 
     async def get_cached_data(self, project_id: str, epoch_id: Optional[int] = None) -> Optional[Dict]:
         """
@@ -356,247 +410,624 @@ class UnifiedCache(multiprocessing.Process):
             self._logger.error(f'Detailed traceback:\n{error_traceback}')
             self._logger.error(f'Event data: {args}')
 
-    async def process_event(self, event_type: str, event_data: Union[str, Dict[str, Any]]) -> None:
-        """
-        Processes events based on their type by calling the appropriate handler method.
-
-        This method routes the event to the appropriate handler based on the event_type,
-        and handles any errors that occur during processing.
-
-        Args:
-            event_type (str): The type of event to process.
-            event_data (Union[str, Dict[str, Any]]): JSON string or dict containing the event data.
-                  Will be parsed to dict if string.
-
-        Returns:
-            None
-        """
-        # Parse JSON string to dictionary if needed
-        if isinstance(event_data, str):
-            try:
-                parsed_event_data = json.loads(event_data)
-            except json.JSONDecodeError as e:
-                self._logger.error(f'Failed to parse event data JSON: {e}')
-                self._logger.error(f'Raw event data: {event_data}')
-                return
-        elif isinstance(event_data, dict):
-            parsed_event_data = event_data
-        else:
-            self._logger.error(f'Invalid event_data type: {type(event_data)}, expected str or dict')
-            return
-
-        # Validate parsed data is a dict
-        if not isinstance(parsed_event_data, dict):
-            self._logger.error(f'Parsed event data is not a dict: {type(parsed_event_data)}')
-            return
-
-        self._logger.info(f'Got message to process: {parsed_event_data}')
+    async def process_event(self, event_type, event_data):
+        """Process events - directly await handlers, inner tasks handle their own tracking"""
+        self._logger.info(
+            (
+                'Got message to process and distribute: {}'
+            ),
+            event_data,
+        )
 
         if event_type == 'SnapshotSubmitted':
-            self._logger.info('SnapshotSubmittedEvent caught')
-            await self._handle_snapshot_submitted(parsed_event_data)
+            self._logger.info(f'SnapshotSubmittedEvent caught with message {event_data}')
+            await self._process_snapshot_submitted_message(event_data)
         elif event_type == 'SnapshotFinalized':
-            self._logger.info('SnapshotFinalizedEvent caught')
-            await self._handle_snapshot_finalized(parsed_event_data)
+            self._logger.info(f'SnapshotFinalizedEvent caught with message {event_data}')
+            await self._process_snapshot_finalized_message(event_data)
         elif event_type == 'SnapshotBatchSubmitted':
-            self._logger.info('SnapshotBatchSubmittedEvent caught')
-            await self._handle_snapshot_batch_submitted(parsed_event_data)
+            self._logger.info(f'SnapshotBatchSubmittedEvent caught with message {event_data}')
+            await self._process_snapshot_batch_submitted_message(event_data)
         else:
-            self._logger.error(f'Unknown message type: {event_type}')
+            self._logger.error(
+                (
+                    'Unknown message type: {}'
+                ),
+                event_type,
+            )
 
-    async def _handle_snapshot_submitted(self, event_data: Dict):
-        """Handle SnapshotSubmitted event - equivalent to original cacher logic"""
+    async def _process_snapshot_submitted_message(self, event_data):
+        """Process snapshot submitted message (same as original cacher)"""
         try:
-            snapshot_cid = event_data.get("snapshotCid")
-            epoch_id = event_data.get("epochId")
-            project_id = event_data.get("projectId")
+            msg_obj: SnapshotSubmittedMessage = SnapshotSubmittedMessage.model_validate_json(event_data)
+            self._logger.debug(
+                f'SnapshotSubmittedEvent - project: {msg_obj.projectId}, '
+                f'epoch: {msg_obj.epochId}, CID: {msg_obj.snapshotCid[:16]}...'
+            )
 
-            if not all([snapshot_cid, epoch_id, project_id]):
-                self._logger.warning(f"Incomplete SnapshotSubmitted event data: {event_data}")
-                return
-
-            # Avoid processing duplicates
-            epoch_key = f"{project_id}:{epoch_id}"
-            if epoch_key in self._processed_epochs:
-                return
-
-            self._processed_epochs.add(epoch_key)
-
-            # Create a pipeline for batch processing (like original)
             pipeline = self._redis_conn.pipeline()
 
-            # Add snapshot cid to unpin zset if IPFS unpinning is configured
-            try:
-                if hasattr(settings, 'ipfs_unpinning') and settings.ipfs_unpinning.enabled:
-                    from snapshotter.utils.redis.redis_keys import snapshots_to_unpin_zset_name
-                    self._logger.debug(f"Adding snapshot CID {snapshot_cid[:16]}... to unpin zset")
-                    pipeline.zadd(
-                        name=snapshots_to_unpin_zset_name(),
-                        mapping={snapshot_cid: int(time.time()) + settings.ipfs_unpinning.unpin_after},
-                    )
-            except AttributeError:
-                # IPFS unpinning not configured, skip
-                pass
+            # Add snapshot cid to unpin zset if enabled
+            if settings.ipfs_unpinning.enabled:
+                self._logger.debug(f"Adding snapshot CID {msg_obj.snapshotCid[:16]}... to unpin zset")
+                pipeline.zadd(
+                    name=snapshots_to_unpin_zset_name(),
+                    mapping={msg_obj.snapshotCid: int(time.time()) + settings.ipfs_unpinning.unpin_after},
+                )
 
-            # Update last submitted snapshot data (like original)
-            from snapshotter.utils.redis.redis_keys import last_submitted_snapshot_data_key
-            last_snapshot_submitted_data = await self._redis_conn.get(last_submitted_snapshot_data_key(project_id))
+            last_snapshot_submitted_data = await self._redis_conn.get(last_submitted_snapshot_data_key(msg_obj.projectId))
             if last_snapshot_submitted_data:
                 last_snapshot_submitted_data = json.loads(last_snapshot_submitted_data)
                 last_snapshot_submitted_epoch = last_snapshot_submitted_data['epochId']
             else:
                 last_snapshot_submitted_epoch = 0
 
-            # Process snapshot CID equivalent to original process_snapshot_cid
-            await self._process_snapshot_cid(project_id, snapshot_cid, epoch_id, epoch_id)
+            await self._create_tracked_task(process_snapshot_cid(
+                self._redis_conn, self._ipfs_reader_client, msg_obj.projectId,
+                msg_obj.snapshotCid, msg_obj.epochId, msg_obj.epochId
+            ))
 
-            # Update project hashmap with this snapshot (like original)
-            project_hmap_key = project_data_hmap(project_id=project_id)
+            # Add to project data hashmap
+            project_hmap_key = project_data_hmap(project_id=msg_obj.projectId)
             pipeline.hset(
-                project_hmap_key,
-                str(epoch_id),
-                json.dumps({
-                    'snapshot_cid': snapshot_cid,
-                    'status': 'SUBMITTED'
-                })
+                name=project_hmap_key,
+                mapping={
+                    msg_obj.epochId: json.dumps({
+                        'snapshot_cid': msg_obj.snapshotCid,
+                        'status': SnapshotStatus.SUBMITTED.value,
+                    }),
+                },
             )
 
-            # Execute pipeline
+            # Add to expiry tracking sorted set with TTL
+            expiry_time = int(time.time()) + self._project_data_entry_expiry
+            expiry_key = f"{msg_obj.projectId}|{msg_obj.epochId}"
+            pipeline.zadd(
+                name=data_expiry_zset(),
+                mapping={expiry_key: expiry_time}
+            )
+
+            # Set last submitted snapshot data
+            pipeline.set(
+                name=last_submitted_snapshot_data_key(msg_obj.projectId),
+                value=json.dumps({
+                    'snapshotCid': msg_obj.snapshotCid,
+                    'epochId': msg_obj.epochId,
+                }),
+            )
+
+            # Execute all commands in a single network round-trip
             await pipeline.execute()
 
-            self._logger.debug(f"Processed snapshot for {project_id}:{epoch_id} (CID: {snapshot_cid[:16]}...)")
-
+            if msg_obj.projectId.startswith('activePools:'):
+                self._logger.info(
+                    f'ActivePoolsEvent - project: {msg_obj.projectId}, '
+                    f'epoch: {msg_obj.epochId}, CID: {msg_obj.snapshotCid[:16]}...'
+                )
+                await self._create_tracked_task(self._process_active_pools_message(msg_obj))
+            elif msg_obj.projectId.startswith('activeTokens:'):
+                self._logger.info(
+                    f'ActiveTokensEvent - project: {msg_obj.projectId}, '
+                    f'epoch: {msg_obj.epochId}, CID: {msg_obj.snapshotCid[:16]}...'
+                )
+                await self._create_tracked_task(self._process_active_tokens_message(msg_obj))
+            elif msg_obj.projectId.startswith('baseSnapshot:'):
+                self._logger.debug(
+                    f'BaseSnapshotEvent - project: {msg_obj.projectId}, '
+                    f'epoch: {msg_obj.epochId}'
+                )
+                await self._create_tracked_task(
+                    self._process_trade_volume_from_base_snapshot_message(msg_obj, 86400)
+                )
+                await self._create_tracked_task(
+                    self._process_trade_volume_from_base_snapshot_message(msg_obj, 604800)
+                )
         except Exception as e:
-            self._logger.error(f"Error handling SnapshotSubmitted event: {e}")
+            self._logger.error(f"Error processing snapshot submitted message: {e}")
+            self._logger.error(traceback.format_exc())
+            raise
 
-    async def _handle_snapshot_finalized(self, event_data: Dict):
-        """Handle SnapshotFinalized event - equivalent to original cacher logic"""
-        try:
-            epoch_id = event_data.get("epochId")
-            project_id = event_data.get("projectId")
-            snapshot_cid = event_data.get("snapshotCid")
+    async def _process_snapshot_finalized_message(self, event_data):
+        """Process snapshot finalized message (same as original cacher)"""
+        self._logger.debug(f'SnapshotFinalizedEvent caught with message {event_data}')
+        msg_obj: SnapshotFinalizedMessage = SnapshotFinalizedMessage.model_validate_json(event_data)
 
-            if not all([epoch_id, project_id, snapshot_cid]):
-                self._logger.warning(f"Incomplete SnapshotFinalized event data: {event_data}")
-                return
+        pipeline = self._redis_conn.pipeline()
 
-            # Create a pipeline for batch processing (like original)
-            pipeline = self._redis_conn.pipeline()
+        # set project last finalized epoch in redis - use max of current and new
+        last_finalized_hmap = project_last_finalized_epoch_hmap()
+        current_epoch = await self._redis_conn.hget(last_finalized_hmap, msg_obj.projectId)
+        if current_epoch is not None:
+            current_epoch = int(current_epoch)
+            pipeline.hset(
+                name=last_finalized_hmap,
+                key=msg_obj.projectId,
+                value=max(current_epoch, msg_obj.epochId),
+            )
+        else:
+            pipeline.hset(
+                name=last_finalized_hmap,
+                key=msg_obj.projectId,
+                value=msg_obj.epochId,
+            )
 
-            # Update project last finalized epoch - use max of current and new (like original)
+        # Add to project data hashmap
+        project_hmap_key = project_data_hmap(project_id=msg_obj.projectId)
+        pipeline.hset(
+            name=project_hmap_key,
+            mapping={
+                msg_obj.epochId: json.dumps({
+                    'snapshot_cid': msg_obj.snapshotCid,
+                    'status': SnapshotStatus.FINALIZED.value,
+                }),
+            },
+        )
+
+        # Add to expiry tracking sorted set with TTL
+        expiry_time = int(time.time()) + self._project_data_entry_expiry
+        expiry_key = f"{msg_obj.projectId}|{msg_obj.epochId}"
+        pipeline.zadd(
+            name=data_expiry_zset(),
+            mapping={expiry_key: expiry_time}
+        )
+
+        await pipeline.execute()
+
+    async def _process_snapshot_batch_submitted_message(self, event_data):
+        """Process snapshot batch submitted message (same as original cacher)"""
+        self._logger.debug(f'SnapshotBatchSubmittedEvent caught with message {event_data}')
+        msg_obj: SnapshotBatchSubmittedMessage = SnapshotBatchSubmittedMessage.model_validate_json(event_data)
+
+        transaction_hash = msg_obj.transactionHash
+
+        # Get the transaction details from the blockchain
+        tx = await self._anchor_rpc_helper.get_transaction_from_hash(transaction_hash)
+
+        # Decode the transaction input to extract project IDs and snapshot CIDs
+        decoded_input = self._protocol_state_contract.decode_function_input(tx.input)
+        _, input_params = decoded_input
+
+        submitted_batch_data = zip(input_params['projectIds'], input_params['snapshotCids'])
+
+        # Create a pipeline for batch processing
+        pipeline = self._redis_conn.pipeline()
+
+        for project_id, snapshot_cid in submitted_batch_data:
+            # update last_finalized_epoch in redis - use max of current and new
+            await self._create_tracked_task(process_snapshot_cid(
+                self._redis_conn, self._ipfs_reader_client, project_id,
+                snapshot_cid, msg_obj.epochId, msg_obj.epochId
+            ))
+
             last_finalized_hmap = project_last_finalized_epoch_hmap()
             current_epoch = await self._redis_conn.hget(last_finalized_hmap, project_id)
             if current_epoch is not None:
                 current_epoch = int(current_epoch)
                 pipeline.hset(
-                    last_finalized_hmap,
-                    project_id,
-                    max(current_epoch, epoch_id),
+                    name=last_finalized_hmap,
+                    key=project_id,
+                    value=max(current_epoch, msg_obj.epochId),
                 )
             else:
                 pipeline.hset(
-                    last_finalized_hmap,
-                    project_id,
-                    epoch_id,
+                    name=last_finalized_hmap,
+                    key=project_id,
+                    value=msg_obj.epochId,
                 )
 
-            # Update project data hashmap (like original)
+            # Add to project data hashmap
             project_hmap_key = project_data_hmap(project_id=project_id)
             pipeline.hset(
-                project_hmap_key,
-                str(epoch_id),
-                json.dumps({
-                    'snapshot_cid': snapshot_cid,
-                    'status': 'FINALIZED'
-                })
+                name=project_hmap_key,
+                mapping={
+                    msg_obj.epochId: json.dumps({
+                        'snapshot_cid': snapshot_cid,
+                        'status': SnapshotStatus.SEQUENCER_FINALIZED.value,
+                    }),
+                },
             )
 
-            # Add to expiry tracking sorted set with TTL (like original)
-            from snapshotter.utils.redis.redis_keys import data_expiry_zset
-            expiry_time = int(time.time()) + PROJECT_DATA_ENTRY_EXPIRY
-            pipeline.zadd(data_expiry_zset, {f"{project_id}|{epoch_id}": expiry_time})
+            # Add to expiry tracking sorted set with TTL
+            expiry_time = int(time.time()) + self._project_data_entry_expiry
+            expiry_key = f"{project_id}|{msg_obj.epochId}"
+            pipeline.zadd(
+                name=data_expiry_zset(),
+                mapping={expiry_key: expiry_time}
+            )
 
-            # Execute pipeline
-            await pipeline.execute()
+            # Get state mapping key
+            state_id = SnapshotterStates.SNAPSHOT_SEQUENCER_FINALIZE.value
+            mapping_key = epoch_id_project_to_state_mapping(msg_obj.epochId, state_id)
 
-            self._logger.debug(f"Marked epoch {epoch_id} as finalized for {project_id}")
+            pipeline.hset(
+                name=mapping_key,
+                mapping={
+                    project_id: SnapshotterStateUpdate(
+                        status='success', timestamp=int(time.time()), extra={'snapshot_cid': snapshot_cid},
+                    ).model_dump_json(),
+                },
+            )
 
-        except Exception as e:
-            self._logger.error(f"Error handling SnapshotFinalized event: {e}")
+        # Execute all commands in a single network round-trip
+        await pipeline.execute()
 
-    async def _handle_snapshot_batch_submitted(self, event_data: Dict):
-        """Handle SnapshotBatchSubmitted event - equivalent to original cacher logic with transaction decoding"""
-        try:
-            transaction_hash = event_data.get("transactionHash")
-            epoch_id = event_data.get("epochId")
+    async def _process_active_pools_message(self, msg_obj: SnapshotSubmittedMessage):
+        """Process active pools message (same as original cacher)"""
+        self._logger.info(
+            f'Processing active pools snapshot - project: {msg_obj.projectId}, '
+            f'epoch: {msg_obj.epochId}, CID: {msg_obj.snapshotCid[:16]}...'
+        )
+        time_interval = 86400
 
-            if not all([transaction_hash, epoch_id]):
-                self._logger.warning(f"Incomplete SnapshotBatchSubmitted event data: {event_data}")
-                return
+        # check if we are already processing this message
+        if await self._redis_conn.get(f"active_pool_data:{time_interval}:processing"):
+            self._logger.info(f"Already processing active pools for time interval {time_interval}")
+            return
 
-            # Decode transaction to get project IDs and snapshot CIDs (like original cacher)
-            tx = await self._anchor_rpc_helper.get_transaction_from_hash(transaction_hash)
-            decoded_input = self._protocol_state_contract.decode_function_input(tx.input)
-            _, input_params = decoded_input
+        # set key in redis to indicate that we are processing this message for 10 minutes
+        await self._redis_conn.set(f"active_pool_data:{time_interval}:processing", "true", ex=600)
 
-            project_ids = input_params['projectIds']
-            snapshot_cids = input_params['snapshotCids']
+        # check last indexed epoch
+        last_indexed_epoch = await self._redis_conn.get(f"active_pool_data:{time_interval}:latest:epoch")
+        if last_indexed_epoch:
+            last_indexed_epoch = int(last_indexed_epoch)
+        else:
+            last_indexed_epoch = 0
 
-            self._logger.debug(f"Decoded batch transaction: {len(project_ids)} projects, epoch {epoch_id}")
+        project_id = msg_obj.projectId
+        tail_epoch_id, _ = await get_tail_epoch_id(
+            self._redis_conn, self._protocol_state_contract, self._anchor_rpc_helper, msg_obj.epochId, time_interval, project_id,
+        )
 
-            # Create a pipeline for batch processing (like original)
-            pipeline = self._redis_conn.pipeline()
+        epochs_to_correct = msg_obj.epochId - last_indexed_epoch if last_indexed_epoch > tail_epoch_id else 0
+        self._logger.info(
+            f'Active pools processing - last_indexed: {last_indexed_epoch}, '
+            f'tail_epoch: {tail_epoch_id}, current: {msg_obj.epochId}, '
+            f'epochs_to_correct: {epochs_to_correct}'
+        )
 
-            # Process each snapshot in the batch (like original)
-            for project_id, snapshot_cid in zip(project_ids, snapshot_cids):
-                epoch_key = f"{project_id}:{epoch_id}"
-                if epoch_key not in self._processed_epochs:
-                    self._processed_epochs.add(epoch_key)
-
-                    # Process snapshot CID (equivalent to original process_snapshot_cid)
-                    await self._process_snapshot_cid(project_id, snapshot_cid, epoch_id, epoch_id)
-
-                    # Update last finalized epoch - use max of current and new (like original)
-                    from snapshotter.utils.redis.redis_keys import project_last_finalized_epoch_hmap
-                    last_finalized_hmap = project_last_finalized_epoch_hmap()
-                    current_epoch = await self._redis_conn.hget(last_finalized_hmap, project_id)
-                    if current_epoch is not None:
-                        current_epoch = int(current_epoch)
-                        pipeline.hset(
-                            last_finalized_hmap,
-                            project_id,
-                            max(current_epoch, epoch_id),
-                        )
-                    else:
-                        pipeline.hset(
-                            last_finalized_hmap,
-                            project_id,
-                            epoch_id,
-                        )
-
-                    # Update project data hashmap (like original)
-                    project_hmap_key = project_data_hmap(project_id=project_id)
-                    pipeline.hset(
-                        project_hmap_key,
-                        str(epoch_id),
-                        json.dumps({
-                            'snapshot_cid': snapshot_cid,
-                            'status': 'FINALIZED'  # Batch submissions are typically finalized
-                        })
+        if last_indexed_epoch > tail_epoch_id:
+            # fetch indexed data
+            self._logger.info(
+                f'Correcting indexed data for epochs {last_indexed_epoch} to {msg_obj.epochId} '
+                f'for time interval {time_interval}, epochs_to_correct: {epochs_to_correct}'
+            )
+            active_pools = await self._redis_conn.get(f"active_pool_data:{time_interval}:{last_indexed_epoch}:{settings.namespace}")
+            if active_pools:
+                active_pools = json.loads(active_pools)
+                # Only fetch snapshots if epochs_to_correct > 0
+                if epochs_to_correct > 0:
+                    # fetch snapshots for epochs_to_correct
+                    self._logger.info(
+                        f'Fetching new snapshots for epochs {last_indexed_epoch + 1} to {msg_obj.epochId}'
+                    )
+                    new_snapshots = await get_project_epoch_snapshot_bulk(
+                        self._redis_conn, self._protocol_state_contract, self._anchor_rpc_helper, self._ipfs_reader_client, last_indexed_epoch + 1, msg_obj.epochId, project_id,
+                    )
+                    old_snapshots = await get_project_epoch_snapshot_bulk(
+                        self._redis_conn, self._protocol_state_contract, self._anchor_rpc_helper, self._ipfs_reader_client, tail_epoch_id - epochs_to_correct, tail_epoch_id - 1, project_id,
                     )
 
-                    # Add to expiry tracking (like original)
-                    from snapshotter.utils.redis.redis_keys import data_expiry_zset
-                    expiry_time = int(time.time()) + PROJECT_DATA_ENTRY_EXPIRY
-                    pipeline.zadd(data_expiry_zset, {f"{project_id}|{epoch_id}": expiry_time})
+                    # add new snapshots to indexed data
+                    for snapshot in new_snapshots:
+                        if snapshot:
+                            for pool_address, frequency in snapshot['pools'].items():
+                                if pool_address not in active_pools:
+                                    active_pools[pool_address] = 0
+                                active_pools[pool_address] += frequency
+                    # remove old snapshots from indexed data
+                    for snapshot in old_snapshots:
+                        if snapshot:
+                            for pool_address, frequency in snapshot['pools'].items():
+                                if pool_address in active_pools:
+                                    active_pools[pool_address] -= frequency
+                                    # Remove pools with zero or negative frequency
+                                    if active_pools[pool_address] <= 0:
+                                        del active_pools[pool_address]
+                else:
+                    # epochs_to_correct == 0, use cached data as-is
+                    self._logger.info(
+                        f'No epochs to correct (epochs_to_correct={epochs_to_correct}), '
+                        f'using cached data directly with {len(active_pools)} pools'
+                    )
 
-            # Execute pipeline
-            await pipeline.execute()
+                # set data in redis
+                pipeline = self._redis_conn.pipeline()
+                pipeline.set(f"active_pool_data:{time_interval}:{msg_obj.epochId}:{settings.namespace}", json.dumps(active_pools), ex=3600)
+                pipeline.set(f"active_pool_data:{time_interval}:latest:epoch", msg_obj.epochId, ex=3600)
+                pipeline.delete(f"active_pool_data:{time_interval}:processing")
+                await pipeline.execute()
+                self._logger.info(
+                    f'Active pools cache updated - epoch: {msg_obj.epochId}, '
+                    f'total pools: {len(active_pools)}'
+                )
+            else:
+                # No cached data found, need to fetch all snapshots from scratch
+                self._logger.warning(
+                    f'No cached data found for epoch {last_indexed_epoch}, '
+                    f'cannot process incremental update for project {msg_obj.projectId}'
+                )
+                pipeline = self._redis_conn.pipeline()
+                pipeline.delete(f"active_pool_data:{time_interval}:processing")
+                await pipeline.execute()
 
-            self._logger.debug(f"Processed batch of {len(project_ids)} snapshots for epoch {epoch_id}")
+    async def _process_active_tokens_message(self, msg_obj: SnapshotSubmittedMessage):
+        """Process active tokens message (same as original cacher)"""
+        self._logger.info(f'ActiveTokensEvent caught with message {msg_obj}')
 
+        time_interval = 86400
+
+        # check if we are already processing this message
+        if await self._redis_conn.get(f"active_token_data:{msg_obj.projectId}:{time_interval}:processing"):
+            self._logger.info(f"Already processing active tokens for project {msg_obj.projectId} for time interval {time_interval}")
+            return
+
+        # set key in redis to indicate that we are processing this message for 10 minutes
+        await self._redis_conn.set(f"active_token_data:{msg_obj.projectId}:{time_interval}:processing", "true", ex=600)
+
+        # check last indexed epoch
+        last_indexed_epoch = await self._redis_conn.get(f"active_token_data:{time_interval}:latest:epoch")
+        if last_indexed_epoch:
+            last_indexed_epoch = int(last_indexed_epoch)
+        else:
+            last_indexed_epoch = 0
+
+        project_id = msg_obj.projectId
+        tail_epoch_id, _ = await get_tail_epoch_id(
+            self._redis_conn, self._protocol_state_contract, self._anchor_rpc_helper, msg_obj.epochId, time_interval, project_id,
+        )
+
+        self._logger.info(f"Last indexed epoch: {last_indexed_epoch}, tail epoch id: {tail_epoch_id}, current epoch: {msg_obj.epochId}")
+
+        if last_indexed_epoch > tail_epoch_id:
+            epochs_to_correct = msg_obj.epochId - last_indexed_epoch
+            # fetch indexed data
+            self._logger.info(f"Correcting indexed data for epochs {last_indexed_epoch} to {msg_obj.epochId} for time interval {time_interval}")
+            active_tokens = await self._redis_conn.get(f"active_token_data:{time_interval}:{last_indexed_epoch}:{settings.namespace}")
+            if active_tokens:
+                active_tokens = json.loads(active_tokens)
+                # fetch snapshots for epochs_to_correct
+                self._logger.info(f"Fetching new snapshots for epochs {last_indexed_epoch} to {last_indexed_epoch + epochs_to_correct}")
+                new_snapshots = await get_project_epoch_snapshot_bulk(
+                    self._redis_conn, self._protocol_state_contract, self._anchor_rpc_helper, self._ipfs_reader_client, last_indexed_epoch + 1, msg_obj.epochId, project_id,
+                )
+                old_snapshots = await get_project_epoch_snapshot_bulk(
+                    self._redis_conn, self._protocol_state_contract, self._anchor_rpc_helper, self._ipfs_reader_client, tail_epoch_id - epochs_to_correct, tail_epoch_id - 1, project_id,
+                )
+
+                # add new snapshots to indexed data
+                for snapshot in new_snapshots:
+                    if snapshot:
+                        for token_address, frequency in snapshot['tokens'].items():
+                            if token_address not in active_tokens:
+                                active_tokens[token_address] = 0
+                            active_tokens[token_address] += frequency
+                # remove old snapshots from indexed data
+                for snapshot in old_snapshots:
+                    if snapshot:
+                        for token_address, frequency in snapshot['tokens'].items():
+                            if token_address in active_tokens:
+                                active_tokens[token_address] -= frequency
+                # set data in redis
+                pipeline = self._redis_conn.pipeline()
+                pipeline.set(f"active_token_data:{time_interval}:{msg_obj.epochId}:{settings.namespace}", json.dumps(active_tokens), ex=3600)
+                pipeline.set(f"active_token_data:{time_interval}:latest:epoch", msg_obj.epochId, ex=3600)
+                pipeline.delete(f"active_token_data:{msg_obj.projectId}:{time_interval}:processing")
+                await pipeline.execute()
+
+    async def _process_trade_volume_from_base_snapshot_message(self, msg_obj: SnapshotSubmittedMessage, time_interval: int):
+        """Process trade volume from base snapshot message (same as original cacher)"""
+        self._logger.info(f'TradeVolumeFromBaseSnapshotEvent caught with message {msg_obj}')
+
+        # check if we are already processing this message
+        if await self._redis_conn.get(f"trade_volume_data:{msg_obj.projectId}:{time_interval}:processing"):
+            self._logger.info(f"Already processing trade volume for project {msg_obj.projectId} for time interval {time_interval}")
+            return
+
+        # set key in redis to indicate that we are processing this message for 10 minutes
+        await self._redis_conn.set(f"trade_volume_data:{msg_obj.projectId}:{time_interval}:processing", "true", ex=600)
+
+        # Check last indexed epoch
+        last_indexed_epoch = await self._redis_conn.get(
+            f"trade_volume_data:{msg_obj.projectId}:{time_interval}:latest:epoch"
+        )
+        if last_indexed_epoch:
+            last_indexed_epoch = int(last_indexed_epoch)
+        else:
+            last_indexed_epoch = 0
+
+        tail_epoch_id, _ = await get_tail_epoch_id(
+            self._redis_conn, self._protocol_state_contract, self._anchor_rpc_helper,
+            msg_obj.epochId, time_interval, msg_obj.projectId
+        )
+
+        self._logger.info(
+            f"Trade volume aggregation - Project: {msg_obj.projectId}, "
+            f"Last indexed epoch: {last_indexed_epoch}, "
+            f"tail epoch id: {tail_epoch_id}, current epoch: {msg_obj.epochId}"
+        )
+
+        total_trade_volume = 0.0
+
+        if last_indexed_epoch > tail_epoch_id:
+            epochs_to_correct = msg_obj.epochId - last_indexed_epoch
+            # Fetch cached volume data
+            self._logger.info(
+                f"Using cached data with correction for project {msg_obj.projectId}, "
+                f"epochs {last_indexed_epoch} to {msg_obj.epochId} "
+                f"for time interval {time_interval}"
+            )
+            cached_volume = await self._redis_conn.get(
+                f"trade_volume_data:{msg_obj.projectId}:{time_interval}:{last_indexed_epoch}:"
+                f"{settings.namespace}"
+            )
+            if cached_volume:
+                total_trade_volume = float(cached_volume)
+                # Apply incremental updates if needed
+                if epochs_to_correct > 0:
+                    self._logger.info(
+                        f"Applying incremental updates for project {msg_obj.projectId}, "
+                        f"fetching {epochs_to_correct} new epochs and removing old ones"
+                    )
+
+                    # Fetch new snapshots to add
+                    new_snapshots = await get_project_epoch_snapshot_bulk(
+                        self._redis_conn, self._protocol_state_contract, self._anchor_rpc_helper,
+                        self._ipfs_reader_client, last_indexed_epoch + 1, msg_obj.epochId, msg_obj.projectId
+                    )
+
+                    # Fetch old snapshots to remove
+                    old_snapshots = await get_project_epoch_snapshot_bulk(
+                        self._redis_conn, self._protocol_state_contract, self._anchor_rpc_helper,
+                        self._ipfs_reader_client, tail_epoch_id - epochs_to_correct,
+                        tail_epoch_id - 1, msg_obj.projectId
+                    )
+
+                    # Add volume from new snapshots
+                    for snapshot in new_snapshots:
+                        if snapshot and 'totalTrade' in snapshot:
+                            volume = snapshot['totalTrade']
+                            if isinstance(volume, (int, float)) and volume > 0:
+                                total_trade_volume += volume
+
+                    # Subtract volume from old snapshots
+                    for snapshot in old_snapshots:
+                        if snapshot and 'totalTrade' in snapshot:
+                            volume = snapshot['totalTrade']
+                            if isinstance(volume, (int, float)) and volume > 0:
+                                total_trade_volume -= volume
+
+                    # Ensure volume doesn't go negative due to data inconsistencies
+                    total_trade_volume = max(0.0, total_trade_volume)
+            else:
+                # No cached data found, fall back to full calculation
+                self._logger.info(
+                    f"No cached data found for project {msg_obj.projectId}, "
+                    f"calculating full volume from {tail_epoch_id} to {msg_obj.epochId}"
+                )
+                snapshots = await get_project_epoch_snapshot_bulk(
+                    self._redis_conn, self._protocol_state_contract, self._anchor_rpc_helper,
+                    self._ipfs_reader_client, tail_epoch_id, msg_obj.epochId, msg_obj.projectId
+                )
+                for snapshot in snapshots:
+                    if snapshot and 'totalTrade' in snapshot:
+                        volume = snapshot['totalTrade']
+                        if isinstance(volume, (int, float)) and volume > 0:
+                            total_trade_volume += volume
+        else:
+            # Fresh calculation needed
+            self._logger.info(
+                f"Performing fresh calculation for project {msg_obj.projectId} "
+                f"from {tail_epoch_id} to {msg_obj.epochId}"
+            )
+            snapshots = await get_project_epoch_snapshot_bulk(
+                self._redis_conn, self._protocol_state_contract, self._anchor_rpc_helper,
+                self._ipfs_reader_client, tail_epoch_id, msg_obj.epochId, msg_obj.projectId
+            )
+            for snapshot in snapshots:
+                if snapshot and 'totalTrade' in snapshot:
+                    volume = snapshot['totalTrade']
+                    if isinstance(volume, (int, float)) and volume > 0:
+                        total_trade_volume += volume
+
+        # Set data in redis (same pattern as active pools/tokens)
+        pipeline = self._redis_conn.pipeline()
+        pipeline.set(
+            f"trade_volume_data:{msg_obj.projectId}:{time_interval}:{msg_obj.epochId}:{settings.namespace}",
+            str(total_trade_volume)
+        )
+        pipeline.set(
+            f"trade_volume_data:{msg_obj.projectId}:{time_interval}:latest:epoch", msg_obj.epochId
+        )
+        # Remove old data
+        if last_indexed_epoch > 0:
+            pipeline.delete(f"trade_volume_data:{msg_obj.projectId}:{time_interval}:{last_indexed_epoch}:{settings.namespace}")
+        pipeline.delete(f"trade_volume_data:{msg_obj.projectId}:{time_interval}:processing")
+        await pipeline.execute()
+
+    async def report_health_status(self):
+        """Report health status to Redis (equivalent to original cacher)"""
+        if not hasattr(self, '_redis_conn') or self._redis_conn is None:
+            self._logger.warning('Redis connection not initialized, skipping health report.')
+            return
+
+        try:
+            from snapshotter.utils.redis.redis_keys import service_health_timestamps_key
+            current_timestamp = int(time.time())
+            hostname = f"{os.getpid()}-{settings.instance_id}"
+            await self._redis_conn.hset(
+                service_health_timestamps_key(),
+                hostname,
+                current_timestamp,
+            )
+            self._logger.debug(f'Reported health for {hostname} at {current_timestamp}')
         except Exception as e:
-            self._logger.error(f"Error handling SnapshotBatchSubmitted event: {e}")
+            self._logger.error(f'Failed to report health status: {e}')
+
+    async def _periodic_health_reporter(self):
+        """Periodically report health status (equivalent to original cacher)"""
+        health_report_interval = getattr(settings, 'health_report_interval', 30)
+
+        while not self._shutdown_initiated:
+            try:
+                # Check if worker thread is still alive
+                if hasattr(self, '_worker_thread') and self._worker_thread and not self._worker_thread.is_alive():
+                    self._logger.critical('Dramatiq worker thread has died. Halting health reports.')
+                    break
+
+                await self.report_health_status()
+                await asyncio.sleep(health_report_interval)
+
+            except asyncio.CancelledError:
+                self._logger.info('Periodic health reporter task cancelled.')
+                break
+            except Exception as e:
+                self._logger.error(f'Error in periodic health reporter loop: {e}')
+                await asyncio.sleep(health_report_interval)
+
+    async def _cleanup_expired_project_data(self):
+        """Clean up expired project data (equivalent to original cacher)"""
+        while not self._shutdown_initiated:
+            try:
+                self._logger.info(f"Cleaning up expired project data at {time.strftime('%Y-%m-%d %H:%M:%S')}")
+                current_time = int(time.time())
+
+                # Get all entries that have expired
+                expired_entries = await self._redis_conn.zrangebyscore(
+                    data_expiry_zset(),
+                    0,
+                    current_time,
+                    withscores=True
+                )
+
+                self._logger.info(f"Cleaning up {len(expired_entries)} expired project data entries")
+
+                if expired_entries:
+                    # Group by project_id for efficient deletion
+                    entries_by_hmap = {}
+                    for entry, _ in expired_entries:
+                        entry_str = entry.decode('utf-8') if isinstance(entry, bytes) else entry
+                        project_id, key = entry_str.split('|')
+                        if project_id not in entries_by_hmap:
+                            entries_by_hmap[project_id] = []
+                        entries_by_hmap[project_id].append(key)
+
+                    # Remove the entries from the hashmaps and the expiry set
+                    pipeline = self._redis_conn.pipeline()
+                    for project_id, keys in entries_by_hmap.items():
+                        from snapshotter.utils.redis.redis_keys import project_data_hmap
+                        pipeline.hdel(project_data_hmap(project_id), *keys)
+
+                    # Remove from expiry tracking
+                    pipeline.zrem(data_expiry_zset(), *[entry for entry, _ in expired_entries])
+
+                    await pipeline.execute()
+
+            except Exception as e:
+                self._logger.error(f"Error cleaning up expired project data: {e}")
+
+            self._logger.info(f"Sleeping for {self._cleanup_interval} seconds before next cleanup cycle")
+            await asyncio.sleep(self._cleanup_interval)
 
     async def _process_snapshot_cid(self, project_id: str, snapshot_cid: str, epoch_id: int, original_epoch_id: int):
         """Process snapshot CID equivalent to original process_snapshot_cid function"""
@@ -747,37 +1178,38 @@ class UnifiedCache(multiprocessing.Process):
                     middleware.event_loop = ev_loop
 
             # Initialize the worker
-            ev_loop.run_until_complete(self._init_components())
+            ev_loop.run_until_complete(self.init_worker())
 
-            # Start a Dramatiq worker in a separate thread (same as original cacher)
+            # Start a Dramatiq worker in a separate thread
             worker = Worker(redis_broker, queues=[CACHER_QUEUE_NAME])
             worker_thread = threading.Thread(target=worker.start, daemon=True)
             self._worker_thread = worker_thread
             worker_thread.start()
 
-            # Start periodic CID caching task (equivalent to original cid_cacher)
+            # Start periodic CID caching task (from cid_cacher)
             cid_cache_task = ev_loop.create_task(self._periodic_cid_caching())
-            self._active_tasks.add((time.time(), cid_cache_task))
+
+            # Start the health reporter task
+            health_reporter_task = ev_loop.create_task(self._periodic_health_reporter())
 
             try:
-                self._logger.info('UnifiedCache started successfully')
                 # Run the event loop until shutdown is requested
                 ev_loop.run_forever()
-            except KeyboardInterrupt:
-                self._logger.info('KeyboardInterrupt received, shutting down')
             finally:
-                self._logger.info('Stopping event loop and cleaning up')
+                # Clean up tasks and close the event loop
+                if health_reporter_task and not health_reporter_task.done():
+                    health_reporter_task.cancel()
+                    ev_loop.run_until_complete(asyncio.sleep(2))
 
-                # Cancel periodic tasks
-                if not cid_cache_task.done():
+                if cid_cache_task and not cid_cache_task.done():
                     cid_cache_task.cancel()
+                    ev_loop.run_until_complete(asyncio.sleep(2))
 
-                # Perform graceful shutdown
-                ev_loop.run_until_complete(self._shutdown())
+                # Close Redis connection
+                if hasattr(self, '_redis_conn') and self._redis_conn:
+                    ev_loop.run_until_complete(self._redis_conn.close())
 
-                # Close the event loop
                 ev_loop.close()
-                self._logger.info('UnifiedCache shutdown complete')
 
         except Exception as e:
             self._logger.error(f"Fatal error in UnifiedCache process: {e}")
@@ -821,7 +1253,7 @@ class UnifiedCache(multiprocessing.Process):
                 if cids_to_cache:
                     total_processed += len(cids_to_cache)
                     self._logger.debug(f'Processing batch {batch_count}: {len(cids_to_cache)} CIDs')
-                    cached_count = await self._cache_cid_batch(cids_to_cache)
+                    cached_count = await self._cache_cids(cids_to_cache)
                     if cached_count:
                         total_cached += cached_count
                 else:
@@ -838,106 +1270,211 @@ class UnifiedCache(multiprocessing.Process):
                         total_cached = 0
                         batch_count = 0
                         last_summary_time = current_time
-                    await asyncio.sleep(60)  # Check every 60 seconds when idle
+                    await asyncio.sleep(self._caching_interval)
 
             except asyncio.CancelledError:
                 self._logger.info("Periodic CID caching cancelled")
                 break
             except Exception as e:
                 self._logger.error(f'Error in periodic CID caching: {e}')
-                await asyncio.sleep(60)
+                await asyncio.sleep(self._caching_interval)
 
-    async def _cache_cid_batch(self, cids: List[str]) -> int:
-        """Cache a batch of CIDs (equivalent to original cid_cacher._cache_cids)"""
+    async def _cache_cids(self, cids: List[str]):
+        """Cache CIDs in Redis (same as original cid_cacher)"""
         if not cids:
-            return 0
+            return
 
         try:
-            # Check which CIDs are already cached
-            cid_data = await self._redis_conn.mget([cid_cache(cid) for cid in cids])
+            # fetch existing cids cached from redis
+            cid_data = await self._redis_conn.mget(
+                [cid_cache(cid) for cid in cids]
+            )
             existing_cids = [cid for cid, data in zip(cids, cid_data) if data is not None]
             cids_to_fetch = [cid for cid in cids if cid not in existing_cids]
 
-            # Log skipping if there are significant numbers
+            # Only log skipping if there are significant numbers, use DEBUG for routine operations
             if len(existing_cids) > 0:
-                self._logger.debug(f'Skipping {len(existing_cids)} CIDs that are already cached')
+                self._logger.debug(f'Skipping {len(existing_cids)} CIDs that are already cached (fetching {len(cids_to_fetch)} new)')
 
             if not cids_to_fetch:
+                self._logger.debug(f'All {len(cids)} CIDs already cached, skipping fetch')
                 return 0
 
-            # Fetch data for new CIDs
             tasks = [
                 get_submission_data(cid, self._ipfs_reader_client, True)
                 for cid in cids_to_fetch
             ]
 
             results = await asyncio.gather(
-                *(asyncio.wait_for(task, timeout=10) for task in tasks),  # 10s timeout like original
+                *(asyncio.wait_for(task, timeout=10) for task in tasks),
                 return_exceptions=True,
             )
 
             pipeline = self._redis_conn.pipeline()
             batch_cached_count = 0
+            error_count = 0
 
             for cid, result in zip(cids_to_fetch, results):
                 if isinstance(result, Exception):
                     self._logger.debug(f'Error processing CID {cid}: {result}')
+                    error_count += 1
                     continue
 
                 snapshot_data = result
                 if snapshot_data:
-                    # Cache the data
+                    # cache lite snapshot in redis
                     cid_cache_key = cid_cache(cid)
-                    pipeline.set(cid_cache_key, json.dumps(snapshot_data), ex=PROJECT_DATA_ENTRY_EXPIRY)
+                    pipeline.set(
+                        name=cid_cache_key,
+                        value=json.dumps(snapshot_data),
+                        ex=self._cid_cache_expiry,
+                    )
                     batch_cached_count += 1
+                else:
+                    self._logger.warning(f'No snapshot data found for CID: {cid}')
 
-            # Execute the pipeline
             if batch_cached_count > 0:
                 await pipeline.execute()
-                self._logger.debug(f'Cached {batch_cached_count} new CIDs')
+
+            # Log summary with context
+            if batch_cached_count > 0:
+                self._logger.info(
+                    f'CID cache update: cached {batch_cached_count} new CIDs '
+                    f'(skipped {len(existing_cids)} already cached'
+                    f'{f", {error_count} errors" if error_count > 0 else ""})'
+                )
+            elif len(cids_to_fetch) > 0:
+                self._logger.warning(
+                    f'CID cache update: failed to cache any of {len(cids_to_fetch)} CIDs'
+                    f'{f" ({error_count} errors)" if error_count > 0 else ""}'
+                )
 
             return batch_cached_count
 
         except Exception as e:
-            self._logger.error(f'Error caching CID batch: {e}')
-            return 0
+            self._logger.error(f'Error caching CIDs: {e}')
+            raise
 
-    async def _cleanup_processed_epochs(self):
-        """Clean up old processed epochs to prevent memory growth"""
+    async def _cleanup_tasks(self):
+        """Periodically clean up completed or timed-out tasks (same as original cacher)"""
+        while True:
+            try:
+                await asyncio.sleep(self._task_cleanup_interval)
+                current_time = time.time()
+
+                # Create a copy of tasks to avoid modification during iteration
+                tasks_to_check = list(self._active_tasks)
+
+                for task_start_time, task in tasks_to_check:
+                    try:
+                        if task.done():
+                            self._active_tasks.discard((task_start_time, task))
+                        elif current_time - task_start_time > self._task_timeout:
+                            self._logger.warning(
+                                f'Task {task} timed out. Cancelling..., '
+                                f'current_time: {current_time}, '
+                                f'start_time: {task_start_time}',
+                            )
+                            task.cancel()
+                            self._active_tasks.discard((task_start_time, task))
+                    except Exception as e:
+                        self._logger.error(f"Error cleaning up task {task}: {e}")
+                        # Remove the task from active tasks even if there's an error
+                        self._active_tasks.discard((task_start_time, task))
+            except asyncio.CancelledError:
+                self._logger.info("Task cleanup loop cancelled")
+                break
+            except Exception as e:
+                self._logger.error(f"Error in task cleanup loop: {e}")
+                await asyncio.sleep(self._task_cleanup_interval)
+
+    async def report_health_status(self):
+        """Report health status to Redis (same as original cacher)"""
+        if not hasattr(self, '_redis_conn') or self._redis_conn is None:
+            self._logger.warning('Redis connection not initialized, skipping health report.')
+            return
         try:
-            # Keep only recent epochs (last 1000) to prevent unbounded growth
-            if len(self._processed_epochs) > 1000:
-                # Remove oldest entries (this is a simple approximation)
-                self._processed_epochs.clear()  # In production, would track timestamps
-                self._logger.debug("Cleaned up processed epochs cache")
-
+            current_timestamp = int(time.time())
+            await self._redis_conn.hset(
+                service_health_timestamps_key(),
+                self._hostname,
+                current_timestamp,
+            )
+            self._logger.debug(f'Reported health for {self._hostname} at {current_timestamp}')
         except Exception as e:
-            self._logger.error(f"Error cleaning up processed epochs: {e}")
+            self._logger.error(f'Failed to report health status for hostname {self._hostname}: {e}')
 
-    async def queue_event(self, event_type: str, event_data: Dict):
-        """Queue an event for processing"""
-        try:
-            await self._event_queue.put((event_type, event_data))
-        except Exception as e:
-            self._logger.error(f"Error queuing event {event_type}: {e}")
+    async def _periodic_health_reporter(self):
+        """Periodically report health status to Redis (same as original cacher)"""
+        self._logger.info(
+            f'Starting periodic health reporter task for {self._hostname} (Interval: {self._health_report_interval}s)',
+        )
+        while True:
+            should_report = True
+            if not self._worker_thread or not self._worker_thread.is_alive():
+                should_report = False
+                if self._worker_thread:
+                    # Worker thread is no longer alive
+                    self._logger.critical(
+                        'Main Dramatiq worker thread has died. Halting health reports.'
+                    )
+                    # Halt the health reporter
+                    break
+                else:
+                    # Worker thread hasn't been initialized yet
+                    self._logger.warning('Worker thread not found. Skipping health report for now.')
 
-    async def _shutdown(self):
-        """Clean shutdown of the cache service"""
-        self._logger.info("Shutting down unified cache service")
+            try:
+                if should_report:
+                    await self.report_health_status()
 
-        # Cancel all active tasks
-        for _, task in self._active_tasks:
-            if not task.done():
-                task.cancel()
+                await asyncio.sleep(self._health_report_interval)
+            except asyncio.CancelledError:
+                self._logger.info(f'Periodic health reporter task for {self._hostname} cancelled.')
+                break
+            except Exception as e:
+                self._logger.error(f'Error in periodic health reporter loop: {e}')
+                await asyncio.sleep(self._health_report_interval)
 
-        # Close connections
-        if self._aioredis_pool:
-            await self._aioredis_pool.close()
+    async def _cleanup_expired_project_data(self):
+        """Periodically clean up expired project data (same as original cacher)"""
+        while True:
+            try:
+                self._logger.info(f"Cleaning up expired project data at {time.strftime('%Y-%m-%d %H:%M:%S')}")
+                current_time = int(time.time())
+                # Get all entries that have expired
+                expired_entries = await self._redis_conn.zrangebyscore(
+                    data_expiry_zset(),
+                    0,
+                    current_time,
+                    withscores=True
+                )
 
-        self._logger.info("Unified cache service shutdown complete")
+                self._logger.info(f"Cleaning up {len(expired_entries)} expired project data entries")
+                if expired_entries:
+                    # Group by project_id for efficient deletion
+                    entries_by_hmap = {}
+                    for entry, _ in expired_entries:
+                        project_id, key = entry.decode('utf-8').split('|')
+                        if project_id not in entries_by_hmap:
+                            entries_by_hmap[project_id] = []
+                        entries_by_hmap[project_id].append(key)
 
-    def stop(self):
-        """Stop the cache service"""
+                    # Remove the entries from the hashmaps and the expiry set
+                    pipeline = self._redis_conn.pipeline()
+                    for project_id, keys in entries_by_hmap.items():
+                        pipeline.hdel(project_data_hmap(project_id), *keys)
+
+                    # Remove from expiry tracking
+                    pipeline.zrem(data_expiry_zset(), *[entry for entry, _ in expired_entries])
+
+                    await pipeline.execute()
+
+            except Exception as e:
+                self._logger.error(f"Error cleaning up expired project data: {e}")
+
+            self._logger.info(f"Sleeping for {self._cleanup_interval} seconds before next cleanup cycle")
+            await asyncio.sleep(self._cleanup_interval)
         self._shutdown_initiated = True
         self._logger.info("Stop signal received")
 
