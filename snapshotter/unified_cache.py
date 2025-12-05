@@ -40,8 +40,8 @@ from dramatiq.worker import Worker
 from snapshotter.settings.config import settings
 from snapshotter.utils.default_logger import default_logger
 from snapshotter.utils.redis.redis_conn import RedisPoolCache
-from snapshotter.utils.redis.redis_keys import cid_cache, project_data_hmap, last_submitted_snapshot_data_key, data_expiry_zset, project_last_finalized_epoch_hmap
-from snapshotter.utils.dramatiq_queues import CACHER_QUEUE_NAME, cids_to_cache_set
+from snapshotter.utils.redis.redis_keys import cid_cache, project_data_hmap, last_submitted_snapshot_data_key, data_expiry_zset, project_last_finalized_epoch_hmap, cids_to_cache_set
+from snapshotter.utils.dramatiq_queues import CACHER_QUEUE_NAME
 from snapshotter.utils.data_utils import get_submission_data, PROJECT_DATA_ENTRY_EXPIRY, get_project_config
 
 # Configure Redis broker for Dramatiq (same as original cacher)
