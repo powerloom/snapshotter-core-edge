@@ -181,14 +181,9 @@ services:
   processor-distributor:
     <<: *snapshotter-base
     command: bash -c "bash snapshotter_autofill.sh &&bash init_processes.sh processor_distributor"
-  cacher:
+  unified-cache:
     <<: *snapshotter-base
-    command: bash -c "bash init_processes.sh cacher"
-    depends_on:
-      - processor-distributor
-  cid-cacher:
-    <<: *snapshotter-base
-    command: bash -c "bash init_processes.sh cid_cacher"
+    command: bash -c "bash init_processes.sh unified_cache"
     depends_on:
       - processor-distributor
   aggregation-worker:

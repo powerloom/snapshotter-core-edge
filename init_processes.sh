@@ -17,4 +17,10 @@ fi
 sleep 30
 
 echo "Starting ${service_name} with extra args: ${extra_args}"
-poetry run python -m snapshotter.$service_name $extra_args
+
+# Handle unified_cache as a special case
+if [ "$service_name" == "unified_cache" ]; then
+    poetry run python snapshotter/unified_cache.py $extra_args
+else
+    poetry run python -m snapshotter.$service_name $extra_args
+fi
