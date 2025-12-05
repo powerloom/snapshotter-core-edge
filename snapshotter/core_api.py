@@ -114,9 +114,7 @@ async def test_endpoint(request: Request):
     return {"status": "ok", "path": request.url.path}
 
 # Include the Uniswap V3 API router
-# Note: If nginx forwards /api/* to backend, it may strip /api prefix
-# So routes are registered as /snapshot/* not /api/snapshot/*
-app.include_router(compute_router, prefix="/api")
+app.include_router(compute_router)
 
 
 @app.on_event('startup')
