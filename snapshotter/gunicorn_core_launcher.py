@@ -11,7 +11,7 @@ JSON_LOGS = True if os.environ.get('JSON_LOGS', '0') == '1' else False
 if __name__ == '__main__':
     # In Docker, always bind to 0.0.0.0 to accept connections from all interfaces
     # This ensures nginx and other containers can connect
-    bind_host = os.environ.get('CORE_API_HOST', '0.0.0.0')
+    bind_host = settings.core_api.host or os.environ.get('CORE_API_HOST', '0.0.0.0')
     bind_port = settings.core_api.port
 
     options = {
@@ -21,7 +21,7 @@ if __name__ == '__main__':
         'errorlog': '-',
         'worker_class': 'uvicorn.workers.UvicornWorker',
         'logger_class': StubbedGunicornLogger,
-        'timeout': int(os.environ.get('GUNICORN_TIMEOUT', '120')),  # 120s default for slow IPFS/Redis operations
+        'timeout': int(os.environ.get('GUNICORN_TIMEOUT', '30')),  # 120s default for slow IPFS/Redis operations
         'keepalive': int(os.environ.get('GUNICORN_KEEPALIVE', '5')),  # 5s keepalive for nginx connections
         'graceful_timeout': int(os.environ.get('GUNICORN_GRACEFUL_TIMEOUT', '30')),  # Graceful shutdown timeout
     }

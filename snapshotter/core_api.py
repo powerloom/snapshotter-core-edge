@@ -59,13 +59,6 @@ class RequestLoggingMiddleware(BaseHTTPMiddleware):
                 f"Time: {process_time:.2f}s"
             )
             return response
-        except asyncio.TimeoutError as e:
-            process_time = time.time() - start_time
-            rest_logger.error(
-                f"[REQUEST] {method} {path} - TIMEOUT after {process_time:.2f}s: {e}",
-                exc_info=True
-            )
-            raise
         except Exception as e:
             process_time = time.time() - start_time
             rest_logger.error(
