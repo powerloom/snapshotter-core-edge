@@ -1,7 +1,24 @@
+"""
+Simplified Unified Cache Service
+
+This replaces the complex multi-layer caching system with a single, unified cache service
+that handles all data caching operations. The key improvements:
+
+1. Single caching layer instead of CID cacher + data cacher + API caching
+2. Cache-on-demand strategy with background refresh
+3. Simple get/set API for data access
+4. Eliminates Rube Goldberg complexity while maintaining performance
+
+Architecture:
+- Listens to blockchain events for cache invalidation/refresh
+- Provides simple cache API for data retrieval
+- Handles all caching logic in one place
+- Background processing for expensive operations
+"""
+
 import json
 import asyncio
 import multiprocessing
-import queue
 import resource
 import threading
 import time
@@ -19,6 +36,7 @@ from typing import Optional
 from typing import Tuple
 from uuid import uuid4
 from ipfs_client.main import AsyncIPFSClientSingleton
+from ipfs_client.dag import IPFSAsyncClientError
 
 import dramatiq
 import uvloop
@@ -31,7 +49,6 @@ from redis import asyncio as aioredis
 
 from snapshotter.settings.config import settings
 from snapshotter.utils.default_logger import default_logger
-from snapshotter.utils.file_utils import read_json_file
 from snapshotter.utils.models.data_models import SnapshotterStates
 from snapshotter.utils.models.data_models import SnapshotterStateUpdate
 from snapshotter.utils.models.data_models import SnapshotStatus
@@ -67,7 +84,27 @@ for m in middleware:
 dramatiq.set_broker(redis_broker)
 
 
-class Cacher(multiprocessing.Process):
+class UnifiedCache(multiprocessing.Process):
+    """
+    Simplified Unified Cache Service
+
+    Replaces the complex multi-layer caching system with a single service that:
+    - Handles all data caching (replaces CID cacher + data cacher)
+    - Uses cache-on-demand strategy with background refresh
+    - Provides simple get/set API for data access
+    - Eliminates redundant caching layers and complexity
+    """
+
+    _aioredis_pool: RedisPoolCache
+    _redis_conn: aioredis.Redis
+    _rpc_helper: RpcHelper
+    _anchor_rpc_helper: RpcHelper
+    _ipfs_singleton: Optional[AsyncIPFSClientSingleton] = None
+    _active_tasks: Set[Tuple[float, asyncio.Task]]
+    _cache_hit_stats: Dict[str, int]  # Track cache performance
+    _cache_miss_stats: Dict[str, int]
+
+    def __init__(self, name, **kwargs):
     """
     A class responsible for distributing processing tasks and managing the snapshot lifecycle.
 
