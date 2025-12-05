@@ -12,6 +12,7 @@ from tenacity import wait_random_exponential
 from typing import List, Optional, Tuple, Dict, Any
 from web3 import Web3
 from ipfs_client.main import AsyncIPFSClient
+from ipfs_client.dag import IPFSAsyncClientError
 from snapshotter.utils.models.data_models import (
     EpochSnapshotResponse, 
     ExactEpochSnapshot, 
@@ -775,6 +776,7 @@ async def _fetch_file_from_ipfs(ipfs_reader, cid):
     Fetches a file from IPFS using the given IPFS reader and CID.
 
     This function is decorated with a retry mechanism to handle potential IPFS errors.
+    Includes timeout handling to prevent hanging on slow/unresponsive IPFS nodes.
 
     Args:
         ipfs_reader: An IPFS reader object.
@@ -783,7 +785,19 @@ async def _fetch_file_from_ipfs(ipfs_reader, cid):
     Returns:
         The contents of the file as bytes.
     """
-    return await ipfs_reader.cat(cid)
+    try:
+        # Add timeout to prevent hanging on IPFS operations
+        return await asyncio.wait_for(ipfs_reader.cat(cid), timeout=30.0)  # 30 second timeout
+    except asyncio.TimeoutError:
+        logger.warning(f"IPFS fetch timeout for CID {cid}")
+        return b""  # Return empty bytes to indicate failure
+    except IPFSAsyncClientError as e:
+        # Permanent IPFS error (invalid CID, network unreachable, etc.) - don't retry
+        logger.warning(f"IPFS client error for CID {cid}: {e}")
+        return b""  # Return empty bytes to indicate failure
+    except Exception as e:
+        logger.warning(f"Unexpected IPFS error for CID {cid}: {e}")
+        return b""  # Return empty bytes to indicate failure
 
 
 async def fetch_file_from_ipfs(ipfs_reader, cid):
@@ -794,6 +808,9 @@ async def fetch_file_from_ipfs(ipfs_reader, cid):
     """
     try:
         data = await _fetch_file_from_ipfs(ipfs_reader, cid)
+        if not data:  # Handle timeout/empty response
+            logger.warning(f'Empty IPFS response for CID {cid}')
+            return dict()
         return json.loads(data)
     except Exception as e:
         logger.opt(exception=True).error(f'Error while fetching data from IPFS | CID {cid} | Error: {e}')
@@ -869,12 +886,39 @@ async def get_submission_data_bulk(
     # Process submissions in batches
     for i in range(0, len(missing_cids), BATCH_SIZE):
         batch_cids = missing_cids[i:i + BATCH_SIZE]
-        batch_snapshot_data = await asyncio.gather(
-            *[
-                get_submission_data(cid, ipfs_reader)
-                for cid in batch_cids
-            ],
-        )
+        try:
+            # Add timeout to prevent hanging on large batches
+            batch_snapshot_data = await asyncio.wait_for(
+                asyncio.gather(
+                    *[
+                        get_submission_data(cid, ipfs_reader)
+                        for cid in batch_cids
+                    ],
+                    return_exceptions=True  # Don't fail entire batch if one CID fails
+                ),
+                timeout=45.0  # 45 second timeout for batch fetching
+            )
+
+            # Handle exceptions in individual fetches
+            processed_batch_data = []
+            for i, data in enumerate(batch_snapshot_data):
+                if isinstance(data, Exception):
+                    if isinstance(data, IPFSAsyncClientError):
+                        logger.warning(f"IPFS client error fetching CID {batch_cids[i]}: {data}")
+                    elif isinstance(data, asyncio.TimeoutError):
+                        logger.warning(f"Timeout fetching CID {batch_cids[i]}")
+                    else:
+                        logger.warning(f"Exception fetching CID {batch_cids[i]}: {data}")
+                    processed_batch_data.append(dict())  # Empty dict for failed fetches
+                else:
+                    processed_batch_data.append(data)
+
+            batch_snapshot_data = processed_batch_data
+
+        except asyncio.TimeoutError:
+            logger.error(f"Timeout fetching batch of {len(batch_cids)} CIDs")
+            # Return empty dicts for all CIDs in the timed-out batch
+            batch_snapshot_data = [dict() for _ in batch_cids]
 
         for cid, data in zip(batch_cids, batch_snapshot_data):
 
@@ -893,8 +937,14 @@ async def get_submission_data_bulk(
                 if data == dict()
             ]
             if missing_cids:
-                logger.error(f'Incomplete ipfs data for CIDs: {missing_cids}')
-                return []
+                logger.warning(f'Incomplete ipfs data for {len(missing_cids)} out of {len(batch_cids)} CIDs: {missing_cids[:5]}...' if len(missing_cids) > 5 else f'Incomplete ipfs data for CIDs: {missing_cids}')
+                # Instead of failing completely, continue but log the issue
+                # Only fail if more than 50% of data is missing to prevent complete failures
+                if len(missing_cids) > len(batch_cids) * 0.5:
+                    logger.error(f'Too many missing CIDs ({len(missing_cids)}/{len(batch_cids)}), failing batch')
+                    return []
+                else:
+                    logger.warning(f'Continuing with partial data ({len(missing_cids)} missing out of {len(batch_cids)})')
 
     final_snapshot_data = []
     for cid in cids:
