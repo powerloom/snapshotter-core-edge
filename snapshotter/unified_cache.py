@@ -26,7 +26,7 @@ import multiprocessing
 import threading
 import time
 import traceback
-from typing import Dict, List, Set, Optional, Tuple, Any
+from typing import Dict, List, Set, Optional, Tuple, Any, Union
 from uuid import uuid4
 from ipfs_client.main import AsyncIPFSClientSingleton
 from ipfs_client.dag import IPFSAsyncClientError
@@ -304,6 +304,7 @@ class UnifiedCache(multiprocessing.Process):
 
         Args:
             *args: Arguments passed by Dramatiq, expected to be [event_type, event_data].
+                  event_data can be a JSON string or dict.
 
         Returns:
             None
@@ -333,7 +334,7 @@ class UnifiedCache(multiprocessing.Process):
             self._logger.error(f'Detailed traceback:\n{error_traceback}')
             self._logger.error(f'Event data: {args}')
 
-    async def process_event(self, event_type, event_data):
+    async def process_event(self, event_type: str, event_data: Union[str, Dict[str, Any]]) -> None:
         """
         Processes events based on their type by calling the appropriate handler method.
 
@@ -342,22 +343,42 @@ class UnifiedCache(multiprocessing.Process):
 
         Args:
             event_type (str): The type of event to process.
-            event_data (str): JSON string containing the event data.
+            event_data (Union[str, Dict[str, Any]]): JSON string or dict containing the event data.
+                  Will be parsed to dict if string.
 
         Returns:
             None
         """
-        self._logger.info(f'Got message to process: {event_data}')
+        # Parse JSON string to dictionary if needed
+        if isinstance(event_data, str):
+            try:
+                parsed_event_data = json.loads(event_data)
+            except json.JSONDecodeError as e:
+                self._logger.error(f'Failed to parse event data JSON: {e}')
+                self._logger.error(f'Raw event data: {event_data}')
+                return
+        elif isinstance(event_data, dict):
+            parsed_event_data = event_data
+        else:
+            self._logger.error(f'Invalid event_data type: {type(event_data)}, expected str or dict')
+            return
+
+        # Validate parsed data is a dict
+        if not isinstance(parsed_event_data, dict):
+            self._logger.error(f'Parsed event data is not a dict: {type(parsed_event_data)}')
+            return
+
+        self._logger.info(f'Got message to process: {parsed_event_data}')
 
         if event_type == 'SnapshotSubmitted':
-            self._logger.info(f'SnapshotSubmittedEvent caught')
-            await self._handle_snapshot_submitted(event_data)
+            self._logger.info('SnapshotSubmittedEvent caught')
+            await self._handle_snapshot_submitted(parsed_event_data)
         elif event_type == 'SnapshotFinalized':
-            self._logger.info(f'SnapshotFinalizedEvent caught')
-            await self._handle_snapshot_finalized(event_data)
+            self._logger.info('SnapshotFinalizedEvent caught')
+            await self._handle_snapshot_finalized(parsed_event_data)
         elif event_type == 'SnapshotBatchSubmitted':
-            self._logger.info(f'SnapshotBatchSubmittedEvent caught')
-            await self._handle_snapshot_batch_submitted(event_data)
+            self._logger.info('SnapshotBatchSubmittedEvent caught')
+            await self._handle_snapshot_batch_submitted(parsed_event_data)
         else:
             self._logger.error(f'Unknown message type: {event_type}')
 
