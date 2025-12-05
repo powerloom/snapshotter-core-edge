@@ -1091,8 +1091,14 @@ class UnifiedCache(multiprocessing.Process):
             if not project_config.keep_previous_snapshot_data:
                 return False
 
-            # Fetch snapshot data from IPFS
-            snapshot_data = await get_submission_data(snapshot_cid, self._ipfs_reader_client, False)
+            # Fetch snapshot data from IPFS (checks Redis cache first)
+            snapshot_data = await get_submission_data(
+                snapshot_cid, 
+                self._ipfs_reader_client, 
+                False,
+                redis_conn=self._redis_conn,
+                project_id=project_id,
+            )
 
             if snapshot_data:
                 pipeline = self._redis_conn.pipeline()

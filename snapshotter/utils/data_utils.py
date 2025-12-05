@@ -399,7 +399,13 @@ async def w3_get_and_cache_finalized_cid(
 
         # Process previousSnapshots if available
         try:
-            snapshot_data = await get_submission_data(cid, ipfs_reader, False)
+            snapshot_data = await get_submission_data(
+                cid, 
+                ipfs_reader, 
+                False,
+                redis_conn=redis_conn,
+                project_id=project_id,
+            )
             if snapshot_data and "previousSnapshots" in snapshot_data and len(snapshot_data["previousSnapshots"]) > 0:
                 data_to_cache = {}
                 min_previous_snapshot_key = snapshot_data["previousSnapshots"][0][0]
@@ -817,18 +823,25 @@ async def fetch_file_from_ipfs(ipfs_reader, cid):
         return dict()
 
 
-async def get_submission_data(cid, ipfs_reader, cleanup_previous_snapshots: bool = True) -> dict:
+async def get_submission_data(
+    cid, 
+    ipfs_reader, 
+    cleanup_previous_snapshots: bool = True,
+    redis_conn: Optional[aioredis.Redis] = None,
+    project_id: Optional[str] = None,
+) -> dict:
     """
     Fetches submission data from cache or IPFS.
 
-    This function first attempts to read the data from a local cache. If not found,
-    it fetches the data from IPFS and then caches it locally.
+    This function first attempts to read the data from Redis cache. If not found,
+    it fetches the data from IPFS and then caches it locally (if redis_conn and project_id provided).
 
     Args:
-        redis_conn (aioredis.Redis): Redis connection object.
         cid (str): IPFS content ID.
-        ipfs_reader (ipfshttpclient.client.Client): IPFS client object.
-        project_id (str): ID of the project.
+        ipfs_reader: IPFS client object.
+        cleanup_previous_snapshots (bool): Whether to remove previousSnapshots from data.
+        redis_conn (Optional[aioredis.Redis]): Redis connection object for cache access.
+        project_id (Optional[str]): ID of the project for caching.
 
     Returns:
         dict: Submission data.
@@ -836,12 +849,37 @@ async def get_submission_data(cid, ipfs_reader, cleanup_previous_snapshots: bool
     if not cid or 'null' in cid:
         return dict()
 
+    # Check Redis cache first if redis_conn is provided
+    if redis_conn:
+        cache_key = cid_cache(cid)
+        cached_data = await redis_conn.get(cache_key)
+        if cached_data:
+            try:
+                data = json.loads(cached_data)
+                if cleanup_previous_snapshots and "previousSnapshots" in data:
+                    data["previousSnapshots"] = []
+                return data
+            except (json.JSONDecodeError, TypeError) as e:
+                logger.warning(f"Failed to parse cached data for CID {cid}: {e}")
+
+    # Cache miss - fetch from IPFS
     data = await fetch_file_from_ipfs(ipfs_reader, cid)
     if isinstance(data, str):
         data = json.loads(data)
     if data:
         if cleanup_previous_snapshots and "previousSnapshots" in data:
             data["previousSnapshots"] = []
+        
+        # Cache the fetched data if redis_conn and project_id are provided
+        if redis_conn and project_id:
+            project_config = get_project_config(project_id)
+            if project_config and project_config.cache_cids:
+                await redis_conn.set(
+                    name=cid_cache(cid),
+                    value=json.dumps(data),
+                    ex=PROJECT_DATA_ENTRY_EXPIRY,
+                )
+        
         return data
     else:
         return dict()
@@ -980,7 +1018,13 @@ async def get_project_epoch_snapshot(
     """
     cid = await get_project_finalized_cid(redis_conn, state_contract_obj, rpc_helper, ipfs_reader, epoch_id, project_id)
     if cid and 'null' not in cid:
-        data = await get_submission_data(cid, ipfs_reader, cleanup_previous_snapshots)
+        data = await get_submission_data(
+            cid, 
+            ipfs_reader, 
+            cleanup_previous_snapshots,
+            redis_conn=redis_conn,
+            project_id=project_id,
+        )
         return EpochSnapshotResponse(
             exact_match=ExactEpochSnapshot(
                 epoch_id=epoch_id,
@@ -1622,7 +1666,13 @@ async def process_snapshot_cid(redis_conn: aioredis.Redis, ipfs_reader: AsyncIPF
         project_config = get_project_config(project_id)
         if not project_config.keep_previous_snapshot_data:
             return False
-        snapshot_data = await get_submission_data(snapshot_cid, ipfs_reader, False)
+        snapshot_data = await get_submission_data(
+            snapshot_cid, 
+            ipfs_reader, 
+            False,
+            redis_conn=redis_conn,
+            project_id=project_id,
+        )
         pipeline = redis_conn.pipeline()
         expiry_keys = []
 
@@ -1744,7 +1794,13 @@ async def fetch_single_epoch_snapshot(
             return snapshot_response.exact_match.data
         elif snapshot_response.has_closest_epochs and snapshot_response.closest_epochs.previous:
             prev_epoch = snapshot_response.closest_epochs.previous
-            prev_snapshot = await get_submission_data(prev_epoch.snapshot_cid, ipfs_reader)
+            prev_snapshot = await get_submission_data(
+                prev_epoch.snapshot_cid, 
+                ipfs_reader,
+                cleanup_previous_snapshots=True,
+                redis_conn=redis_conn,
+                project_id=project_id,
+            )
             return prev_snapshot if prev_snapshot else None
         else:
             return None
