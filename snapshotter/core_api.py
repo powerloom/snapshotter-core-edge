@@ -43,10 +43,15 @@ class RequestLoggingMiddleware(BaseHTTPMiddleware):
         path = request.url.path
         method = request.method
         client_ip = request.client.host if request.client else "unknown"
+        query_params = str(request.query_params) if request.query_params else ""
         
-        rest_logger.info(f"[REQUEST] {method} {path} from {client_ip}")
+        rest_logger.info(
+            f"[REQUEST] {method} {path}{'?' + query_params if query_params else ''} from {client_ip}"
+        )
         
         try:
+            # Add timeout wrapper to detect hanging requests
+            rest_logger.debug(f"[REQUEST] Calling next middleware/handler for {method} {path}")
             response = await call_next(request)
             process_time = time.time() - start_time
             rest_logger.info(
@@ -54,6 +59,13 @@ class RequestLoggingMiddleware(BaseHTTPMiddleware):
                 f"Time: {process_time:.2f}s"
             )
             return response
+        except asyncio.TimeoutError as e:
+            process_time = time.time() - start_time
+            rest_logger.error(
+                f"[REQUEST] {method} {path} - TIMEOUT after {process_time:.2f}s: {e}",
+                exc_info=True
+            )
+            raise
         except Exception as e:
             process_time = time.time() - start_time
             rest_logger.error(
@@ -94,8 +106,17 @@ app.add_middleware(
     allow_headers=['*'],
 )
 
+# Test endpoint to verify routing
+@app.get("/api/test")
+async def test_endpoint(request: Request):
+    """Test endpoint to verify routing works"""
+    rest_logger.info("[TEST] Test endpoint called")
+    return {"status": "ok", "path": request.url.path}
+
 # Include the Uniswap V3 API router
-app.include_router(compute_router)
+# Note: If nginx forwards /api/* to backend, it may strip /api prefix
+# So routes are registered as /snapshot/* not /api/snapshot/*
+app.include_router(compute_router, prefix="/api")
 
 
 @app.on_event('startup')
