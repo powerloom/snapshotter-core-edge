@@ -847,23 +847,35 @@ async def get_submission_data(
         dict: Submission data.
     """
     if not cid or 'null' in cid:
+        logger.debug(f"get_submission_data: Invalid CID {cid}")
         return dict()
 
     # Check Redis cache first if redis_conn is provided
     if redis_conn:
         cache_key = cid_cache(cid)
+        logger.debug(f"get_submission_data: Checking Redis cache for CID {cid[:16]}... (key: {cache_key})")
         cached_data = await redis_conn.get(cache_key)
         if cached_data:
             try:
+                logger.info(f"get_submission_data: Cache HIT for CID {cid[:16]}... (project: {project_id or 'unknown'})")
                 data = json.loads(cached_data)
                 if cleanup_previous_snapshots and "previousSnapshots" in data:
                     data["previousSnapshots"] = []
                 return data
             except (json.JSONDecodeError, TypeError) as e:
-                logger.warning(f"Failed to parse cached data for CID {cid}: {e}")
+                logger.warning(f"get_submission_data: Failed to parse cached data for CID {cid[:16]}...: {e}")
+        else:
+            logger.info(f"get_submission_data: Cache MISS for CID {cid[:16]}... (project: {project_id or 'unknown'})")
+    else:
+        logger.debug(f"get_submission_data: No redis_conn provided, skipping cache check for CID {cid[:16]}...")
 
     # Cache miss - fetch from IPFS
+    logger.info(f"get_submission_data: Fetching from IPFS for CID {cid[:16]}... (project: {project_id or 'unknown'})")
+    fetch_start = time.time()
     data = await fetch_file_from_ipfs(ipfs_reader, cid)
+    fetch_duration = time.time() - fetch_start
+    logger.info(f"get_submission_data: IPFS fetch completed for CID {cid[:16]}... in {fetch_duration:.2f}s")
+    
     if isinstance(data, str):
         data = json.loads(data)
     if data:
@@ -874,14 +886,21 @@ async def get_submission_data(
         if redis_conn and project_id:
             project_config = get_project_config(project_id)
             if project_config and project_config.cache_cids:
+                logger.info(f"get_submission_data: Caching CID {cid[:16]}... to Redis (project: {project_id})")
                 await redis_conn.set(
                     name=cid_cache(cid),
                     value=json.dumps(data),
                     ex=PROJECT_DATA_ENTRY_EXPIRY,
                 )
+                logger.debug(f"get_submission_data: Successfully cached CID {cid[:16]}...")
+            else:
+                logger.debug(f"get_submission_data: Not caching CID {cid[:16]}... (cache_cids disabled for project {project_id})")
+        else:
+            logger.debug(f"get_submission_data: Not caching CID {cid[:16]}... (missing redis_conn or project_id)")
         
         return data
     else:
+        logger.warning(f"get_submission_data: No data returned from IPFS for CID {cid[:16]}...")
         return dict()
 
 
@@ -1016,8 +1035,14 @@ async def get_project_epoch_snapshot(
             2. The closest epochs when seek=True and no exact match exists
             3. No data (empty response)
     """
+    logger.info(f"get_project_epoch_snapshot: Starting fetch for project {project_id}, epoch {epoch_id}")
+    start_time = time.time()
+    
     cid = await get_project_finalized_cid(redis_conn, state_contract_obj, rpc_helper, ipfs_reader, epoch_id, project_id)
+    logger.info(f"get_project_epoch_snapshot: Got CID {cid[:16] if cid and 'null' not in cid else 'null'}... for project {project_id}, epoch {epoch_id}")
+    
     if cid and 'null' not in cid:
+        logger.info(f"get_project_epoch_snapshot: Fetching snapshot data for CID {cid[:16]}... (project: {project_id}, epoch: {epoch_id})")
         data = await get_submission_data(
             cid, 
             ipfs_reader, 
@@ -1025,6 +1050,11 @@ async def get_project_epoch_snapshot(
             redis_conn=redis_conn,
             project_id=project_id,
         )
+        duration = time.time() - start_time
+        if data:
+            logger.info(f"get_project_epoch_snapshot: Successfully fetched snapshot data for project {project_id}, epoch {epoch_id} in {duration:.2f}s")
+        else:
+            logger.warning(f"get_project_epoch_snapshot: No data returned for project {project_id}, epoch {epoch_id} (CID: {cid[:16]}...)")
         return EpochSnapshotResponse(
             exact_match=ExactEpochSnapshot(
                 epoch_id=epoch_id,

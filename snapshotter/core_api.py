@@ -5,10 +5,12 @@ It includes functionality for health checks, epoch information retrieval,
 project data fetching, and task status checking.
 """
 import asyncio
+import time
 from fastapi import FastAPI
 from fastapi import Request
 from fastapi import Response
 from fastapi.middleware.cors import CORSMiddleware
+from starlette.middleware.base import BaseHTTPMiddleware
 from fastapi_pagination import add_pagination
 from fastapi_pagination import Page
 from fastapi_pagination.customization import CustomizedPage, UseParamsFields
@@ -34,6 +36,33 @@ from computes.api.router import router as compute_router
 rest_logger = default_logger.bind(module='CoreAPI')
 
 
+class RequestLoggingMiddleware(BaseHTTPMiddleware):
+    """Middleware to log all incoming requests"""
+    async def dispatch(self, request: Request, call_next):
+        start_time = time.time()
+        path = request.url.path
+        method = request.method
+        client_ip = request.client.host if request.client else "unknown"
+        
+        rest_logger.info(f"[REQUEST] {method} {path} from {client_ip}")
+        
+        try:
+            response = await call_next(request)
+            process_time = time.time() - start_time
+            rest_logger.info(
+                f"[REQUEST] {method} {path} - Status: {response.status_code} - "
+                f"Time: {process_time:.2f}s"
+            )
+            return response
+        except Exception as e:
+            process_time = time.time() - start_time
+            rest_logger.error(
+                f"[REQUEST] {method} {path} - ERROR after {process_time:.2f}s: {e}",
+                exc_info=True
+            )
+            raise
+
+
 # Load protocol state contract ABI and address
 protocol_state_contract_abi = read_json_file(
     settings.protocol_state.abi,
@@ -52,6 +81,9 @@ Page = CustomizedPage[
     UseParamsFields(size=Field(10, ge=1, le=30)),
 ]
 add_pagination(app)
+
+# Add request logging middleware (first, so it logs all requests)
+app.add_middleware(RequestLoggingMiddleware)
 
 # Add CORS middleware
 app.add_middleware(
@@ -72,6 +104,11 @@ async def startup_boilerplate():
     Initialize various state variables and caches required for the application to function properly.
     This function is called when the FastAPI application starts up.
     """
+    rest_logger.info("=" * 80)
+    rest_logger.info("Core API starting up...")
+    rest_logger.info(f"Core API host: {settings.core_api.host}, port: {settings.core_api.port}")
+    rest_logger.info("=" * 80)
+    
     app.state.core_settings = settings
     app.state.local_user_cache = dict()
     # Initialize both anchor and main RPC helpers
@@ -97,6 +134,12 @@ async def startup_boilerplate():
     app.state._aioredis_pool = RedisPoolCache()
     await app.state._aioredis_pool.populate()
     app.state.redis_conn = app.state._aioredis_pool._aioredis_pool
+    
+    rest_logger.info("=" * 80)
+    rest_logger.info("Core API startup complete - Ready to accept requests")
+    rest_logger.info(f"Redis connection: {app.state.redis_conn is not None}")
+    rest_logger.info(f"IPFS reader: {app.state.ipfs_reader_client is not None}")
+    rest_logger.info("=" * 80)
 
 
 @app.get('/health')
