@@ -32,11 +32,29 @@ from ipfs_client.main import AsyncIPFSClientSingleton
 from ipfs_client.dag import IPFSAsyncClientError
 from redis import asyncio as aioredis
 
+import dramatiq
+from dramatiq.brokers.redis import RedisBroker
+from dramatiq.middleware import AsyncIO
+from dramatiq.worker import Worker
+
 from snapshotter.settings.config import settings
 from snapshotter.utils.default_logger import default_logger
 from snapshotter.utils.redis.redis_conn import RedisPoolCache
-from snapshotter.utils.redis.redis_keys import cid_cache, project_data_hmap, last_submitted_snapshot_data_key, data_expiry_zset, project_last_finalized_epoch_hmap, cids_to_cache_set
+from snapshotter.utils.redis.redis_keys import cid_cache, project_data_hmap, last_submitted_snapshot_data_key, data_expiry_zset, project_last_finalized_epoch_hmap
+from snapshotter.utils.dramatiq_queues import CACHER_QUEUE_NAME, cids_to_cache_set
 from snapshotter.utils.data_utils import get_submission_data, PROJECT_DATA_ENTRY_EXPIRY, get_project_config
+
+# Configure Redis broker for Dramatiq (same as original cacher)
+redis_broker = RedisBroker(host=settings.redis.host, port=settings.redis.port, db=settings.redis.db)
+redis_broker.add_middleware(AsyncIO())
+
+# Remove Prometheus middleware to avoid errors (same as original)
+middleware = redis_broker.middleware[:]  # Make a copy
+for m in middleware:
+    if m.__class__.__name__ == 'Prometheus':
+        redis_broker.middleware.remove(m)
+
+dramatiq.set_broker(redis_broker)
 
 
 class UnifiedCache(multiprocessing.Process):
@@ -49,6 +67,9 @@ class UnifiedCache(multiprocessing.Process):
     - Provides simple get/set API for data access
     - Eliminates redundant caching layers and complexity
     """
+
+    # Class variable to store the event loop (same as original cacher)
+    _event_loop = None
 
     def __init__(self, name, **kwargs):
         super().__init__(name=name, **kwargs)
@@ -72,7 +93,33 @@ class UnifiedCache(multiprocessing.Process):
 
         # Event processing
         self._event_queue = asyncio.Queue()
-        self._processed_epochs: Set[int] = set()  # Track processed epochs to avoid duplicates
+        self._processed_epochs: Set[int] = set()
+
+        # Dramatiq worker thread (same as original cacher)
+        self._worker_thread: Optional[threading.Thread] = None
+
+        # Register the handle_event method as a Dramatiq actor (same as original cacher)
+        self._handle_event_actor = dramatiq.actor(
+            queue_name=CACHER_QUEUE_NAME,
+            actor_name='handleEvent',
+        )(self.handle_event)
+
+    def _signal_handler(self, signum, frame):
+        """
+        Signal handler method that handles shutdown when a SIGINT, SIGTERM, or SIGQUIT signal is received.
+
+        Args:
+            signum (int): The signal number.
+            frame (frame): The current stack frame at the time the signal was received.
+        """
+        import signal
+        if signum in [signal.SIGINT, signal.SIGTERM, signal.SIGQUIT]:
+            self._shutdown_initiated = True
+            self._logger.info(f'Shutdown initiated by signal {signum}')
+
+            # Cancel all active tasks gracefully
+            if hasattr(self, '_event_loop') and self._event_loop:
+                self._event_loop.call_soon_threadsafe(self._event_loop.stop)  # Track processed epochs to avoid duplicates
 
     async def _init_components(self):
         """Initialize Redis and IPFS connections"""
@@ -247,25 +294,72 @@ class UnifiedCache(multiprocessing.Process):
         except Exception as e:
             self._logger.error(f"Error invalidating cache for {project_id}:{epoch_id}: {e}")
 
-    async def handle_event(self, event_type: str, event_data: Dict):
+    def handle_event(self, *args):
         """
-        Handle blockchain events and proactively cache data.
+        Dramatiq actor method that handles incoming events.
 
-        This replaces the complex event processing logic with simple,
-        proactive caching when data becomes available.
+        This method is called by Dramatiq when a message is received. It extracts the
+        event type and data from the arguments and runs the async process_event method
+        in the event loop.
+
+        Args:
+            *args: Arguments passed by Dramatiq, expected to be [event_type, event_data].
+
+        Returns:
+            None
         """
         try:
-            if event_type == "SnapshotSubmitted":
-                await self._handle_snapshot_submitted(event_data)
-            elif event_type == "SnapshotFinalized":
-                await self._handle_snapshot_finalized(event_data)
-            elif event_type == "SnapshotBatchSubmitted":
-                await self._handle_snapshot_batch_submitted(event_data)
-            else:
-                self._logger.debug(f"Ignoring unhandled event type: {event_type}")
+            self._logger.warning(f'Handling event: {args}')
+            event_type = args[0]
+            event_data = args[1]
 
+            # Run the async process_event in the event loop
+            future = asyncio.run_coroutine_threadsafe(
+                self.process_event(event_type, event_data),
+                self._event_loop,
+            )
+            # Wait for the result with timeout
+            future.result(timeout=60)
+
+            self._logger.debug(f'Event has been handled: {args}')
+
+            return None
         except Exception as e:
-            self._logger.error(f"Error handling event {event_type}: {e}")
+            # Capture the full traceback for better debugging
+            error_traceback = ''.join(
+                traceback.format_exception(type(e), e, e.__traceback__),
+            )
+            self._logger.error(f'Error processing event: {e}')
+            self._logger.error(f'Detailed traceback:\n{error_traceback}')
+            self._logger.error(f'Event data: {args}')
+
+    async def process_event(self, event_type, event_data):
+        """
+        Processes events based on their type by calling the appropriate handler method.
+
+        This method routes the event to the appropriate handler based on the event_type,
+        and handles any errors that occur during processing.
+
+        Args:
+            event_type (str): The type of event to process.
+            event_data (str): JSON string containing the event data.
+
+        Returns:
+            None
+        """
+        self._logger.info(f'Got message to process: {event_data}')
+
+        if event_type == 'SnapshotSubmitted':
+            self._logger.info(f'SnapshotSubmittedEvent caught')
+            await self._handle_snapshot_submitted(event_data)
+        elif event_type == 'SnapshotFinalized':
+            self._logger.info(f'SnapshotFinalizedEvent caught')
+            await self._handle_snapshot_finalized(event_data)
+        elif event_type == 'SnapshotBatchSubmitted':
+            self._logger.info(f'SnapshotBatchSubmittedEvent caught')
+            await self._handle_snapshot_batch_submitted(event_data)
+        else:
+            self._logger.error(f'Unknown message type: {event_type}')
 
     async def _handle_snapshot_submitted(self, event_data: Dict):
         """Handle SnapshotSubmitted event - equivalent to original cacher logic"""
@@ -467,43 +561,80 @@ class UnifiedCache(multiprocessing.Process):
             'active_tasks': len(self._active_tasks)
         }
 
-    async def run(self):
-        """Main run loop for the cache service"""
-        await self._init_components()
+    def run(self):
+        """
+        Main entry point for the UnifiedCache process.
 
-        # Start periodic CID caching task (equivalent to original cid_cacher)
-        cid_cache_task = asyncio.create_task(self._periodic_cid_caching())
-        self._active_tasks.add((time.time(), cid_cache_task))
-
-        self._logger.info("Unified cache service started")
-
+        This method sets up resource limits, registers signal handlers,
+        initializes the worker, starts the Dramatiq worker in a separate thread,
+        and runs the event loop. It also handles cleanup when the process is
+        shutting down.
+        """
         try:
-            while not self._shutdown_initiated:
-                try:
-                    # Process any queued events
-                    await self._process_event_queue()
+            # Set resource limits for file descriptors (same as original)
+            import resource
+            soft, hard = resource.getrlimit(resource.RLIMIT_NOFILE)
+            resource.setrlimit(
+                resource.RLIMIT_NOFILE,
+                (settings.rlimit.file_descriptors, hard),
+            )
+            self._logger.info(f'Set file descriptor limit to {settings.rlimit.file_descriptors}')
 
-                    # Periodic cleanup of background tasks
-                    await self._cleanup_tasks()
+            # Register signal handlers for graceful shutdown
+            import signal
+            for signame in [signal.SIGINT, signal.SIGTERM, signal.SIGQUIT]:
+                signal.signal(signame, self._signal_handler)
 
-                    # Periodic cleanup of processed epochs set (prevent memory growth)
-                    await self._cleanup_processed_epochs()
+            # Use uvloop for better performance
+            import uvloop
+            asyncio.set_event_loop_policy(uvloop.EventLoopPolicy())
 
-                    # Log stats periodically
-                    if int(time.time()) % 300 == 0:  # Every 5 minutes
-                        stats = self.get_cache_stats()
-                        self._logger.info(f"Cache stats: {stats}")
+            ev_loop = asyncio.get_event_loop()
+            UnifiedCache._event_loop = ev_loop  # Store the event loop
+            self._event_loop = ev_loop
 
-                    await asyncio.sleep(1)
+            # Set event loop for AsyncIO middleware
+            for middleware in redis_broker.middleware:
+                if isinstance(middleware, AsyncIO):
+                    middleware.event_loop = ev_loop
 
-                except Exception as e:
-                    self._logger.error(f"Error in cache service loop: {e}")
-                    await asyncio.sleep(5)
+            # Initialize the worker
+            ev_loop.run_until_complete(self._init_components())
 
-        except KeyboardInterrupt:
-            self._logger.info("Cache service interrupted")
-        finally:
-            await self._shutdown()
+            # Start a Dramatiq worker in a separate thread (same as original cacher)
+            worker = Worker(redis_broker, queues=[CACHER_QUEUE_NAME])
+            worker_thread = threading.Thread(target=worker.start, daemon=True)
+            self._worker_thread = worker_thread
+            worker_thread.start()
+
+            # Start periodic CID caching task (equivalent to original cid_cacher)
+            cid_cache_task = ev_loop.create_task(self._periodic_cid_caching())
+            self._active_tasks.add((time.time(), cid_cache_task))
+
+            try:
+                self._logger.info('UnifiedCache started successfully')
+                # Run the event loop until shutdown is requested
+                ev_loop.run_forever()
+            except KeyboardInterrupt:
+                self._logger.info('KeyboardInterrupt received, shutting down')
+            finally:
+                self._logger.info('Stopping event loop and cleaning up')
+
+                # Cancel periodic tasks
+                if not cid_cache_task.done():
+                    cid_cache_task.cancel()
+
+                # Perform graceful shutdown
+                ev_loop.run_until_complete(self._shutdown())
+
+                # Close the event loop
+                ev_loop.close()
+                self._logger.info('UnifiedCache shutdown complete')
+
+        except Exception as e:
+            self._logger.error(f"Fatal error in UnifiedCache process: {e}")
+            self._logger.error(traceback.format_exc())
+            raise
 
     async def _process_event_queue(self):
         """Process queued events"""
