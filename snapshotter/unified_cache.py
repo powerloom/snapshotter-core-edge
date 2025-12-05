@@ -42,6 +42,9 @@ from snapshotter.utils.default_logger import default_logger
 from snapshotter.utils.redis.redis_conn import RedisPoolCache
 from snapshotter.utils.redis.redis_keys import cid_cache, project_data_hmap, last_submitted_snapshot_data_key, data_expiry_zset, project_last_finalized_epoch_hmap, cids_to_cache_set
 from snapshotter.utils.dramatiq_queues import CACHER_QUEUE_NAME
+from snapshotter.utils.rpc import RpcHelper
+from snapshotter.utils.file_utils import read_json_file
+from eth_utils.address import to_checksum_address
 from snapshotter.utils.data_utils import get_submission_data, PROJECT_DATA_ENTRY_EXPIRY, get_project_config
 
 # Configure Redis broker for Dramatiq (same as original cacher)
@@ -82,6 +85,11 @@ class UnifiedCache(multiprocessing.Process):
         self._redis_conn: Optional[aioredis.Redis] = None
         self._ipfs_singleton: Optional[AsyncIPFSClientSingleton] = None
         self._ipfs_reader_client = None
+
+        # RPC and contract components (for transaction decoding)
+        self._rpc_helper: Optional[RpcHelper] = None
+        self._anchor_rpc_helper: Optional[RpcHelper] = None
+        self._protocol_state_contract = None
 
         # Cache performance tracking
         self._cache_hit_stats: Dict[str, int] = {}
@@ -132,6 +140,20 @@ class UnifiedCache(multiprocessing.Process):
         self._ipfs_singleton = AsyncIPFSClientSingleton(settings.ipfs)
         await self._ipfs_singleton.init_sessions()
         self._ipfs_reader_client = self._ipfs_singleton._ipfs_read_client
+
+        # RPC helpers (for transaction decoding like original cacher)
+        self._rpc_helper = RpcHelper(settings.rpc)
+        await self._rpc_helper.init()
+
+        self._anchor_rpc_helper = RpcHelper(settings.anchor_chain_rpc)
+        await self._anchor_rpc_helper.init()
+
+        # Protocol state contract (for transaction decoding like original cacher)
+        protocol_abi = read_json_file(settings.protocol_state.abi, self._logger)
+        self._protocol_state_contract = self._anchor_rpc_helper.get_current_node()['web3_client'].eth.contract(
+            address=to_checksum_address(settings.protocol_state.address),
+            abi=protocol_abi
+        )
 
         self._logger.info("Unified cache components initialized")
 
@@ -400,12 +422,37 @@ class UnifiedCache(multiprocessing.Process):
 
             self._processed_epochs.add(epoch_key)
 
+            # Create a pipeline for batch processing (like original)
+            pipeline = self._redis_conn.pipeline()
+
+            # Add snapshot cid to unpin zset if IPFS unpinning is configured
+            try:
+                if hasattr(settings, 'ipfs_unpinning') and settings.ipfs_unpinning.enabled:
+                    from snapshotter.utils.redis.redis_keys import snapshots_to_unpin_zset_name
+                    self._logger.debug(f"Adding snapshot CID {snapshot_cid[:16]}... to unpin zset")
+                    pipeline.zadd(
+                        name=snapshots_to_unpin_zset_name(),
+                        mapping={snapshot_cid: int(time.time()) + settings.ipfs_unpinning.unpin_after},
+                    )
+            except AttributeError:
+                # IPFS unpinning not configured, skip
+                pass
+
+            # Update last submitted snapshot data (like original)
+            from snapshotter.utils.redis.redis_keys import last_submitted_snapshot_data_key
+            last_snapshot_submitted_data = await self._redis_conn.get(last_submitted_snapshot_data_key(project_id))
+            if last_snapshot_submitted_data:
+                last_snapshot_submitted_data = json.loads(last_snapshot_submitted_data)
+                last_snapshot_submitted_epoch = last_snapshot_submitted_data['epochId']
+            else:
+                last_snapshot_submitted_epoch = 0
+
             # Process snapshot CID equivalent to original process_snapshot_cid
             await self._process_snapshot_cid(project_id, snapshot_cid, epoch_id, epoch_id)
 
-            # Update project hashmap with this snapshot
+            # Update project hashmap with this snapshot (like original)
             project_hmap_key = project_data_hmap(project_id=project_id)
-            await self._redis_conn.hset(
+            pipeline.hset(
                 project_hmap_key,
                 str(epoch_id),
                 json.dumps({
@@ -414,23 +461,63 @@ class UnifiedCache(multiprocessing.Process):
                 })
             )
 
+            # Execute pipeline
+            await pipeline.execute()
+
             self._logger.debug(f"Processed snapshot for {project_id}:{epoch_id} (CID: {snapshot_cid[:16]}...)")
 
         except Exception as e:
             self._logger.error(f"Error handling SnapshotSubmitted event: {e}")
 
     async def _handle_snapshot_finalized(self, event_data: Dict):
-        """Handle SnapshotFinalized event - mark epoch as finalized"""
+        """Handle SnapshotFinalized event - equivalent to original cacher logic"""
         try:
             epoch_id = event_data.get("epochId")
             project_id = event_data.get("projectId")
+            snapshot_cid = event_data.get("snapshotCid")
 
-            if not epoch_id or not project_id:
+            if not all([epoch_id, project_id, snapshot_cid]):
+                self._logger.warning(f"Incomplete SnapshotFinalized event data: {event_data}")
                 return
 
-            # Update project last finalized epoch
-            project_last_finalized_key = project_last_finalized_epoch_hmap(project_id)
-            await self._redis_conn.hset(project_last_finalized_key, project_id, epoch_id)
+            # Create a pipeline for batch processing (like original)
+            pipeline = self._redis_conn.pipeline()
+
+            # Update project last finalized epoch - use max of current and new (like original)
+            last_finalized_hmap = project_last_finalized_epoch_hmap()
+            current_epoch = await self._redis_conn.hget(last_finalized_hmap, project_id)
+            if current_epoch is not None:
+                current_epoch = int(current_epoch)
+                pipeline.hset(
+                    last_finalized_hmap,
+                    project_id,
+                    max(current_epoch, epoch_id),
+                )
+            else:
+                pipeline.hset(
+                    last_finalized_hmap,
+                    project_id,
+                    epoch_id,
+                )
+
+            # Update project data hashmap (like original)
+            project_hmap_key = project_data_hmap(project_id=project_id)
+            pipeline.hset(
+                project_hmap_key,
+                str(epoch_id),
+                json.dumps({
+                    'snapshot_cid': snapshot_cid,
+                    'status': 'FINALIZED'
+                })
+            )
+
+            # Add to expiry tracking sorted set with TTL (like original)
+            from snapshotter.utils.redis.redis_keys import data_expiry_zset
+            expiry_time = int(time.time()) + PROJECT_DATA_ENTRY_EXPIRY
+            pipeline.zadd(data_expiry_zset, {f"{project_id}|{epoch_id}": expiry_time})
+
+            # Execute pipeline
+            await pipeline.execute()
 
             self._logger.debug(f"Marked epoch {epoch_id} as finalized for {project_id}")
 
@@ -438,33 +525,73 @@ class UnifiedCache(multiprocessing.Process):
             self._logger.error(f"Error handling SnapshotFinalized event: {e}")
 
     async def _handle_snapshot_batch_submitted(self, event_data: Dict):
-        """Handle SnapshotBatchSubmitted event - cache batch snapshots"""
+        """Handle SnapshotBatchSubmitted event - equivalent to original cacher logic with transaction decoding"""
         try:
-            project_ids = event_data.get("projectIds", [])
-            snapshot_cids = event_data.get("snapshotCids", [])
+            transaction_hash = event_data.get("transactionHash")
             epoch_id = event_data.get("epochId")
 
-            if not all([project_ids, snapshot_cids, epoch_id]):
+            if not all([transaction_hash, epoch_id]):
+                self._logger.warning(f"Incomplete SnapshotBatchSubmitted event data: {event_data}")
                 return
 
-            # Process each snapshot in the batch
+            # Decode transaction to get project IDs and snapshot CIDs (like original cacher)
+            tx = await self._anchor_rpc_helper.get_transaction_from_hash(transaction_hash)
+            decoded_input = self._protocol_state_contract.decode_function_input(tx.input)
+            _, input_params = decoded_input
+
+            project_ids = input_params['projectIds']
+            snapshot_cids = input_params['snapshotCids']
+
+            self._logger.debug(f"Decoded batch transaction: {len(project_ids)} projects, epoch {epoch_id}")
+
+            # Create a pipeline for batch processing (like original)
+            pipeline = self._redis_conn.pipeline()
+
+            # Process each snapshot in the batch (like original)
             for project_id, snapshot_cid in zip(project_ids, snapshot_cids):
                 epoch_key = f"{project_id}:{epoch_id}"
                 if epoch_key not in self._processed_epochs:
                     self._processed_epochs.add(epoch_key)
-                    # Process snapshot CID (equivalent to original cacher logic)
+
+                    # Process snapshot CID (equivalent to original process_snapshot_cid)
                     await self._process_snapshot_cid(project_id, snapshot_cid, epoch_id, epoch_id)
 
-                    # Update project hashmap with this snapshot
+                    # Update last finalized epoch - use max of current and new (like original)
+                    from snapshotter.utils.redis.redis_keys import project_last_finalized_epoch_hmap
+                    last_finalized_hmap = project_last_finalized_epoch_hmap()
+                    current_epoch = await self._redis_conn.hget(last_finalized_hmap, project_id)
+                    if current_epoch is not None:
+                        current_epoch = int(current_epoch)
+                        pipeline.hset(
+                            last_finalized_hmap,
+                            project_id,
+                            max(current_epoch, epoch_id),
+                        )
+                    else:
+                        pipeline.hset(
+                            last_finalized_hmap,
+                            project_id,
+                            epoch_id,
+                        )
+
+                    # Update project data hashmap (like original)
                     project_hmap_key = project_data_hmap(project_id=project_id)
-                    await self._redis_conn.hset(
+                    pipeline.hset(
                         project_hmap_key,
                         str(epoch_id),
                         json.dumps({
                             'snapshot_cid': snapshot_cid,
-                            'status': 'SUBMITTED'
+                            'status': 'FINALIZED'  # Batch submissions are typically finalized
                         })
                     )
+
+                    # Add to expiry tracking (like original)
+                    from snapshotter.utils.redis.redis_keys import data_expiry_zset
+                    expiry_time = int(time.time()) + PROJECT_DATA_ENTRY_EXPIRY
+                    pipeline.zadd(data_expiry_zset, {f"{project_id}|{epoch_id}": expiry_time})
+
+            # Execute pipeline
+            await pipeline.execute()
 
             self._logger.debug(f"Processed batch of {len(project_ids)} snapshots for epoch {epoch_id}")
 
@@ -745,7 +872,7 @@ class UnifiedCache(multiprocessing.Process):
             ]
 
             results = await asyncio.gather(
-                *(asyncio.wait_for(task, timeout=30) for task in tasks),  # 30s timeout
+                *(asyncio.wait_for(task, timeout=10) for task in tasks),  # 10s timeout like original
                 return_exceptions=True,
             )
 
