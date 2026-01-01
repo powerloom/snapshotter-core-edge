@@ -148,6 +148,20 @@ services:
       - PUBLIC_IP
       - CONN_MANAGER_LOW_WATER=${CONN_MANAGER_LOW_WATER:-10000}
       - CONN_MANAGER_HIGH_WATER=${CONN_MANAGER_HIGH_WATER:-40000}
+      # Stream Pool Configuration (for centralized sequencer)
+      - MAX_STREAM_QUEUE_SIZE=${MAX_STREAM_QUEUE_SIZE:-1000}
+      # Centralized Sequencer Control
+      # Set to "false" to disable all submissions to centralized sequencer (mesh-only mode)
+      # Set to "true" to enable dual submission (both centralized sequencer and mesh)
+      - CENTRALIZED_SEQUENCER_ENABLED=${CENTRALIZED_SEQUENCER_ENABLED:-true}
+      # Mesh Submission Concurrency Controls
+      # Rate limiting for mesh submissions to prevent overwhelming the gossipsub network
+      - MESH_SUBMISSION_RATE_LIMIT=${MESH_SUBMISSION_RATE_LIMIT:-100}
+      - MESH_SUBMISSION_BURST_SIZE=${MESH_SUBMISSION_BURST_SIZE:-200}
+      # Maximum concurrent mesh publish operations (goroutine limit)
+      - MAX_MESH_PUBLISH_GOROUTINES=${MAX_MESH_PUBLISH_GOROUTINES:-500}
+      # Maximum queued mesh submissions when rate limited
+      - MESH_PUBLISH_QUEUE_SIZE=${MESH_PUBLISH_QUEUE_SIZE:-1000}
       # Slack alerting for local collector (mesh monitoring, errors, etc.)
       - SLACK_WEBHOOK_URL=${LOCAL_COLLECTOR_SLACK_WEBHOOK_URL}
       # Health check server port
