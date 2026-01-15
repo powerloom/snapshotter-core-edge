@@ -129,7 +129,6 @@ services:
       - LOCAL_COLLECTOR_PORT
       - LOCAL_COLLECTOR_P2P_PORT=${LOCAL_COLLECTOR_P2P_PORT:-9100}
       - LOCAL_COLLECTOR_PRIVATE_KEY
-      - RELAYER_PRIVATE_KEY
       # Configurable stream processing parameters with sensible defaults
       - BLOCK_TIME=${BLOCK_TIME:-15}
       - MAX_STREAM_POOL_SIZE=${MAX_STREAM_POOL_SIZE:-100}
@@ -162,6 +161,15 @@ services:
       - MAX_MESH_PUBLISH_GOROUTINES=${MAX_MESH_PUBLISH_GOROUTINES:-500}
       # Maximum queued mesh submissions when rate limited
       - MESH_PUBLISH_QUEUE_SIZE=${MESH_PUBLISH_QUEUE_SIZE:-1000}
+      # Delay between processing queued messages to smooth out bursts (milliseconds)
+      - MESH_QUEUE_PROCESSING_DELAY_MS=${MESH_QUEUE_PROCESSING_DELAY_MS:-10}
+      # Timeout for rate limiter waits when processing queued messages (seconds)
+      - MESH_RATE_LIMITER_TIMEOUT_SEC=${MESH_RATE_LIMITER_TIMEOUT_SEC:-10}
+      # Gossipsub Buffer Configuration
+      # Validation queue size for gossipsub (increased from default to prevent buffer overflow)
+      - GOSSIPSUB_VALIDATE_QUEUE_SIZE=${GOSSIPSUB_VALIDATE_QUEUE_SIZE:-512}
+      # Number of validation workers for gossipsub (increased from default for better throughput)
+      - GOSSIPSUB_VALIDATE_WORKERS=${GOSSIPSUB_VALIDATE_WORKERS:-8}
       # Slack alerting for local collector (mesh monitoring, errors, etc.)
       - SLACK_WEBHOOK_URL=${LOCAL_COLLECTOR_SLACK_WEBHOOK_URL}
       # Health check server port
