@@ -377,3 +377,75 @@ async def test_get_project_epoch_snapshot_bulk_ensure_complete_false(
     # clean slate
     await mock_redis.flushall()
     ipfs_reader.cat.reset_mock()
+
+@pytest.mark.asyncio(loop_scope='module')
+async def test_get_project_last_finalized_epoch_returns_zero_when_no_finalized_snapshot(
+    mock_redis,
+    protocol_state_contract,
+    rpc_helper,
+    project_id: str,
+):
+    """
+    When lastFinalizedSnapshot returns 0 (no batch submitted yet), function returns 0
+    and does not write to Redis (no garbage in project_last_finalized_epoch hmap).
+    """
+    with patch.object(rpc_helper, 'web3_call', AsyncMock(return_value=[0])):
+        result = await get_project_last_finalized_epoch(
+            redis_conn=mock_redis,
+            state_contract_obj=protocol_state_contract,
+            rpc_helper=rpc_helper,
+            project_id=project_id,
+            force_update=True,
+        )
+    assert result == 0
+    cached = await mock_redis.hget(project_last_finalized_epoch_hmap(), project_id)
+    assert cached is None
+
+
+@pytest.mark.asyncio(loop_scope='module')
+async def test_get_project_last_finalized_epoch_returns_zero_on_exception_no_redis_write(
+    mock_redis,
+    protocol_state_contract,
+    rpc_helper,
+    project_id: str,
+):
+    """
+    When RPC returns an exception object (e.g. ContractLogicError), function returns 0
+    and does not attempt Redis hset.
+    """
+    err = Exception('ContractLogicError or RPC error')
+    with patch.object(rpc_helper, 'web3_call', AsyncMock(return_value=[err])):
+        result = await get_project_last_finalized_epoch(
+            redis_conn=mock_redis,
+            state_contract_obj=protocol_state_contract,
+            rpc_helper=rpc_helper,
+            project_id=project_id,
+            force_update=True,
+        )
+    assert result == 0
+    cached = await mock_redis.hget(project_last_finalized_epoch_hmap(), project_id)
+    assert cached is None
+
+
+@pytest.mark.asyncio(loop_scope='module')
+async def test_get_project_last_finalized_epoch_returns_zero_when_web3_call_raises(
+    mock_redis,
+    protocol_state_contract,
+    rpc_helper,
+    project_id: str,
+):
+    """
+    When web3_call raises, function returns 0 and does not write to Redis.
+    """
+    with patch.object(rpc_helper, 'web3_call', AsyncMock(side_effect=Exception('RPC failure'))):
+        result = await get_project_last_finalized_epoch(
+            redis_conn=mock_redis,
+            state_contract_obj=protocol_state_contract,
+            rpc_helper=rpc_helper,
+            project_id=project_id,
+            force_update=True,
+        )
+    assert result == 0
+    cached = await mock_redis.hget(project_last_finalized_epoch_hmap(), project_id)
+    assert cached is None
+

@@ -430,8 +430,9 @@ class GenericAsyncWorker(multiprocessing.Process):
             self._anchor_rpc_helper,
             project_id,
         )
-        if last_epoch_id is None:
-            raise Exception(f"Last finalized epoch not found for project {project_id}")
+        if last_epoch_id == 0:
+            logger.debug(f'No previous finalized snapshot for project {project_id} (cold start)')
+            return None, None, None
 
         logger.debug(
             f'Attempting to fetch finalized CID for project {project_id}, '

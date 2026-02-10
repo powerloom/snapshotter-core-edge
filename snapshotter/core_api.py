@@ -279,14 +279,24 @@ async def get_project_last_finalized_epoch_info(
     """
 
     try:
-        # Find the last finalized epoch from the contract
+        # Find the last finalized epoch from the contract (lastFinalizedSnapshot: VPA-gated batch submissions)
         [project_last_finalized_epoch] = await request.app.state.anchor_rpc_helper.web3_call(
             tasks=[
-                ('lastSequencerFinalizedSnapshot', [Web3.to_checksum_address(settings.data_market), project_id]),
+                ('lastFinalizedSnapshot', [Web3.to_checksum_address(settings.data_market), project_id]),
             ],
             contract_addr=protocol_state_contract_address,
             abi=protocol_state_contract_abi,
         )
+        if isinstance(project_last_finalized_epoch, BaseException):
+            response.status_code = 200
+            return {'epochId': 0, 'timestamp': 0, 'blocknumber': 0, 'epochEnd': False}
+        try:
+            project_last_finalized_epoch = int(project_last_finalized_epoch)
+        except (TypeError, ValueError):
+            response.status_code = 200
+            return {'epochId': 0, 'timestamp': 0, 'blocknumber': 0, 'epochEnd': False}
+        if project_last_finalized_epoch == 0:
+            return {'epochId': 0, 'timestamp': 0, 'blocknumber': 0, 'epochEnd': False}
 
         # Get epoch info for the last finalized epoch
         [epoch_info_data] = await request.app.state.anchor_rpc_helper.web3_call(

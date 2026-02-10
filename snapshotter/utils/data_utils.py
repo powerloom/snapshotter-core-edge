@@ -155,23 +155,33 @@ async def get_project_last_finalized_epoch(
 ):
     """
     Get the last finalized epoch for a given project.
+    Uses lastFinalizedSnapshot (VPA-gated batch submissions); returns 0 when none yet or on error.
     """
     if not force_update:
         last_finalized_epoch = await redis_conn.hget(project_last_finalized_epoch_hmap(), project_id)
         if last_finalized_epoch:
             return int(last_finalized_epoch)
 
-    [project_last_finalized_epoch] = await rpc_helper.web3_call(
-        tasks=[
-            ('lastSequencerFinalizedSnapshot', [Web3.to_checksum_address(settings.data_market), project_id]),
-        ],
-        contract_addr=state_contract_obj.address,
-        abi=state_contract_obj.abi,
-    )
-    if project_last_finalized_epoch == 0:
+    try:
+        [project_last_finalized_epoch] = await rpc_helper.web3_call(
+            tasks=[
+                ('lastFinalizedSnapshot', [Web3.to_checksum_address(settings.data_market), project_id]),
+            ],
+            contract_addr=state_contract_obj.address,
+            abi=state_contract_obj.abi,
+        )
+    except Exception:
         return 0
-    await redis_conn.hset(project_last_finalized_epoch_hmap(), project_id, project_last_finalized_epoch)
-    return project_last_finalized_epoch
+    if isinstance(project_last_finalized_epoch, BaseException):
+        return 0
+    try:
+        epoch_int = int(project_last_finalized_epoch)
+    except (TypeError, ValueError):
+        return 0
+    if epoch_int == 0:
+        return 0
+    await redis_conn.hset(project_last_finalized_epoch_hmap(), project_id, epoch_int)
+    return epoch_int
 
 
 async def get_last_submitted_snapshot_data(redis_conn: aioredis.Redis, project_id: str):
