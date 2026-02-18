@@ -174,9 +174,10 @@ class EventDetectorProcess(multiprocessing.Process):
         self._logger.debug('⏳Preparing simulation submission...')
         current_block_number = await self._source_rpc_helper.get_current_block_number()
 
+        target_block = current_block_number - 1
         event = EpochReleasedEvent(
-            begin=current_block_number - 9,
-            end=current_block_number,
+            begin=target_block,
+            end=target_block,
             epochId=0,
             timestamp=int(time.time()),
         )
