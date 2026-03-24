@@ -147,6 +147,7 @@ services:
       - PUBLIC_IP
       - CONN_MANAGER_LOW_WATER=${CONN_MANAGER_LOW_WATER:-10000}
       - CONN_MANAGER_HIGH_WATER=${CONN_MANAGER_HIGH_WATER:-40000}
+      - DOCKER_BRIDGE_GATEWAY_IPS=${DOCKER_BRIDGE_GATEWAY_IPS:-}
       # Stream Pool Configuration (for centralized sequencer)
       - MAX_STREAM_QUEUE_SIZE=${MAX_STREAM_QUEUE_SIZE:-1000}
       # Centralized Sequencer Control
