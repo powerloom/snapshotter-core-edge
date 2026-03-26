@@ -70,6 +70,10 @@ def app_config():
     to fix a hardcoded SSL certificate path and disable rate-limiting checks.
     This is the earliest point in our test setup that runs before any
     RpcHelper instances are created.
+
+    Session-scoped config files under ``test_config/`` are created by the **root**
+    ``conftest.py`` (``pytest_sessionstart``); see that file for the full pipeline
+    including the mirror into ``config/`` for import-time settings.
     """
     # Create test-specific settings from the test_config directory created by root conftest.py
     import os

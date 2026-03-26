@@ -207,6 +207,11 @@ class EpochSnapshotResponse(BaseModel):
         )
 
 
+class PreloaderResult(BaseModel):
+    """Result from a preloader task (e.g. eth_price)."""
+    result: Optional[Dict[str, Any]] = None
+
+
 class BlockSearchType(Enum):
     """
     Represents the type of block search to perform when fetching a block at a given timestamp.

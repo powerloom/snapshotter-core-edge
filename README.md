@@ -1033,9 +1033,19 @@ Tests require specific environment variables to be set, which control aspects li
         ```
     *   **Crucially, edit `.env.test`** and replace all placeholder values (like `your_actual_test_rpc_url`, `0xYourTestContractAddress...`) with valid data for your testing environment. The tests will not pass with placeholder values.
 
+### How pytest prepares config files
+
+Two `conftest.py` files work together:
+
+*   **Root `conftest.py`** (project root) defines `pytest_sessionstart` / `pytest_sessionfinish`. It loads `.env.test`, builds a temporary **`test_config/`** directory from **`config/*.example.json`** (with placeholder substitution), then **copies those populated files into `config/`** so code that resolves settings from `config/` at **import time** behaves like production. When the session ends, it **removes** the mirrored files from `config/` (for the same basenames it manages: `settings.json`, `projects.json`, `auth_settings.json`, `aggregator.json`, `event_filters.json`) and deletes **`test_config/`**.
+
+*   **`tests/shared_fixtures/conftest.py`** provides fixtures (e.g. `app_config`, Redis, RPC helpers) that read from **`test_config/`** after the root hooks have run.
+
+**Important:** If you keep a personal `config/settings.json` (or another managed filename) for local development, a full pytest run may **delete** that path on teardown because it matches the mirrored names. Back up or restore from version control if needed. Details and rationale are in comments at the top of the root `conftest.py`.
+
 ### Running the Configuration Loading Test
 
-A dedicated test suite verifies that the test configuration mechanism (driven by `tests/shared_fixtures/conftest.py` and your `.env.test` file) works correctly. This test ensures that the application's main configuration files (e.g., `config/settings.json`) are correctly populated with test-specific values at runtime.
+A dedicated test suite verifies that the test configuration mechanism (driven by the root `conftest.py`, `tests/shared_fixtures/conftest.py`, and your `.env.test` file) works correctly. This test ensures that the application's main configuration files (e.g., `config/settings.json`) are correctly populated with test-specific values at runtime.
 
 *   **Run the Test**:
     *   Ensure your virtual environment is activated.
@@ -1046,12 +1056,13 @@ A dedicated test suite verifies that the test configuration mechanism (driven by
         The `-s` flag is optional but helpful as it shows `print` statements from your `conftest.py` and tests, which can aid in debugging if issues arise.
 *   **Expected Outcome**:
     *   All tests within `test_config_loading.py` should pass.
-    *   You should see output from `conftest.py` indicating:
+    *   You should see output from the root `conftest.py` indicating:
         *   The project root being added to `sys.path`.
         *   Loading of environment variables from `.env.test`.
-        *   Copying of `*.example.json` files to their active names (e.g., `settings.json`).
+        *   Copying of `*.example.json` files into `test_config/` (e.g., `settings.json`).
         *   Population of `settings.json` and `auth_settings.json` with test data.
-        *   At the end of the session, restoration of original config files (or removal of test-generated ones if no originals existed).
+        *   Copying from `test_config/` into `config/` for import-time loading.
+        *   At the end of the session, removal of mirrored files under `config/` and deletion of `test_config/`.
     *   If all tests pass, your environment is correctly set up for running the broader test suite, as the core mechanism for providing test-specific configurations to the application is working.
 
 ### Troubleshooting
@@ -1060,7 +1071,7 @@ A dedicated test suite verifies that the test configuration mechanism (driven by
 *   **`ModuleNotFoundError`**:
     *   Ensure your virtual environment is active (`source .venv/bin/activate` or `poetry shell`).
     *   Confirm that `poetry install --with dev` completed successfully.
-    *   The `conftest.py` automatically adds the project root to `sys.path`. If module import issues persist, verify the `PROJECT_ROOT` definition in `tests/shared_fixtures/conftest.py` correctly points to your project's top-level directory.
+    *   The root `conftest.py` and `tests/shared_fixtures/conftest.py` add the project root to `sys.path`. If module import issues persist, verify each file's `PROJECT_ROOT` points to the repository top-level directory.
 *   **Errors during config file population/restoration**: The print statements from `pytest_sessionstart` and `pytest_sessionfinish` in `conftest.py` should provide details on which file operations are failing. Check file permissions and paths.
 
 #### Debugging Tips

@@ -21,6 +21,24 @@ _log_info(f"PROJECT_ROOT added to sys.path: {PROJECT_ROOT}")
 _log_info(f"Current Working Directory: {os.getcwd()}")
 
 # --- Configuration for Test Setup ---
+#
+# Session hooks below implement the full test config pipeline:
+#
+#   1. Load .env.test, then populate test_config/ from config/*.example.json (see
+#      pytest_sessionstart). Missing examples fall back to a minimal settings.json.
+#   2. Run placeholder replacements into test_config/settings.json and
+#      test_config/auth_settings.json (REPLACEMENTS_* + .env.test).
+#   3. Mirror: copy each populated file from test_config/ to config/. Application code
+#      and imports resolve snapshotter.settings.config against config/ at project root;
+#      without this step, tests that import settings before fixtures run would see wrong
+#      or missing files.
+#   4. Teardown: delete the mirrored paths under config/ (same basenames as
+#      CONFIG_FILES_TO_MANAGE), then remove the whole test_config/ tree.
+#
+# If you rely on a long-lived config/settings.json (or other names listed here) for
+# local development, pytest_sessionfinish removes those paths when they match this list.
+# Back them up or restore from VCS after a test run if needed.
+#
 CONFIG_FILES_TO_MANAGE = [
     "settings.json",
     "projects.json",
@@ -127,9 +145,10 @@ def _populate_config_file(file_path, replacement_rules):
 def pytest_sessionstart(session):
     """
     Pytest hook that runs at the beginning of a test session.
-    - Sets up the test environment by creating temporary config files.
-    - Backs up any existing config files.
-    - Populates the temporary configs with values from .env.test.
+
+    Builds ``test_config/`` from ``config/*.example.json``, applies ``.env.test``-driven
+    replacements, then mirrors those files into ``config/`` so import-time settings
+    loading matches production paths. See the module comment above ``CONFIG_FILES_TO_MANAGE``.
     """
     # Force httpx to use certifi's CA bundle by setting the SSL_CERT_FILE env var.
     # This is crucial for cross-platform compatibility (especially macOS).
@@ -206,17 +225,41 @@ def pytest_sessionstart(session):
     else:
         _log_info(f"Warning: Cannot populate '{auth_settings_json_target_path}' as it does not exist.")
 
+    # Mirror test_config/ -> config/ (see module comment block above CONFIG_FILES_TO_MANAGE).
+    main_config_dir = os.path.join(PROJECT_ROOT, "config")
+    for file_base_name in CONFIG_FILES_TO_MANAGE:
+        src = os.path.join(app_config_dir_abs, file_base_name)
+        dst = os.path.join(main_config_dir, file_base_name)
+        if os.path.exists(src):
+            _log_info(f"  Copying test config to config/: {file_base_name}")
+            try:
+                shutil.copy2(src, dst)
+            except Exception as e:
+                _log_info(f"    Warning: Could not copy {src} to {dst}: {e}")
+
     _log_info("--- Test configurations prepared ---")
 
 @pytest.hookimpl(trylast=True)
 def pytest_sessionfinish(session, exitstatus):
     """
     Pytest hook that runs at the end of a test session.
-    - Cleans up test configuration files.
+
+    Removes mirrored files under ``config/``, then deletes ``test_config/`` and backup dirs.
     """
     _log_info("\n--- Pytest Session Finish: Cleaning up test configurations ---")
     app_config_dir_abs = os.path.join(PROJECT_ROOT, APP_CONFIG_DIR_NAME)
     backup_dir_abs = os.path.join(PROJECT_ROOT, "tests", BACKUP_DIR_NAME)
+    main_config_dir = os.path.join(PROJECT_ROOT, "config")
+
+    # Remove mirrored files from config/ (same basenames as CONFIG_FILES_TO_MANAGE).
+    for file_base_name in CONFIG_FILES_TO_MANAGE:
+        dst = os.path.join(main_config_dir, file_base_name)
+        if os.path.exists(dst):
+            try:
+                os.remove(dst)
+                _log_info(f"  Removed {dst}")
+            except Exception as e:
+                _log_info(f"  Error removing {dst}: {e}")
 
     # Since we're using a separate test config directory, just remove it
     if os.path.exists(app_config_dir_abs):
