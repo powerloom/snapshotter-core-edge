@@ -99,6 +99,11 @@ app.add_middleware(
     allow_headers=['*'],
 )
 
+if settings.mpp.enabled:
+    from snapshotter.mpp_middleware import MppPaymentMiddleware
+
+    app.add_middleware(MppPaymentMiddleware)
+
 # Test endpoint to verify routing
 @app.get("/api/test")
 async def test_endpoint(request: Request):

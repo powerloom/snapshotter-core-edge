@@ -47,6 +47,14 @@ x-snapshotter-base: &snapshotter-base
     - IPFS_UNPINNING_AFTER=${IPFS_UNPINNING_AFTER:-86400}
     - GUNICORN_WORKERS=${GUNICORN_WORKERS:-5}
     - BLOCK_SHIFT_FOR_BITMAP_INDEX=${BLOCK_SHIFT_FOR_BITMAP_INDEX:-22400000}
+    # MPP (Core API / gunicorn_core_launcher; ignored by other workers if unset)
+    - MPP_ENABLED=${MPP_ENABLED:-false}
+    - MPP_CHARGE_AMOUNT=${MPP_CHARGE_AMOUNT:-0.01}
+    - MPP_TEMPO_RECIPIENT=${MPP_TEMPO_RECIPIENT:-}
+    - MPP_TEMPO_CURRENCY=${MPP_TEMPO_CURRENCY:-}
+    - MPP_SECRET_KEY=${MPP_SECRET_KEY:-}
+    - MPP_PROTECTED_PATHS=${MPP_PROTECTED_PATHS:-/snapshot/base,/snapshot/allTrades,/snapshot/trades}
+    - MPP_REALM=${MPP_REALM:-}
   extra_hosts:
     - "host.docker.internal:host-gateway"
   healthcheck:
