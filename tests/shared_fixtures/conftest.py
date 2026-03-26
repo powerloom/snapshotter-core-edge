@@ -78,20 +78,24 @@ def app_config():
     # Create test-specific settings from the test_config directory created by root conftest.py
     import os
     import json
+    from snapshotter.utils.models.settings_model import MppConfig
     from snapshotter.utils.models.settings_model import Settings
-    
+
     # Load test settings from test_config directory (created by root conftest.py)
     test_config_dir = os.path.join(os.getcwd(), APP_CONFIG_DIR_NAME)
     test_settings_path = os.path.join(test_config_dir, "settings.json")
-    
+
     if not os.path.exists(test_settings_path):
         pytest.fail(f"Test settings file not found at {test_settings_path}. Make sure the root conftest.py setup completed successfully.")
-    
+
     with open(test_settings_path, 'r') as f:
         test_settings_dict = json.load(f)
-    
-    # Create test settings object
-    settings = Settings(**test_settings_dict)
+
+    mpp_data = test_settings_dict.pop("mpp", None)
+    if mpp_data is not None:
+        settings = Settings(**test_settings_dict, mpp=MppConfig(**mpp_data))
+    else:
+        settings = Settings(**test_settings_dict)
     
     # Disable file logging for tests to avoid permission issues
     settings.logs.write_to_files = False

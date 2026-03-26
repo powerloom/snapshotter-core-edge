@@ -1,3 +1,11 @@
+"""
+Async Redis-backed rate limiting used by ``helpers.py`` (``generic_rate_limiter``).
+
+Not imported by ``server_entry.py`` or the Core API until you wire
+``Depends(...)`` from ``helpers.py`` onto routes. See module docstring on
+``helpers.py`` for wiring status.
+"""
+
 import time
 from typing import List
 

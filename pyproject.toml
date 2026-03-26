@@ -19,7 +19,9 @@ gunicorn = "^20.1.0"
 aiohttp = "^3.8.5"
 web3 = "^7"
 tenacity = "^9.1.2"
-limits = "^2.8.0"
+# async_limits: used by snapshotter/auth/helpers/ (Depends-based rate limits). Wiring: README.md → "Auth helpers and async_limits (wiring)"; snapshotter/auth/README.md.
+# Vendored from https://github.com/powerloom/limits (versioneer patched for Python 3.12); switch to git when upstream merges the same.
+async-limits = {path = "contrib/async-limits", develop = true}
 uvicorn = "^0.20.0"
 frozendict = "^2.3.8"
 multiaddr = "^0.0.9"
@@ -39,18 +41,21 @@ aioboto3 = "^14.1.0"
 dramatiq = "^1.17.1"
 fastapi = "^0.115.12"
 pydantic = "^2.11.3"
+pydantic-settings = "^2.0.0"
+packaging = ">=24.0"
 gql = "^3.5.3"
 jinja2 = "^3.1.6"
 python-dotenv = "^1.1.0"
 pytest = "^8.4.0"
 certifi = "^2025.4.26"
 async-lru = "^2.0.5"
+pympp = {version = "0.4.0", extras = ["tempo"]}
+
 [tool.poetry.group.dev.dependencies]
 pytest-cov = "^5.0.0"
 pytest-asyncio = "^0.24.0"
 fakeredis = "^2.25.1"
 pytest-mock = "^3.14.0"
-pympp = {version = "0.4.0", extras = ["tempo"]}
 
 # Add pytest configuration section
 [tool.pytest.ini_options]

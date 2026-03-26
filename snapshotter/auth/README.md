@@ -38,4 +38,18 @@ If any new config needs to be added, users must update the Setting Models first.
 The main FastAPI server and entry point for this module is `server_entry.py`, this server is started using a custom Gunicorn handler present in `gunicorn_auth_entry_launcher.py`. Doing so provides more flexibility to customize the application and start it using `Pm2`.
 
 ### Helpers
-All the other helper functions and utilities are present in `helpers.py`.
+
+#### `helpers.py` and `rate_limiter.py` (API keys + rate limits on routes)
+
+These modules implement FastAPI dependencies (`auth_check`, `rate_limit_auth_check`, etc.) using **`async_limits`** for async-safe fixed-window limits backed by Redis.
+
+**Wiring status (current tree):**
+
+- The **auth HTTP service** (`server_entry.py`) only handles user/API key CRUD in Redis. It imports `data_models` and `redis_keys`, **not** `helpers.py` or `rate_limiter.py`, so it never loads `async_limits` at runtime.
+- **`core_api.py`** and **`computes/`** do **not** import these helpers either. The dependency chain is unused until you attach something like `Depends(rate_limit_auth_check)` to Core API or compute routes.
+
+The **`async_limits`** dependency is declared in the project `pyproject.toml` so the package resolves for imports and for future wiring.
+
+#### Other utilities
+
+Additional helpers live alongside the files above (e.g. Redis key helpers in `redis_keys.py`).

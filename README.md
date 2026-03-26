@@ -25,6 +25,7 @@
     - [Snapshot Data Endpoints](#snapshot-data-endpoints)
     - [Time Series Data Endpoint](#time-series-data-endpoint)
     - [Authentication API Endpoints](#authentication-api-endpoints)
+    - [Auth helpers and async\_limits (wiring)](#auth-helpers-and-async_limits-wiring)
     - [Uniswap V3 API Endpoints](#uniswap-v3-api-endpoints)
 - [Development setup and instructions](#development-setup-and-instructions)
   - [Configuration](#configuration)
@@ -50,6 +51,7 @@
     - [**External API Settings (Optional)**](#external-api-settings-optional)
   - [Environment Verification](#environment-verification)
   - [Test-Specific Environment Variables](#test-specific-environment-variables)
+  - [How pytest prepares config files](#how-pytest-prepares-config-files)
   - [Running the Configuration Loading Test](#running-the-configuration-loading-test)
   - [Troubleshooting](#troubleshooting)
     - [Debugging Tips](#debugging-tips)
@@ -606,6 +608,12 @@ The authentication service (`snapshotter/auth/server_entry.py`) provides user ma
 | `/users` | GET | Get all users (admin only) |
 
 **Note:** Authentication endpoints require proper authorization headers and are typically used for managing access to the Core API endpoints.
+
+#### Auth helpers and async_limits (wiring)
+
+The **auth service** above (`snapshotter/auth/server_entry.py`) is only for user and API key management in Redis. It does **not** import `snapshotter/auth/helpers/helpers.py` or `rate_limiter.py`.
+
+Those helper modules implement FastAPI `Depends(...)` flows (API key validation and per-user rate limits) using **`async_limits`**. They are **not** referenced by `core_api.py` or `computes/` in the default layout; they only run if you attach those dependencies to routes. See [`snapshotter/auth/README.md`](snapshotter/auth/README.md) for details. The `async_limits` package is listed in `pyproject.toml` so imports and future wiring work.
 
 #### Uniswap V3 API Endpoints
 

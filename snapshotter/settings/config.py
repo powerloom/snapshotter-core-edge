@@ -6,6 +6,7 @@ aggregators, preloaders, and delegate tasks.
 import json
 
 from snapshotter.utils.models.settings_model import AggregatorConfig
+from snapshotter.utils.models.settings_model import MppConfig
 from snapshotter.utils.models.settings_model import PreloaderConfig
 from snapshotter.utils.models.settings_model import ProjectsConfig
 from snapshotter.utils.models.settings_model import Settings
@@ -13,7 +14,11 @@ from snapshotter.utils.models.settings_model import Settings
 # Load main settings
 with open('config/settings.json', 'r') as settings_file:
     settings_dict = json.load(settings_file)
-settings: Settings = Settings(**settings_dict)
+mpp_data = settings_dict.pop('mpp', None)
+if mpp_data is not None:
+    settings: Settings = Settings(**settings_dict, mpp=MppConfig(**mpp_data))
+else:
+    settings: Settings = Settings(**settings_dict)
 
 # Load projects configuration
 projects_config_path = settings.projects_config_path

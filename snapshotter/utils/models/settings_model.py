@@ -6,6 +6,9 @@ from typing import Union
 from ipfs_client.settings.data_models import IPFSConfig
 from pydantic import BaseModel
 from pydantic import Field
+from pydantic import computed_field
+from pydantic_settings import BaseSettings
+from pydantic_settings import SettingsConfigDict
 from rpc_helper.utils.models.settings_model import RPCConfigBase
 from rpc_helper.utils.models.settings_model import RPCConfigFull
 
@@ -140,6 +143,23 @@ class IPFSUnpinningConfig(BaseModel):
     unpin_after: int
 
 
+class MppConfig(BaseSettings):
+    """MPP (Machine Payment Protocol) — env MPP_* overrides optional JSON under settings.mpp."""
+
+    model_config = SettingsConfigDict(env_prefix="MPP_", extra="ignore")
+
+    enabled: bool = False
+    charge_amount: str = "0.01"
+    tempo_recipient: str = ""
+    tempo_currency: str = ""
+    protected_paths: str = "/snapshot/base,/snapshot/allTrades,/snapshot/trades"
+
+    @computed_field
+    @property
+    def protected_paths_list(self) -> List[str]:
+        return [p.strip() for p in self.protected_paths.split(",") if p.strip()]
+
+
 class Settings(BaseModel):
     """Main settings configuration model."""
     namespace: str
@@ -167,6 +187,7 @@ class Settings(BaseModel):
     node_version: str
     anchor_chain_rpc: RPCConfigBase
     block_shift_for_bitmap_index: int
+    mpp: MppConfig = Field(default_factory=MppConfig)
 
 # Projects related models
 

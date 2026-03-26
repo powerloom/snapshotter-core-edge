@@ -1,3 +1,14 @@
+"""
+API-key auth and per-user rate limits for FastAPI routes (Depends-based).
+
+Wiring status: nothing in ``core_api.py`` or ``computes/`` imports this module today.
+The auth *service* (``server_entry.py``) manages users/API keys in Redis and does not
+use these helpers. To enforce limits on Core API routes, add dependencies such as
+``Depends(rate_limit_auth_check)`` to the relevant endpoints.
+
+Depends on ``async_limits`` (see ``pyproject.toml``).
+"""
+
 import time
 from datetime import datetime
 from datetime import timedelta
