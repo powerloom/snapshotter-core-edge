@@ -2,6 +2,9 @@ version: '3.9'
 
 # Shared base configuration for worker services to reduce duplication
 x-snapshotter-base: &snapshotter-base
+  build:
+    context: .
+    dockerfile: Dockerfile
   image: ${SNAPSHOTTER_IMAGE:-ghcr.io/powerloom/snapshotter-core:dockerify}
   networks:
     - ipfs-redis
@@ -13,6 +16,7 @@ x-snapshotter-base: &snapshotter-base
     - ./config:/config
     - ./computes:/computes
     - ./snapshotter:/snapshotter
+    - ./contrib:/contrib
     - ./poetry.lock:/poetry.lock
     - ./pyproject.toml:/pyproject.toml
   environment:

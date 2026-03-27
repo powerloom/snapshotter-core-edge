@@ -10,10 +10,11 @@ RUN apt-get update && apt-get install -y ca-certificates && rm -rf /var/lib/apt/
 # Install poetry
 RUN pip install poetry
 
-# Copy the application's dependencies files
+# Path dependency (async-limits) must exist before poetry install
 COPY poetry.lock pyproject.toml ./
+COPY contrib ./contrib
 
-# Install the Python dependencies
+# Install the Python dependencies (includes pydantic-settings, pympp, etc.)
 RUN poetry install --no-root
 
 # Copy the rest of the application's files
