@@ -152,7 +152,9 @@ class MppConfig(BaseSettings):
     charge_amount: str = "0.01"
     tempo_recipient: str = ""
     tempo_currency: str = ""
-    protected_paths: str = "/snapshot/base,/snapshot/allTrades,/snapshot/trades"
+    protected_paths: str = (
+        "/mpp/snapshot/base,/mpp/snapshot/allTrades,/mpp/snapshot/trades"
+    )
 
     @computed_field
     @property

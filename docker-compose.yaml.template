@@ -53,7 +53,7 @@ x-snapshotter-base: &snapshotter-base
     - MPP_TEMPO_RECIPIENT=${MPP_TEMPO_RECIPIENT:-}
     - MPP_TEMPO_CURRENCY=${MPP_TEMPO_CURRENCY:-}
     - MPP_SECRET_KEY=${MPP_SECRET_KEY:-}
-    - MPP_PROTECTED_PATHS=${MPP_PROTECTED_PATHS:-/snapshot/base,/snapshot/allTrades,/snapshot/trades}
+    - MPP_PROTECTED_PATHS=${MPP_PROTECTED_PATHS:-/mpp/snapshot/base,/mpp/snapshot/allTrades,/mpp/snapshot/trades}
     - MPP_REALM=${MPP_REALM:-}
   extra_hosts:
     - "host.docker.internal:host-gateway"
