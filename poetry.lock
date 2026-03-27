@@ -3142,14 +3142,14 @@ windows-terminal = ["colorama (>=0.4.6)"]
 
 [[package]]
 name = "pympp"
-version = "0.4.0"
+version = "0.4.2"
 description = "Python SDK for the Machine Payments Protocol (MPP)"
 optional = false
 python-versions = ">=3.12"
 groups = ["main"]
 files = [
-    {file = "pympp-0.4.0-py3-none-any.whl", hash = "sha256:a3c551ab05a50d207cc0996ab75ecfe549e56996122758b79d7055ea783dc5f1"},
-    {file = "pympp-0.4.0.tar.gz", hash = "sha256:533fd738ba8c4499430f9bed7dd700bcc17d24fda39d85c4e955c870d84a5949"},
+    {file = "pympp-0.4.2-py3-none-any.whl", hash = "sha256:7db59604b74a11cb0c2cca5b5c5b6af65b06129c6108de4b1abdabd100860764"},
+    {file = "pympp-0.4.2.tar.gz", hash = "sha256:1ed42be93029ba526b3441864f2aa2c41d70b8964428d178b35709d757d91b08"},
 ]
 
 [package.dependencies]
@@ -4347,4 +4347,4 @@ propcache = ">=0.2.1"
 [metadata]
 lock-version = "2.1"
 python-versions = "^3.12"
-content-hash = "0cd3c904df8dae455ad7f167b0879bb0c7db586cfceb4e78665cc423ada0666d"
+content-hash = "de33383fffc7374be66cb777bfc24965b03eb9bcefd5bf4fae1696fa636adeff"

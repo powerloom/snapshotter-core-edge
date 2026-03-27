@@ -28,9 +28,13 @@ export TEMPO_PRIVATE_KEY=0x...   # default for TempoAccount.from_env(); override
 
 ## Run
 
+Use the environment where **pympp** is installed. Bare `python fetch_paid.py` uses your system Python and will fail with `No module named 'mpp'` unless you installed pympp there.
+
 ```bash
 poetry run python fetch_paid.py --base-url https://your-host:9003 --path /mpp/snapshot/allTrades
 ```
+
+Equivalent without Poetry: `pip install 'pympp[tempo]==0.4.0'` then `python fetch_paid.py`.
 
 Fund the wallet with test **pathUSD** (or the currency your server’s `MPP_TEMPO_CURRENCY` expects) on **Tempo testnet** before calling.
 

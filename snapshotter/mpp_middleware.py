@@ -58,11 +58,21 @@ class MppPaymentMiddleware(BaseHTTPMiddleware):
             )
 
         from mpp import Challenge
+        from mpp.errors import VerificationError
 
-        result = await mpp.charge(
-            authorization=request.headers.get("Authorization"),
-            amount=settings.mpp.charge_amount,
-        )
+        try:
+            result = await mpp.charge(
+                authorization=request.headers.get("Authorization"),
+                amount=settings.mpp.charge_amount,
+            )
+        except VerificationError as exc:
+            return JSONResponse(
+                status_code=400,
+                content={
+                    "error": "MPP payment verification failed",
+                    "message": str(exc),
+                },
+            )
 
         if isinstance(result, Challenge):
             return JSONResponse(

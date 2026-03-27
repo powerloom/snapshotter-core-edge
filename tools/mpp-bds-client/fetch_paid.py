@@ -7,9 +7,18 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import sys
 
-from mpp.client import Client
-from mpp.methods.tempo import ChargeIntent, TempoAccount, tempo
+try:
+    from mpp.client import Client
+    from mpp.methods.tempo import ChargeIntent, TempoAccount, tempo
+except ModuleNotFoundError as exc:  # pympp not on this interpreter’s path
+    sys.stderr.write(
+        "Missing pympp. From tools/mpp-bds-client run:\n"
+        "  poetry install && poetry run python fetch_paid.py ...\n"
+        "or: pip install 'pympp[tempo]==0.4.0' && python fetch_paid.py ...\n"
+    )
+    raise SystemExit(1) from exc
 
 
 async def main() -> None:
