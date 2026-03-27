@@ -12,13 +12,19 @@ import sys
 try:
     from mpp.client import Client
     from mpp.methods.tempo import ChargeIntent, TempoAccount, tempo
+    import mpp.methods.tempo.client as _mpp_tempo_client
 except ModuleNotFoundError as exc:  # pympp not on this interpreter’s path
     sys.stderr.write(
         "Missing pympp. From tools/mpp-bds-client run:\n"
         "  poetry install && poetry run python fetch_paid.py ...\n"
-        "or: pip install 'pympp[tempo]==0.4.0' && python fetch_paid.py ...\n"
+        "or: pip install 'pympp[tempo]>=0.4.2' && python fetch_paid.py ...\n"
     )
     raise SystemExit(1) from exc
+
+# pympp uses DEFAULT_GAS_LIMIT=100_000 and eth_estimateGas; for Tempo AA (0x76) that
+# estimate often fails (swallowed), so gas stays 100k — below intrinsic gas (~272k).
+# Until pympp raises the default on PyPI, match upstream main (1M floor).
+_mpp_tempo_client.DEFAULT_GAS_LIMIT = 1_000_000
 
 
 async def main() -> None:

@@ -34,7 +34,9 @@ Use the environment where **pympp** is installed. Bare `python fetch_paid.py` us
 poetry run python fetch_paid.py --base-url https://your-host:9003 --path /mpp/snapshot/allTrades
 ```
 
-Equivalent without Poetry: `pip install 'pympp[tempo]==0.4.0'` then `python fetch_paid.py`.
+Equivalent without Poetry: `pip install 'pympp[tempo]>=0.4.2'` then `python fetch_paid.py`.
+
+`fetch_paid.py` sets pympp’s `DEFAULT_GAS_LIMIT` to **1e6** before requests: stock pympp **100000** is below Tempo AA intrinsic gas when `eth_estimateGas` fails silently.
 
 Fund the wallet with test **pathUSD** (or the currency your server’s `MPP_TEMPO_CURRENCY` expects) on **Tempo testnet** before calling.
 
