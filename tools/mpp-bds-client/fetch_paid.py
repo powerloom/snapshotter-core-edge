@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import os
 import sys
 
 try:
@@ -27,6 +28,14 @@ except ModuleNotFoundError as exc:  # pympp not on this interpreter’s path
 _mpp_tempo_client.DEFAULT_GAS_LIMIT = 1_000_000
 
 
+def _env_chain_id() -> int:
+    """Match server MPP_TEMPO_CHAIN_ID (default Moderato testnet 42431)."""
+    raw = os.environ.get("TEMPO_CHAIN_ID", os.environ.get("MPP_TEMPO_CHAIN_ID", "42431"))
+    if raw.startswith("0x"):
+        return int(raw, 16)
+    return int(raw, 10)
+
+
 async def main() -> None:
     parser = argparse.ArgumentParser(description="MPP-paid GET to BDS Core API")
     parser.add_argument(
@@ -43,8 +52,15 @@ async def main() -> None:
     url = args.base_url.rstrip("/") + args.path
 
     account = TempoAccount.from_env()
+    chain_id = _env_chain_id()
     async with Client(
-        methods=[tempo(account=account, intents={"charge": ChargeIntent()})]
+        methods=[
+            tempo(
+                account=account,
+                chain_id=chain_id,
+                intents={"charge": ChargeIntent()},
+            )
+        ]
     ) as client:
         response = await client.get(url)
         print("status", response.status_code)

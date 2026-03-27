@@ -23,6 +23,24 @@ def _is_protected(path: str) -> bool:
     return any(path.startswith(prefix) for prefix in settings.mpp.protected_paths_list)
 
 
+def _verification_error_payload(exc: Exception) -> dict:
+    """Structured body for pympp VerificationError (esp. Tempo RPC fund errors)."""
+    msg = str(exc)
+    body: dict = {
+        "error": "MPP payment verification failed",
+        "message": msg,
+    }
+    low = msg.lower()
+    if "insufficient funds" in low or "have 0 want" in low:
+        body["hint"] = (
+            "If the payer is funded on Tempo testnet but this still appears, the server may "
+            "be using the wrong chain: set MPP_TEMPO_CHAIN_ID=42431 (Moderato) or 4217 "
+            "(mainnet) to match where you funded. pympp defaults to mainnet when chain_id "
+            "was omitted. Also ensure MPP_TEMPO_CURRENCY matches the token you funded."
+        )
+    return body
+
+
 def _get_mpp():
     """Lazy-init Mpp so pympp/tempo imports are skipped when MPP is disabled."""
     global _mpp
@@ -35,6 +53,7 @@ def _get_mpp():
             method=tempo(
                 currency=mpp_cfg.tempo_currency,
                 recipient=mpp_cfg.tempo_recipient,
+                chain_id=mpp_cfg.tempo_chain_id,
                 intents={"charge": ChargeIntent()},
             ),
         )
@@ -66,13 +85,7 @@ class MppPaymentMiddleware(BaseHTTPMiddleware):
                 amount=settings.mpp.charge_amount,
             )
         except VerificationError as exc:
-            return JSONResponse(
-                status_code=400,
-                content={
-                    "error": "MPP payment verification failed",
-                    "message": str(exc),
-                },
-            )
+            return JSONResponse(status_code=400, content=_verification_error_payload(exc))
 
         if isinstance(result, Challenge):
             return JSONResponse(

@@ -20,11 +20,24 @@ poetry install
 
 ## Environment (client wallet — not `MPP_SECRET_KEY`)
 
-Set a Tempo-capable key for the **payer** (testnet faucet: [Tempo faucet](https://docs.tempo.xyz/quickstart/faucet)):
+Set a Tempo-capable key for the **payer**:
 
 ```bash
 export TEMPO_PRIVATE_KEY=0x...   # default for TempoAccount.from_env(); override name via from_env("OTHER_VAR")
+# Same chain as Core API (default Moderato testnet):
+export TEMPO_CHAIN_ID=42431      # or MPP_TEMPO_CHAIN_ID; use 4217 for Tempo mainnet
 ```
+
+### Fund the payer (required)
+
+MPP charges are paid in **TIP-20** on Tempo (e.g. **pathUSD**). Gas on Tempo is also paid in a **fee token**, not native ETH for these flows. Your payer address must hold **enough of that token** for **both** the transfer and the fee.
+
+1. Derive the payer address from `TEMPO_PRIVATE_KEY` (or check in a block explorer).
+2. Use the [Tempo faucet](https://docs.tempo.xyz/quickstart/faucet) and send **pathUSD** (or whatever matches the server’s `MPP_TEMPO_CURRENCY`) **to that exact address**.
+3. Ensure the server’s `MPP_TEMPO_CURRENCY` matches the token you funded (same chain / testnet).
+4. **Chain ID must match** where you funded: Core API uses **`MPP_TEMPO_CHAIN_ID`** (default **42431** Moderato). If it was unset, pympp previously defaulted to **mainnet (4217)** while balances live on testnet—set **`MPP_TEMPO_CHAIN_ID=42431`** on the server and align **`TEMPO_CHAIN_ID`** / **`MPP_TEMPO_CHAIN_ID`** for `fetch_paid.py`.
+
+If the API returns `insufficient funds … have 0 want …` despite a funded wallet, re-check **chain** (42431 vs 4217) and **token contract** vs `MPP_TEMPO_CURRENCY`.
 
 ## Run
 
@@ -37,8 +50,6 @@ poetry run python fetch_paid.py --base-url https://your-host:9003 --path /mpp/sn
 Equivalent without Poetry: `pip install 'pympp[tempo]>=0.4.2'` then `python fetch_paid.py`.
 
 `fetch_paid.py` sets pympp’s `DEFAULT_GAS_LIMIT` to **1e6** before requests: stock pympp **100000** is below Tempo AA intrinsic gas when `eth_estimateGas` fails silently.
-
-Fund the wallet with test **pathUSD** (or the currency your server’s `MPP_TEMPO_CURRENCY` expects) on **Tempo testnet** before calling.
 
 ## POWER token (later)
 
