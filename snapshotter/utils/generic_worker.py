@@ -17,7 +17,7 @@ import tenacity
 from coincurve import PrivateKey
 from dramatiq.brokers.redis import RedisBroker
 from dramatiq.middleware import AsyncIO
-from eth_account.messages import encode_structured_data
+from eth_account.messages import encode_typed_data
 from eth_utils.crypto import keccak
 from grpclib.client import Channel
 from httpx import AsyncClient
@@ -304,7 +304,7 @@ class GenericAsyncWorker(multiprocessing.Process):
         )
 
 
-        signable_message = encode_structured_data(eip712_typed_data)
+        signable_message = encode_typed_data(full_message=eip712_typed_data)
         message_hash_bytes = keccak(b'\x19\x01' + signable_message.header + signable_message.body)
 
         if not private_key:  # self signing
