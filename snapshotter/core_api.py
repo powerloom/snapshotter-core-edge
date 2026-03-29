@@ -111,7 +111,7 @@ async def test_endpoint(request: Request):
     rest_logger.info("[TEST] Test endpoint called")
     return {"status": "ok", "path": request.url.path}
 
-# Include the Uniswap V3 API router
+# Include compute module API router (compute-owned routes, including /mpp/... aliases when defined there)
 app.include_router(compute_router)
 
 
