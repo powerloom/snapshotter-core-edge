@@ -11,6 +11,7 @@ import os
 import sys
 
 try:
+    from mpp import Receipt
     from mpp.client import Client
     from mpp.methods.tempo import ChargeIntent, TempoAccount, tempo
     import mpp.methods.tempo.client as _mpp_tempo_client
@@ -64,6 +65,15 @@ async def main() -> None:
     ) as client:
         response = await client.get(url)
         print("status", response.status_code)
+        # On-chain proof is in Payment-Receipt (MPP), not the JSON body — Receipt.reference is usually the tx hash.
+        pr = response.headers.get("Payment-Receipt") or response.headers.get("payment-receipt")
+        if pr:
+            print("payment_receipt_header", pr)
+            try:
+                r = Receipt.from_payment_receipt(pr)
+                print("payment_reference_tx", r.reference)
+            except ValueError:
+                pass
         print(response.text[:2000])
 
 

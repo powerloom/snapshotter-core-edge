@@ -51,6 +51,19 @@ Equivalent without Poetry: `pip install 'pympp[tempo]>=0.4.2'` then `python fetc
 
 `fetch_paid.py` sets pympp’s `DEFAULT_GAS_LIMIT` to **1e6** before requests: stock pympp **100000** is below Tempo AA intrinsic gas when `eth_estimateGas` fails silently.
 
+Successful payments expose **`Payment-Receipt`** on the HTTP response (not the JSON body). The script prints **`payment_reference_tx`** — that value is usually the **Tempo transaction hash** to look up on a block explorer.
+
+### Tempo block explorers (official)
+
+Use the explorer that matches **`TEMPO_CHAIN_ID` / `MPP_TEMPO_CHAIN_ID`** ([connection details](https://docs.tempo.xyz/quickstart/connection-details)):
+
+| Network | Chain ID | Block explorer |
+|--------|----------|----------------|
+| Tempo mainnet | 4217 | [explore.tempo.xyz](https://explore.tempo.xyz) |
+| Tempo testnet (Moderato) | 42431 | [explore.testnet.tempo.xyz](https://explore.testnet.tempo.xyz) |
+
+Default MPP settings here target **Moderato (42431)** — open addresses and tx hashes on **testnet** explorer, not mainnet.
+
 ## POWER token (later)
 
 Settlement in **POWER** on Powerloom L2 / Ethereum is **not** implemented here. This client uses **Tempo TIP-20** (e.g. pathUSD) per MPP charge. See **ai-coord-docs** `bds-mpp-integration/08-power-token-payments.md` (separate documentation repo).
