@@ -265,7 +265,7 @@ async def get_epoch_info(
     return epoch_info
 
 
-@app.get('/last_finalized_epoch/{project_id}')
+@app.get('/last_finalized_epoch/{project_id}', tags=['consumption'])
 async def get_project_last_finalized_epoch_info(
     request: Request,
     response: Response,
@@ -332,7 +332,8 @@ async def get_project_last_finalized_epoch_info(
     return epoch_info
 
 
-@app.get('/data/{epoch_id}/{project_id}/')
+@app.get('/api/data/{epoch_id}/{project_id}/', tags=['consumption'])
+@app.get('/data/{epoch_id}/{project_id}/', tags=['consumption'])
 async def get_data_for_project_id_epoch_id(
     request: Request,
     response: Response,
@@ -406,7 +407,7 @@ async def get_data_for_project_id_epoch_id(
     }
 
 
-@app.get('/cid/{epoch_id}/{project_id}/')
+@app.get('/cid/{epoch_id}/{project_id}/', tags=['consumption'])
 async def get_finalized_cid_for_project_id_epoch_id(
     request: Request,
     response: Response,
