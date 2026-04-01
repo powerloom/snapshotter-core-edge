@@ -74,7 +74,7 @@ async def main() -> None:
                 print("payment_reference_tx", r.reference)
             except ValueError:
                 pass
-        print(response.text[:2000])
+        print(response.text)
 
 
 if __name__ == "__main__":
