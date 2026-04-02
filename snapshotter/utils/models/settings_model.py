@@ -150,12 +150,16 @@ class MppConfig(BaseSettings):
 
     enabled: bool = False
     charge_amount: str = "0.01"
+    # One Tempo charge per SSE connection for /mpp/stream/... (flat session fee).
+    stream_amount: str = "0.0001"
     tempo_recipient: str = ""
     tempo_currency: str = ""
     # pympp defaults to mainnet (4217) if unset; must match where the payer is funded.
     tempo_chain_id: int = 42431  # Moderato testnet; use 4217 for Tempo mainnet
+    # Tempo JSON-RPC URL — set explicitly for testnet vs mainnet alongside MPP_TEMPO_CHAIN_ID.
+    tempo_rpc_url: str = "https://rpc.moderato.tempo.xyz"
     protected_paths: str = (
-        "/mpp/snapshot/base,/mpp/snapshot/allTrades,/mpp/snapshot/trades"
+        "/mpp/snapshot/base,/mpp/snapshot/allTrades,/mpp/snapshot/trades,/mpp/stream/allTrades"
     )
 
     @computed_field

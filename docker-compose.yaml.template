@@ -54,11 +54,13 @@ x-snapshotter-base: &snapshotter-base
     # MPP (Core API / gunicorn_core_launcher; ignored by other workers if unset)
     - MPP_ENABLED=${MPP_ENABLED:-false}
     - MPP_CHARGE_AMOUNT=${MPP_CHARGE_AMOUNT:-0.01}
+    - MPP_STREAM_AMOUNT=${MPP_STREAM_AMOUNT:-0.0001}
+    - MPP_TEMPO_RPC_URL=${MPP_TEMPO_RPC_URL:-https://rpc.moderato.tempo.xyz}
     - MPP_TEMPO_RECIPIENT=${MPP_TEMPO_RECIPIENT:-}
     - MPP_TEMPO_CURRENCY=${MPP_TEMPO_CURRENCY:-}
     - MPP_TEMPO_CHAIN_ID=${MPP_TEMPO_CHAIN_ID:-42431}
     - MPP_SECRET_KEY=${MPP_SECRET_KEY:-}
-    - MPP_PROTECTED_PATHS=${MPP_PROTECTED_PATHS:-/mpp/snapshot/base,/mpp/snapshot/allTrades,/mpp/snapshot/trades}
+    - MPP_PROTECTED_PATHS=${MPP_PROTECTED_PATHS:-/mpp/snapshot/base,/mpp/snapshot/allTrades,/mpp/snapshot/trades,/mpp/stream/allTrades}
     - MPP_REALM=${MPP_REALM:-}
   extra_hosts:
     - "host.docker.internal:host-gateway"

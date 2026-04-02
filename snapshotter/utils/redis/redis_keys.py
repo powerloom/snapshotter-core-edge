@@ -96,6 +96,11 @@ def project_last_finalized_epoch_hmap():
     return 'projectLastFinalizedEpoch'
 
 
+def snapshot_finalized_channel(project_id):
+    """Redis pub/sub channel published when a project snapshot is finalized."""
+    return f'snapshot:finalized:{project_id}'
+
+
 def snapshots_to_unpin_zset_name():
     """
     Generate Redis key for unpinned snapshots zset.

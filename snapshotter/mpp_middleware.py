@@ -23,6 +23,11 @@ def _is_protected(path: str) -> bool:
     return any(path.startswith(prefix) for prefix in settings.mpp.protected_paths_list)
 
 
+def _is_stream_path(path: str) -> bool:
+    """MPP-paid SSE routes use stream_amount (one charge per connection)."""
+    return path.startswith("/mpp/stream/")
+
+
 def _verification_error_payload(exc: Exception) -> dict:
     """Structured body for pympp VerificationError (esp. Tempo RPC fund errors)."""
     msg = str(exc)
@@ -80,9 +85,14 @@ class MppPaymentMiddleware(BaseHTTPMiddleware):
         from mpp.errors import VerificationError
 
         try:
+            charge_amount = (
+                settings.mpp.stream_amount
+                if _is_stream_path(request.url.path)
+                else settings.mpp.charge_amount
+            )
             result = await mpp.charge(
                 authorization=request.headers.get("Authorization"),
-                amount=settings.mpp.charge_amount,
+                amount=charge_amount,
             )
         except VerificationError as exc:
             return JSONResponse(status_code=400, content=_verification_error_payload(exc))

@@ -59,7 +59,7 @@ from snapshotter.utils.redis.redis_keys import (
     cid_cache, project_data_hmap, last_submitted_snapshot_data_key, 
     data_expiry_zset, project_last_finalized_epoch_hmap, cids_to_cache_set,
     snapshots_to_unpin_zset_name, service_health_timestamps_key,
-    epoch_id_project_to_state_mapping
+    epoch_id_project_to_state_mapping, snapshot_finalized_channel,
 )
 from snapshotter.utils.dramatiq_queues import CACHER_QUEUE_NAME
 from snapshotter.utils.data_utils import (
@@ -625,6 +625,11 @@ class UnifiedCache(multiprocessing.Process):
 
         await pipeline.execute()
 
+        await self._redis_conn.publish(
+            snapshot_finalized_channel(msg_obj.projectId),
+            json.dumps({'epochId': msg_obj.epochId, 'snapshotCid': msg_obj.snapshotCid}),
+        )
+
     async def _process_snapshot_batch_submitted_message(self, event_data):
         """Process snapshot batch submitted message (same as original cacher)"""
         self._logger.debug(f'SnapshotBatchSubmittedEvent caught with message {event_data}')
@@ -702,6 +707,13 @@ class UnifiedCache(multiprocessing.Process):
 
         # Execute all commands in a single network round-trip
         await pipeline.execute()
+
+        # Notify SSE subscribers that these projects were finalized
+        for project_id, snapshot_cid in zip(input_params['projectIds'], input_params['snapshotCids']):
+            await self._redis_conn.publish(
+                snapshot_finalized_channel(project_id),
+                json.dumps({'epochId': msg_obj.epochId, 'snapshotCid': snapshot_cid}),
+            )
 
     async def _process_active_pools_message(self, msg_obj: SnapshotSubmittedMessage):
         """Process active pools message (same as original cacher)"""
