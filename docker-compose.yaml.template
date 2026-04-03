@@ -1,5 +1,3 @@
-version: '3.9'
-
 # Shared base configuration for worker services to reduce duplication
 x-snapshotter-base: &snapshotter-base
   build:
@@ -11,6 +9,7 @@ x-snapshotter-base: &snapshotter-base
   depends_on:
     snapshotter-local-collector:
       condition: service_healthy
+      required: false
   volumes:
     - ./logs/snapshotter:/logs
     - ./config:/config
