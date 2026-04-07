@@ -6,7 +6,7 @@ Env vars `MPP_*` override defaults and optional `mpp` object in config/settings.
 
 Modes:
 - **billing_mode=tempo** (default): pympp + Tempo ChargeIntent (`Authorization: Payment ...`).
-- **billing_mode=signup_api**: deduct credits from SQLite via `bds-agent-signup`
+- **billing_mode=signup_api**: deduct credits from SQLite via `bds-agenthub-billing-metering`
   (`MPP_SIGNUP_BILLING_URL` + `MPP_INTERNAL_BILLING_SECRET`; client sends `Authorization: Bearer sk_live_...`).
 
 pympp reads `MPP_SECRET_KEY` from the environment when charging (HMAC challenges).
@@ -74,7 +74,7 @@ def _get_mpp():
 
 
 async def _signup_api_billing(request: Request, call_next):
-    """Deduct credits via bds-agent-signup before serving /mpp/... routes."""
+    """Deduct credits via bds-agenthub-billing-metering before serving /mpp/... routes."""
     base = settings.mpp.signup_billing_base_url.strip().rstrip("/")
     secret = settings.mpp.internal_billing_secret.strip()
     if not base or not secret:

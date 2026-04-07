@@ -161,7 +161,7 @@ class MppConfig(BaseSettings):
     protected_paths: str = (
         "/mpp/snapshot/base,/mpp/snapshot/allTrades,/mpp/snapshot/trades,/mpp/stream/allTrades"
     )
-    # tempo = pympp + Tempo ChargeIntent (default). signup_api = deduct credits via bds-agent-signup HTTP.
+    # tempo = pympp + Tempo ChargeIntent (default). signup_api = deduct credits via bds-agenthub-billing-metering HTTP.
     billing_mode: Literal["tempo", "signup_api"] = "tempo"
     signup_billing_base_url: str = ""
     internal_billing_secret: str = ""
