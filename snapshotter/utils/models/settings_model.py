@@ -1,5 +1,5 @@
 from enum import Enum
-from typing import List
+from typing import List, Literal
 from typing import Optional
 from typing import Union
 
@@ -161,6 +161,10 @@ class MppConfig(BaseSettings):
     protected_paths: str = (
         "/mpp/snapshot/base,/mpp/snapshot/allTrades,/mpp/snapshot/trades,/mpp/stream/allTrades"
     )
+    # tempo = pympp + Tempo ChargeIntent (default). signup_api = deduct credits via bds-agent-signup HTTP.
+    billing_mode: Literal["tempo", "signup_api"] = "tempo"
+    signup_billing_base_url: str = ""
+    internal_billing_secret: str = ""
 
     @computed_field
     @property
