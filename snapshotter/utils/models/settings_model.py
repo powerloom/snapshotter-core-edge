@@ -1,4 +1,6 @@
+import os
 from enum import Enum
+from typing import Any
 from typing import List, Literal
 from typing import Optional
 from typing import Union
@@ -7,6 +9,7 @@ from ipfs_client.settings.data_models import IPFSConfig
 from pydantic import BaseModel
 from pydantic import Field
 from pydantic import computed_field
+from pydantic import model_validator
 from pydantic_settings import BaseSettings
 from pydantic_settings import SettingsConfigDict
 from rpc_helper.utils.models.settings_model import RPCConfigBase
@@ -163,8 +166,24 @@ class MppConfig(BaseSettings):
     )
     # tempo = pympp + Tempo ChargeIntent (default). signup_api = deduct credits via bds-agenthub-billing-metering HTTP.
     billing_mode: Literal["tempo", "signup_api"] = "tempo"
+    # Env: MPP_SIGNUP_BILLING_BASE_URL (canonical). MPP_SIGNUP_BILLING_URL merged in validator if base URL empty.
     signup_billing_base_url: str = ""
     internal_billing_secret: str = ""
+
+    @model_validator(mode="before")
+    @classmethod
+    def _legacy_signup_billing_url_from_env(cls, data: Any) -> Any:
+        """Support MPP_SIGNUP_BILLING_URL when MPP_SIGNUP_BILLING_BASE_URL is unset (docker / host env naming)."""
+        if not isinstance(data, dict):
+            return data
+        raw = data.get("signup_billing_base_url")
+        if raw is None or (isinstance(raw, str) and not raw.strip()):
+            legacy = os.environ.get("MPP_SIGNUP_BILLING_URL", "").strip()
+            if legacy:
+                merged = dict(data)
+                merged["signup_billing_base_url"] = legacy
+                return merged
+        return data
 
     @computed_field
     @property
