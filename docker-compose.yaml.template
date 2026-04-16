@@ -67,6 +67,13 @@ x-snapshotter-base: &snapshotter-base
     - MPP_SECRET_KEY=${MPP_SECRET_KEY:-}
     - MPP_PROTECTED_PATHS=${MPP_PROTECTED_PATHS:-/mpp/}
     - MPP_REALM=${MPP_REALM:-}
+    # Free-route rate limits (non-/mpp/); Redis-backed (see PUBLIC_RATE_LIMIT_* in env.example)
+    - PUBLIC_RATE_LIMIT_ENABLED=${PUBLIC_RATE_LIMIT_ENABLED:-true}
+    - PUBLIC_RATE_LIMIT_RATE_PUBLIC=${PUBLIC_RATE_LIMIT_RATE_PUBLIC:-10/minute}
+    - PUBLIC_RATE_LIMIT_RATE_AUTHENTICATED=${PUBLIC_RATE_LIMIT_RATE_AUTHENTICATED:-60/minute}
+    - PUBLIC_RATE_LIMIT_KEY_PREFIX=${PUBLIC_RATE_LIMIT_KEY_PREFIX:-rl:public:}
+    - PUBLIC_RATE_LIMIT_AUTH_HEADER=${PUBLIC_RATE_LIMIT_AUTH_HEADER:-X-API-KEY}
+    - PUBLIC_RATE_LIMIT_SKIP_PATHS=${PUBLIC_RATE_LIMIT_SKIP_PATHS:-/health,/docs,/openapi.json,/redoc}
   extra_hosts:
     - "host.docker.internal:host-gateway"
   healthcheck:

@@ -46,9 +46,9 @@ These modules implement FastAPI dependencies (`auth_check`, `rate_limit_auth_che
 **Wiring status (current tree):**
 
 - The **auth HTTP service** (`server_entry.py`) only handles user/API key CRUD in Redis. It imports `data_models` and `redis_keys`, **not** `helpers.py` or `rate_limiter.py`, so it never loads `async_limits` at runtime.
-- **`core_api.py`** and **`computes/`** do **not** import these helpers either. The dependency chain is unused until you attach something like `Depends(rate_limit_auth_check)` to Core API or compute routes.
+- **`core_api.py`** registers **`PublicRateLimitMiddleware`** (`snapshotter/public_rate_limit.py`) for free routes; it reuses **`rate_limiter.generic_rate_limiter`** and main `app.state.redis_conn` (not the auth Redis). Per-route `Depends(rate_limit_auth_check)` on **`computes/`** is still optional and not wired by default.
 
-The **`async_limits`** dependency is declared in the project `pyproject.toml` so the package resolves for imports and for future wiring.
+The **`async_limits`** dependency is declared in the project `pyproject.toml` (vendored `contrib/async-limits`) so the package resolves for imports and middleware.
 
 #### Other utilities
 

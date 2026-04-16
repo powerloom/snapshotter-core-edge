@@ -99,6 +99,11 @@ app.add_middleware(
     allow_headers=['*'],
 )
 
+if settings.public_rate_limit_config.enabled:
+    from snapshotter.public_rate_limit import PublicRateLimitMiddleware
+
+    app.add_middleware(PublicRateLimitMiddleware)
+
 if settings.mpp.enabled:
     from snapshotter.mpp_middleware import MppPaymentMiddleware
 
@@ -151,6 +156,25 @@ async def startup_boilerplate():
     app.state._aioredis_pool = RedisPoolCache()
     await app.state._aioredis_pool.populate()
     app.state.redis_conn = app.state._aioredis_pool._aioredis_pool
+
+    prl_cfg = settings.public_rate_limit_config
+    if prl_cfg.enabled and app.state.redis_conn is not None:
+        from async_limits import parse
+
+        from snapshotter.auth.helpers.rate_limiter import load_rate_limiter_scripts
+
+        app.state.public_rate_limit_item_public = parse(prl_cfg.rate_public)
+        app.state.public_rate_limit_item_auth = parse(prl_cfg.rate_authenticated)
+        app.state.public_rate_limit_script_shas = await load_rate_limiter_scripts(
+            app.state.redis_conn,
+        )
+        rest_logger.info(
+            f"Public rate limit: enabled (public={prl_cfg.rate_public}, auth={prl_cfg.rate_authenticated})",
+        )
+    elif prl_cfg.enabled:
+        rest_logger.warning(
+            "Public rate limit enabled but Redis missing; middleware will fail open until Redis is up",
+        )
     
     rest_logger.info("=" * 80)
     rest_logger.info("Core API startup complete - Ready to accept requests")

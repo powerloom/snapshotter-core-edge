@@ -189,6 +189,29 @@ class MppConfig(BaseSettings):
         return [p.strip() for p in self.protected_paths.split(",") if p.strip()]
 
 
+class PublicRateLimitConfig(BaseSettings):
+    """
+    Free (non-``/mpp/``) Core API rate limits using API key / Bearer vs IP.
+
+    Env prefix ``PUBLIC_RATE_LIMIT_``. Independent of MPP metering. See
+    ``ai-coord-docs/bds-mpp-integration/15-mpp-full-uniswap-surface.md``.
+    """
+
+    model_config = SettingsConfigDict(env_prefix="PUBLIC_RATE_LIMIT_", extra="ignore")
+
+    enabled: bool = True
+    rate_public: str = "10/minute"
+    rate_authenticated: str = "60/minute"
+    key_prefix: str = "rl:public:"
+    auth_header: str = "X-API-KEY"
+    skip_paths: str = "/health,/docs,/openapi.json,/redoc"
+
+    @computed_field
+    @property
+    def skip_paths_list(self) -> List[str]:
+        return [p.strip() for p in self.skip_paths.split(",") if p.strip()]
+
+
 class Settings(BaseModel):
     """Main settings configuration model."""
     namespace: str
@@ -217,6 +240,7 @@ class Settings(BaseModel):
     anchor_chain_rpc: RPCConfigBase
     block_shift_for_bitmap_index: int
     mpp: MppConfig = Field(default_factory=MppConfig)
+    public_rate_limit_config: PublicRateLimitConfig = Field(default_factory=PublicRateLimitConfig)
 
 # Projects related models
 

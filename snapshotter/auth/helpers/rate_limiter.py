@@ -1,9 +1,8 @@
 """
 Async Redis-backed rate limiting used by ``helpers.py`` (``generic_rate_limiter``).
 
-Not imported by ``server_entry.py`` or the Core API until you wire
-``Depends(...)`` from ``helpers.py`` onto routes. See module docstring on
-``helpers.py`` for wiring status.
+Used by ``public_rate_limit.PublicRateLimitMiddleware`` (Core API) and optionally by ``Depends(...)`` from
+``helpers.py``. See ``helpers.py`` module docstring for Depends wiring status.
 """
 
 import time
@@ -114,7 +113,7 @@ async def generic_rate_limiter(
             if await custom_limiter.hit(each_lim, limit_incr_by, *[key_bits]) is False:
                 window_stats = await custom_limiter.get_window_stats(
                     each_lim,
-                    key_bits,
+                    *key_bits,
                 )
                 reset_in = 1 + window_stats[0]
                 retry_after = reset_in - int(time.time())

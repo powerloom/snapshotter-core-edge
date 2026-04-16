@@ -1,10 +1,9 @@
 """
 API-key auth and per-user rate limits for FastAPI routes (Depends-based).
 
-Wiring status: nothing in ``core_api.py`` or ``computes/`` imports this module today.
-The auth *service* (``server_entry.py``) manages users/API keys in Redis and does not
-use these helpers. To enforce limits on Core API routes, add dependencies such as
-``Depends(rate_limit_auth_check)`` to the relevant endpoints.
+Wiring status: ``core_api.py`` does not import this module; it uses ``rate_limiter.generic_rate_limiter``
+from ``public_rate_limit.py`` for coarse global limits. Optional per-route enforcement: add
+``Depends(rate_limit_auth_check)`` to endpoints. The auth *service* (``server_entry.py``) does not use these helpers.
 
 Depends on ``async_limits`` (see ``pyproject.toml``).
 """
