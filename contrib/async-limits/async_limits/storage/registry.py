@@ -1,6 +1,6 @@
 import six
 
-from limits.errors import ConfigurationError
+from ..errors import ConfigurationError
 
 SCHEMES = {}
 

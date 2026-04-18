@@ -1,6 +1,6 @@
 from six.moves import urllib
 
-from limits.errors import ConfigurationError
+from ..errors import ConfigurationError
 from .memory import MemoryStorage
 
 from .base import Storage, AsyncStorage
