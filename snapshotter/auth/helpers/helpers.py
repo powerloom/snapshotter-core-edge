@@ -23,6 +23,7 @@ from snapshotter.auth.helpers.data_models import AuthCheck
 from snapshotter.auth.helpers.data_models import RateLimitAuthCheck
 from snapshotter.auth.helpers.data_models import UserStatusEnum
 from snapshotter.auth.helpers.rate_limiter import generic_rate_limiter
+from snapshotter.auth.helpers.redis_keys import all_users_set
 from snapshotter.auth.helpers.redis_keys import api_key_to_owner_key
 from snapshotter.auth.helpers.redis_keys import user_active_api_keys_set
 from snapshotter.auth.helpers.redis_keys import user_details_htable
@@ -139,30 +140,62 @@ async def check_user_details(
     Returns:
         AuthCheck: An AuthCheck object containing authorization details.
     """
-    owner_email = await redis_conn.get(api_key_to_owner_key(api_key))
-    if not owner_email:
+    owner_email_raw = await redis_conn.get(api_key_to_owner_key(api_key))
+    if not owner_email_raw:
         return AuthCheck(
             authorized=False,
             api_key=api_key,
             reason='bad API key',
         )
-    else:
-        owner_email = owner_email.decode('utf-8')
-        owner_details_b = await redis_conn.hgetall(
-            user_details_htable(owner_email),
-        )
-        owner_details_dec = {
-            k.decode('utf-8'): v.decode('utf-8') for k, v in owner_details_b.items()
-        }
-        owner_details = AppOwnerModel(**owner_details_dec)
+
+    owner_email = owner_email_raw.decode('utf-8')
+
+    if not await redis_conn.sismember(all_users_set(), owner_email):
         return AuthCheck(
-            authorized=await redis_conn.sismember(
-                user_active_api_keys_set(owner_email),
-                api_key,
-            ),
+            authorized=False,
             api_key=api_key,
+            reason='user not registered',
+        )
+
+    owner_details_b = await redis_conn.hgetall(
+        user_details_htable(owner_email),
+    )
+    if not owner_details_b:
+        return AuthCheck(
+            authorized=False,
+            api_key=api_key,
+            reason='user record missing',
+        )
+    owner_details_dec = {
+        k.decode('utf-8'): v.decode('utf-8') for k, v in owner_details_b.items()
+    }
+    try:
+        owner_details = AppOwnerModel(**owner_details_dec)
+    except Exception:
+        return AuthCheck(
+            authorized=False,
+            api_key=api_key,
+            reason='invalid user record',
+        )
+
+    if owner_details.active != UserStatusEnum.active:
+        return AuthCheck(
+            authorized=False,
+            api_key=api_key,
+            reason='inactive subscription',
             owner=owner_details,
         )
+
+    in_active_keys = await redis_conn.sismember(
+        user_active_api_keys_set(owner_email),
+        api_key,
+    )
+    return AuthCheck(
+        authorized=in_active_keys,
+        api_key=api_key,
+        owner=owner_details,
+        reason='' if in_active_keys else 'revoked key',
+    )
 
 
 async def auth_check(

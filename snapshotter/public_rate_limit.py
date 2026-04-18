@@ -1,9 +1,11 @@
 """
 Public (non-MPP) HTTP rate limiting for Core API free routes.
 
-Uses ``async_limits`` + main ``app.state.redis_conn`` (same stack as
-``auth/helpers/rate_limiter.py``). Skips ``/mpp/...`` (MPP middleware handles
-those). See ``ai-coord-docs/bds-mpp-integration/15-mpp-full-uniswap-surface.md``.
+Uses ``async_limits`` + main ``app.state.redis_conn`` for counters (same stack as
+``auth/helpers/rate_limiter.py``). ``X-API-KEY`` / Bearer tokens are validated with
+``check_user_details`` against auth Redis (``allUsers``, ``apikey:…:owner``,
+``user:{email}``, active key set). Skips ``/mpp/...``. See
+``ai-coord-docs/bds-mpp-integration/15-mpp-full-uniswap-surface.md``.
 """
 
 from __future__ import annotations
@@ -11,10 +13,12 @@ from __future__ import annotations
 import hashlib
 from typing import Optional
 
+from redis import asyncio as aioredis
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 from starlette.responses import JSONResponse
 
+from snapshotter.auth.helpers.helpers import check_user_details
 from snapshotter.auth.helpers.rate_limiter import generic_rate_limiter
 from snapshotter.settings.config import settings
 from snapshotter.utils.default_logger import default_logger
@@ -60,6 +64,11 @@ def _should_skip_path(path: str, skip_entries: list[str]) -> bool:
     return False
 
 
+def _auth_registry_redis(request: Request) -> Optional[aioredis.Redis]:
+    """Redis where API key registry lives (same DB as auth HTTP service)."""
+    return getattr(request.app.state, "public_rate_limit_auth_redis_conn", None)
+
+
 class PublicRateLimitMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
         cfg = settings.public_rate_limit_config
@@ -76,19 +85,53 @@ class PublicRateLimitMiddleware(BaseHTTPMiddleware):
 
         redis_conn = getattr(request.app.state, "redis_conn", None)
         script_shas = getattr(request.app.state, "public_rate_limit_script_shas", None)
-        pub_lim = getattr(request.app.state, "public_rate_limit_item_public", None)
-        auth_lim = getattr(request.app.state, "public_rate_limit_item_auth", None)
+        pub_limits = getattr(request.app.state, "public_rate_limit_limits_public", None)
+        auth_limits = getattr(request.app.state, "public_rate_limit_limits_auth", None)
 
-        if redis_conn is None or script_shas is None or pub_lim is None or auth_lim is None:
+        if (
+            redis_conn is None
+            or script_shas is None
+            or not pub_limits
+            or not auth_limits
+        ):
             return await call_next(request)
 
+        tier_name = "public"
         secret = _api_key_or_bearer(request, cfg.auth_header)
         if secret:
-            tier_key = f"auth:{_digest(secret)}"
-            parsed_limits = [auth_lim]
+            auth_redis = _auth_registry_redis(request)
+            if auth_redis is None:
+                logger.warning(
+                    "public rate limit: auth Redis not configured; rejecting X-API-KEY / Bearer",
+                )
+                return JSONResponse(
+                    status_code=503,
+                    content={
+                        "error": "service_unavailable",
+                        "message": "API key validation unavailable (auth Redis not initialized)",
+                    },
+                )
+            try:
+                auth_check = await check_user_details(secret, auth_redis)
+            except Exception as exc:
+                logger.warning("public rate limit: API key lookup failed open: {}", exc)
+                return await call_next(request)
+
+            if not auth_check.authorized or not auth_check.owner:
+                return JSONResponse(
+                    status_code=401,
+                    content={
+                        "error": "unauthorized",
+                        "message": auth_check.reason or "Invalid or inactive API key",
+                    },
+                )
+
+            tier_name = "auth"
+            tier_key = f"auth:{_digest(auth_check.owner.email)}"
+            parsed_limits = list(auth_limits)
         else:
             tier_key = f"ip:{_digest(_forwarded_ip(request))}"
-            parsed_limits = [pub_lim]
+            parsed_limits = list(pub_limits)
 
         redis_key_bits = [f"{cfg.key_prefix}{tier_key}"]
 
@@ -107,10 +150,20 @@ class PublicRateLimitMiddleware(BaseHTTPMiddleware):
             return await call_next(request)
 
         retry_after = max(1, int(retry_after))
+        logger.info(
+            "public rate limit 429 tier={} method={} path={} violated={} retry_after={} bucket={}",
+            tier_name,
+            request.method,
+            request.url.path,
+            violated,
+            retry_after,
+            tier_key,
+        )
         body: dict = {
             "error": "rate_limit_exceeded",
             "message": "Too many requests; retry later.",
             "retry_after": retry_after,
+            "tier": tier_name,
         }
         if violated:
             body["limit"] = str(violated)

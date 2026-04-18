@@ -2,9 +2,13 @@
 Gunicorn Auth Entry Launcher
 This module sets up and launches a Gunicorn server for the authentication service.
 It configures logging using the singleton logger, sets up workers, and initializes the application.
+
+Set ``AUTH_HTTP_ENABLED=false`` (or ``0`` / ``no``) to skip starting the HTTP API. Use
+``scripts/auth_registry.py`` for Redis registry changes instead.
 """
 import logging
 import os
+import sys
 
 from snapshotter.auth.conf import auth_settings
 from snapshotter.auth.server_entry import app
@@ -65,7 +69,20 @@ def setup_logging():
         logging.getLogger(_logger).handlers = [InterceptHandler()]
 
 
+def _auth_http_enabled() -> bool:
+    raw = os.environ.get("AUTH_HTTP_ENABLED", "true").strip().lower()
+    return raw not in ("0", "false", "no", "off")
+
+
 if __name__ == '__main__':
+    if not _auth_http_enabled():
+        print(
+            "AUTH_HTTP_ENABLED is false: auth HTTP server not started. "
+            "Use scripts/auth_registry.py against the auth registry Redis.",
+            file=sys.stderr,
+        )
+        sys.exit(0)
+
     # Set up logging
     setup_logging()
 

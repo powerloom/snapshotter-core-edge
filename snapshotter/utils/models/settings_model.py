@@ -193,6 +193,10 @@ class PublicRateLimitConfig(BaseSettings):
     """
     Free (non-``/mpp/``) Core API rate limits using API key / Bearer vs IP.
 
+    ``X-API-KEY`` / Bearer values are validated against the auth Redis schema (same as
+    ``snapshotter/auth/server_entry.py``): ``allUsers``, ``apikey:{key}:owner``,
+    ``user:{email}`` (``active``), ``user:{email}:apikeys``.
+
     Env prefix ``PUBLIC_RATE_LIMIT_``. Independent of MPP metering. See
     ``ai-coord-docs/bds-mpp-integration/15-mpp-full-uniswap-surface.md``.
     """
@@ -205,6 +209,12 @@ class PublicRateLimitConfig(BaseSettings):
     key_prefix: str = "rl:public:"
     auth_header: str = "X-API-KEY"
     skip_paths: str = "/health,/docs,/openapi.json,/redoc"
+    # Auth Redis for API key registry (defaults to main snapshotter Redis)
+    auth_redis_use_main: bool = True
+    auth_redis_host: str = ""
+    auth_redis_port: int = 6379
+    auth_redis_db: int = 0
+    auth_redis_password: Optional[str] = None
 
     @computed_field
     @property

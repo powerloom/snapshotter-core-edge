@@ -74,6 +74,13 @@ x-snapshotter-base: &snapshotter-base
     - PUBLIC_RATE_LIMIT_KEY_PREFIX=${PUBLIC_RATE_LIMIT_KEY_PREFIX:-rl:public:}
     - PUBLIC_RATE_LIMIT_AUTH_HEADER=${PUBLIC_RATE_LIMIT_AUTH_HEADER:-X-API-KEY}
     - PUBLIC_RATE_LIMIT_SKIP_PATHS=${PUBLIC_RATE_LIMIT_SKIP_PATHS:-/health,/docs,/openapi.json,/redoc}
+    - PUBLIC_RATE_LIMIT_AUTH_REDIS_USE_MAIN=${PUBLIC_RATE_LIMIT_AUTH_REDIS_USE_MAIN:-true}
+    - PUBLIC_RATE_LIMIT_AUTH_REDIS_HOST=${PUBLIC_RATE_LIMIT_AUTH_REDIS_HOST:-}
+    - PUBLIC_RATE_LIMIT_AUTH_REDIS_PORT=${PUBLIC_RATE_LIMIT_AUTH_REDIS_PORT:-6379}
+    - PUBLIC_RATE_LIMIT_AUTH_REDIS_DB=${PUBLIC_RATE_LIMIT_AUTH_REDIS_DB:-0}
+    - PUBLIC_RATE_LIMIT_AUTH_REDIS_PASSWORD=${PUBLIC_RATE_LIMIT_AUTH_REDIS_PASSWORD:-}
+    # Auth HTTP (snapshotter.auth.gunicorn_auth_entry_launcher). false = process exits 0, no port. .env via build.sh / compose.
+    - AUTH_HTTP_ENABLED=${AUTH_HTTP_ENABLED:-true}
   extra_hosts:
     - "host.docker.internal:host-gateway"
   healthcheck:

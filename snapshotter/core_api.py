@@ -158,18 +158,42 @@ async def startup_boilerplate():
     app.state.redis_conn = app.state._aioredis_pool._aioredis_pool
 
     prl_cfg = settings.public_rate_limit_config
+    app.state.public_rate_limit_auth_redis_conn = app.state.redis_conn
+    if prl_cfg.enabled and not prl_cfg.auth_redis_use_main and app.state.redis_conn is not None:
+        auth_conf = {
+            "host": prl_cfg.auth_redis_host or settings.redis.host,
+            "port": prl_cfg.auth_redis_port,
+            "db": prl_cfg.auth_redis_db,
+            "password": prl_cfg.auth_redis_password
+            if prl_cfg.auth_redis_password is not None
+            else settings.redis.password,
+        }
+        app.state._public_rl_auth_pool = RedisPoolCache(pool_size=100, redis_conf=auth_conf)
+        await app.state._public_rl_auth_pool.populate()
+        app.state.public_rate_limit_auth_redis_conn = app.state._public_rl_auth_pool._aioredis_pool
+        rest_logger.info(
+            "Public rate limit: auth Redis = separate pool "
+            f"({auth_conf['host']}:{auth_conf['port']}/{auth_conf['db']})",
+        )
+
+    app.state.auth_aioredis_pool = app.state.public_rate_limit_auth_redis_conn
+
     if prl_cfg.enabled and app.state.redis_conn is not None:
-        from async_limits import parse
+        from async_limits import parse_many
 
         from snapshotter.auth.helpers.rate_limiter import load_rate_limiter_scripts
 
-        app.state.public_rate_limit_item_public = parse(prl_cfg.rate_public)
-        app.state.public_rate_limit_item_auth = parse(prl_cfg.rate_authenticated)
+        app.state.public_rate_limit_limits_public = parse_many(prl_cfg.rate_public)
+        app.state.public_rate_limit_limits_auth = parse_many(prl_cfg.rate_authenticated)
         app.state.public_rate_limit_script_shas = await load_rate_limiter_scripts(
             app.state.redis_conn,
         )
         rest_logger.info(
-            f"Public rate limit: enabled (public={prl_cfg.rate_public}, auth={prl_cfg.rate_authenticated})",
+            "Public rate limit: enabled; key_prefix=%s; public_windows=%s; auth_windows=%s; "
+            "API keys validated against auth Redis",
+            prl_cfg.key_prefix,
+            [str(x) for x in app.state.public_rate_limit_limits_public],
+            [str(x) for x in app.state.public_rate_limit_limits_auth],
         )
     elif prl_cfg.enabled:
         rest_logger.warning(

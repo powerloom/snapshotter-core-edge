@@ -37,6 +37,10 @@ If any new config needs to be added, users must update the Setting Models first.
 
 The main FastAPI server and entry point for this module is `server_entry.py`, this server is started using a custom Gunicorn handler present in `gunicorn_auth_entry_launcher.py`. Doing so provides more flexibility to customize the application and start it using `Pm2`.
 
+**Disable the HTTP API:** set env **`AUTH_HTTP_ENABLED=false`** before launching `gunicorn_auth_entry_launcher.py`; the process exits immediately (exit code 0) and does not bind a port. Use **`scripts/auth_registry.py`** for registry changes (see `ai-coord-docs/bds-mpp-integration/15-mpp-full-uniswap-surface.md`).
+
+**Docker Compose:** `AUTH_HTTP_ENABLED` is listed on the shared **`x-snapshotter-base`** anchor in **`docker-compose.yaml.template`** / generated **`docker-compose.yaml`**, so any service that inherits it (including **`core-api`**, and any future **`auth-api`**-style service) receives the variable from your **`.env`** when you run **`build.sh`** (which `source`s `.env`) or **`docker compose`**. Set it in `.env`; you do not need to change **`build.sh`** for this variable.
+
 ### Helpers
 
 #### `helpers.py` and `rate_limiter.py` (API keys + rate limits on routes)
