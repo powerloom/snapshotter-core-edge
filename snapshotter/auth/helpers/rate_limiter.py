@@ -7,6 +7,8 @@ Used by ``public_rate_limit.PublicRateLimitMiddleware`` (Core API) and optionall
 
 import time
 from typing import List
+from typing import Sequence
+from typing import Union
 
 import redis.exceptions
 from async_limits import RateLimitItem
@@ -56,6 +58,23 @@ SCRIPT_SET_EXPIRE = """
 """
 
 # # # END RATE LIMITER LUA SCRIPTS
+
+
+def _rate_limit_identifier_tuple(key_bits: Sequence[Union[str, bytes, int, float]]) -> tuple:
+    """
+    Build ``*identifiers`` for async_limits ``key_for``.
+
+    ``key_bits`` is normally a flat list of strings (e.g. ``[instance_id, email]`` or
+    ``["rl:public:ip:…"]``). If a single element is itself a list/tuple (accidental
+    double-wrap or a caller passing ``hit(..., key_bits)`` without unpacking), flatten
+    so Redis keys are ``LIMITER/rl:public:…/…`` not ``LIMITER/['rl:public:…']/…``.
+    """
+    if not key_bits:
+        return ()
+    kb = list(key_bits)
+    if len(kb) == 1 and isinstance(kb[0], (list, tuple)):
+        kb = list(kb[0])
+    return tuple(kb)
 
 
 async def load_rate_limiter_scripts(redis_conn: aioredis.Redis):
@@ -108,12 +127,13 @@ async def generic_rate_limiter(
         rate_limit_lua_script_shas = await load_rate_limiter_scripts(redis_conn)
     redis_storage = AsyncRedisStorage(rate_limit_lua_script_shas, redis_conn)
     custom_limiter = AsyncFixedWindowRateLimiter(redis_storage)
+    identifiers = _rate_limit_identifier_tuple(key_bits)
     for each_lim in parsed_limits:
         try:
-            if await custom_limiter.hit(each_lim, limit_incr_by, *[key_bits]) is False:
+            if await custom_limiter.hit(each_lim, limit_incr_by, *identifiers) is False:
                 window_stats = await custom_limiter.get_window_stats(
                     each_lim,
-                    *key_bits,
+                    *identifiers,
                 )
                 reset_in = 1 + window_stats[0]
                 retry_after = reset_in - int(time.time())

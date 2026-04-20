@@ -17,12 +17,20 @@ Examples:
   REDIS_HOST=redis poetry run python scripts/public_rl_status.py
   poetry run python scripts/public_rl_status.py --max 50
   poetry run python scripts/public_rl_status.py --use-core-settings
+
+``--use-core-settings`` needs the package on ``PYTHONPATH`` (same as ``auth_registry.py``):
+the script prepends the repo root automatically.
 """
 from __future__ import annotations
 
 import argparse
 import os
 import sys
+from pathlib import Path
+
+_REPO_ROOT = Path(__file__).resolve().parents[1]
+if str(_REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(_REPO_ROOT))
 
 
 def _redis_from_core_settings():
@@ -54,9 +62,12 @@ def main() -> int:
     args = parser.parse_args()
 
     prefix = os.getenv("PUBLIC_RATE_LIMIT_KEY_PREFIX", "rl:public:").rstrip("/")
-    pattern = f"LIMITER/{prefix}*"
+    # Glob: include legacy malformed keys ``LIMITER/['rl:public:…']/…`` (see rate_limiter fix).
+    needle = prefix.lstrip("/")
+    pattern = f"LIMITER*{needle}*"
 
     if args.use_core_settings:
+        os.chdir(_REPO_ROOT)
         conf = _redis_from_core_settings()
         host, port, db, password = (
             conf["host"],
