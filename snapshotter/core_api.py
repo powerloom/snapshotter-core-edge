@@ -194,12 +194,12 @@ async def startup_boilerplate():
                 "Public rate limit: failed to parse limits or load Lua scripts (startup aborted)",
             )
             raise
+        pub_w = [str(x) for x in app.state.public_rate_limit_limits_public]
+        auth_w = [str(x) for x in app.state.public_rate_limit_limits_auth]
         rest_logger.info(
-            "Public rate limit: enabled; key_prefix=%s; public_windows=%s; auth_windows=%s; "
+            f"Public rate limit: enabled; key_prefix={prl_cfg.key_prefix}; "
+            f"public_windows={pub_w}; auth_windows={auth_w}; "
             "API keys validated against auth Redis",
-            prl_cfg.key_prefix,
-            [str(x) for x in app.state.public_rate_limit_limits_public],
-            [str(x) for x in app.state.public_rate_limit_limits_auth],
         )
     elif prl_cfg.enabled:
         rest_logger.warning(
