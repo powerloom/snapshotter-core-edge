@@ -183,11 +183,17 @@ async def startup_boilerplate():
 
         from snapshotter.auth.helpers.rate_limiter import load_rate_limiter_scripts
 
-        app.state.public_rate_limit_limits_public = parse_many(prl_cfg.rate_public)
-        app.state.public_rate_limit_limits_auth = parse_many(prl_cfg.rate_authenticated)
-        app.state.public_rate_limit_script_shas = await load_rate_limiter_scripts(
-            app.state.redis_conn,
-        )
+        try:
+            app.state.public_rate_limit_limits_public = parse_many(prl_cfg.rate_public)
+            app.state.public_rate_limit_limits_auth = parse_many(prl_cfg.rate_authenticated)
+            app.state.public_rate_limit_script_shas = await load_rate_limiter_scripts(
+                app.state.redis_conn,
+            )
+        except Exception:
+            rest_logger.exception(
+                "Public rate limit: failed to parse limits or load Lua scripts (startup aborted)",
+            )
+            raise
         rest_logger.info(
             "Public rate limit: enabled; key_prefix=%s; public_windows=%s; auth_windows=%s; "
             "API keys validated against auth Redis",

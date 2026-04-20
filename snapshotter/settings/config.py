@@ -9,16 +9,26 @@ from snapshotter.utils.models.settings_model import AggregatorConfig
 from snapshotter.utils.models.settings_model import MppConfig
 from snapshotter.utils.models.settings_model import PreloaderConfig
 from snapshotter.utils.models.settings_model import ProjectsConfig
+from snapshotter.utils.models.settings_model import PublicRateLimitConfig
 from snapshotter.utils.models.settings_model import Settings
 
 # Load main settings
 with open('config/settings.json', 'r') as settings_file:
     settings_dict = json.load(settings_file)
 mpp_data = settings_dict.pop('mpp', None)
+# Public rate limits are operator-controlled via PUBLIC_RATE_LIMIT_* (compose/.env).
+# Ignore any legacy ``public_rate_limit_config`` block in settings.json so env always wins
+# (nested JSON previously shadowed env and led to "no LIMITER keys" / disabled middleware).
+settings_dict.pop('public_rate_limit_config', None)
+_public_rl = PublicRateLimitConfig()
 if mpp_data is not None:
-    settings: Settings = Settings(**settings_dict, mpp=MppConfig(**mpp_data))
+    settings: Settings = Settings(
+        **settings_dict,
+        mpp=MppConfig(**mpp_data),
+        public_rate_limit_config=_public_rl,
+    )
 else:
-    settings: Settings = Settings(**settings_dict)
+    settings: Settings = Settings(**settings_dict, public_rate_limit_config=_public_rl)
 
 # Load projects configuration
 projects_config_path = settings.projects_config_path

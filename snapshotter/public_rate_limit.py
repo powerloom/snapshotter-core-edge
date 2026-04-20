@@ -25,6 +25,8 @@ from snapshotter.utils.default_logger import default_logger
 
 logger = default_logger.bind(module="PublicRateLimit")
 
+_fail_open_warned = False
+
 
 def _digest(s: str) -> str:
     return hashlib.sha256(s.encode("utf-8")).hexdigest()[:32]
@@ -94,6 +96,17 @@ class PublicRateLimitMiddleware(BaseHTTPMiddleware):
             or not pub_limits
             or not auth_limits
         ):
+            global _fail_open_warned
+            if not _fail_open_warned:
+                _fail_open_warned = True
+                logger.warning(
+                    "public rate limit fail-open: redis_conn={} script_shas={} "
+                    "public_limits={} auth_limits={} (check startup logs / Redis)",
+                    redis_conn is not None,
+                    script_shas is not None,
+                    bool(pub_limits),
+                    bool(auth_limits),
+                )
             return await call_next(request)
 
         tier_name = "public"
