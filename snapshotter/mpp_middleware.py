@@ -150,6 +150,17 @@ async def _signup_api_billing(request: Request, call_next):
             body = {"message": r.text}
         return JSONResponse(status_code=401, content=body)
 
+    if r.status_code == 429:
+        try:
+            body = r.json()
+        except json.JSONDecodeError:
+            body = {"message": r.text}
+        headers = {}
+        retry_after = r.headers.get("Retry-After")
+        if retry_after:
+            headers["Retry-After"] = retry_after
+        return JSONResponse(status_code=429, content=body, headers=headers)
+
     if r.status_code == 403:
         return JSONResponse(
             status_code=500,
