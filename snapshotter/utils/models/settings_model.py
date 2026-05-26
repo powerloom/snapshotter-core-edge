@@ -167,6 +167,8 @@ class MppConfig(BaseSettings):
     # Env: MPP_SIGNUP_BILLING_BASE_URL (canonical). MPP_SIGNUP_BILLING_URL merged in validator if base URL empty.
     signup_billing_base_url: str = ""
     internal_billing_secret: str = ""
+    # Local path or HTTPS URL to snapshotter-computes api/endpoints.json for route_template matching.
+    endpoints_catalog_json: str = ""
 
     @model_validator(mode="before")
     @classmethod

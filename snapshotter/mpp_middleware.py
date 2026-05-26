@@ -103,6 +103,20 @@ async def _signup_api_billing(request: Request, call_next):
         )
 
     try:
+        from snapshotter.endpoint_catalog import get_endpoint_catalog, normalize_client_source
+
+        catalog_ref = settings.mpp.endpoints_catalog_json.strip() or None
+        route_template = get_endpoint_catalog(catalog_ref).match(request.method, request.url.path)
+        client_source = normalize_client_source(request.headers.get("X-BDS-Client-Source"))
+
+        deduct_body: dict[str, str | None] = {
+            "path": request.url.path,
+            "method": request.method,
+            "client_source": client_source,
+        }
+        if route_template:
+            deduct_body["route_template"] = route_template
+
         async with httpx.AsyncClient(timeout=20.0) as client:
             r = await client.post(
                 f"{base}/internal/billing/deduct",
@@ -111,7 +125,7 @@ async def _signup_api_billing(request: Request, call_next):
                     "X-BDS-Internal-Billing-Secret": secret,
                     "Content-Type": "application/json",
                 },
-                json={"path": request.url.path, "method": request.method},
+                json=deduct_body,
             )
     except httpx.RequestError as exc:
         return JSONResponse(

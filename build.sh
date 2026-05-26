@@ -254,8 +254,21 @@ else
     COMPOSE_CMD="docker compose"
 fi
 
+# Optional skips (faster local iteration; bind-mounted dirs need no image rebuild):
+#   SKIP_COMPOSE_PULL=1   — skip "docker compose pull" (non-DEVMODE only; uses existing cached GHCR images)
+#   SKIP_COMPOSE_BUILD=1  — skip "--build" (after poetry.lock/Dockerfile changes, run a full build without this)
+# Docker still uses layer cache for the Dockerfile; first build or lockfile edits stay heavy until cached.
 if [ "$DEVMODE" = "false" ]; then
-    $COMPOSE_CMD -f docker-compose.yaml $PROFILES pull
+    if [ -n "$SKIP_COMPOSE_PULL" ] && [ "$SKIP_COMPOSE_PULL" != "0" ]; then
+        echo "SKIP_COMPOSE_PULL set — skipping docker compose pull"
+    else
+        $COMPOSE_CMD -f docker-compose.yaml $PROFILES pull
+    fi
 fi
 
-$COMPOSE_CMD -f docker-compose.yaml $PROFILES up -V --remove-orphans --build
+if [ -n "$SKIP_COMPOSE_BUILD" ] && [ "$SKIP_COMPOSE_BUILD" != "0" ]; then
+    echo "SKIP_COMPOSE_BUILD set — up without --build (code under ./snapshotter, ./computes, etc. is bind-mounted)"
+    $COMPOSE_CMD -f docker-compose.yaml $PROFILES up -V --remove-orphans
+else
+    $COMPOSE_CMD -f docker-compose.yaml $PROFILES up -V --remove-orphans --build
+fi

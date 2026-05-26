@@ -58,6 +58,8 @@ x-snapshotter-base: &snapshotter-base
     - MPP_SIGNUP_BILLING_BASE_URL=${MPP_SIGNUP_BILLING_BASE_URL:-}
     - MPP_SIGNUP_BILLING_URL=${MPP_SIGNUP_BILLING_URL:-}
     - MPP_INTERNAL_BILLING_SECRET=${MPP_INTERNAL_BILLING_SECRET:-}
+    # Optional override; default loads snapshotter-computes api/endpoints.json from GitHub
+    - MPP_ENDPOINTS_CATALOG_JSON=${MPP_ENDPOINTS_CATALOG_JSON:-}
     - MPP_CHARGE_AMOUNT=${MPP_CHARGE_AMOUNT:-0.01}
     - MPP_STREAM_AMOUNT=${MPP_STREAM_AMOUNT:-0.0001}
     - MPP_TEMPO_RPC_URL=${MPP_TEMPO_RPC_URL:-https://rpc.moderato.tempo.xyz}
