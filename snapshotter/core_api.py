@@ -77,7 +77,7 @@ protocol_state_contract_address = settings.protocol_state.address
 
 # Setup CORS origins
 origins = ['*']
-app = FastAPI()
+app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None)
 
 # Configure pagination for epoch processing status reports
 T = TypeVar("T")

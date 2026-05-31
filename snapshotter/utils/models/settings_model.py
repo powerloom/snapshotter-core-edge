@@ -210,7 +210,7 @@ class PublicRateLimitConfig(BaseSettings):
     rate_authenticated: str = "60/minute"
     key_prefix: str = "rl:public:"
     auth_header: str = "X-API-KEY"
-    skip_paths: str = "/health,/docs,/openapi.json,/redoc"
+    skip_paths: str = "/health"
     # Auth Redis for API key registry (defaults to main snapshotter Redis)
     auth_redis_use_main: bool = True
     auth_redis_host: str = ""

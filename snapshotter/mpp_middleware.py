@@ -106,16 +106,17 @@ async def _signup_api_billing(request: Request, call_next):
         from snapshotter.endpoint_catalog import get_endpoint_catalog, normalize_client_source
 
         catalog_ref = settings.mpp.endpoints_catalog_json.strip() or None
-        route_template = get_endpoint_catalog(catalog_ref).match(request.method, request.url.path)
+        catalog_match = get_endpoint_catalog(catalog_ref).match(request.method, request.url.path)
         client_source = normalize_client_source(request.headers.get("X-BDS-Client-Source"))
 
-        deduct_body: dict[str, str | None] = {
+        deduct_body: dict[str, str | float | None] = {
             "path": request.url.path,
             "method": request.method,
             "client_source": client_source,
         }
-        if route_template:
-            deduct_body["route_template"] = route_template
+        if catalog_match:
+            deduct_body["route_template"] = catalog_match.path_template
+            deduct_body["credit_weight"] = catalog_match.credit_weight
 
         async with httpx.AsyncClient(timeout=20.0) as client:
             r = await client.post(

@@ -26,28 +26,36 @@ class CatalogRoute:
     method: str
     path_template: str
     metered: bool
+    credit_weight: float = 1.0
+
+
+@dataclass(frozen=True)
+class CatalogMatch:
+    path_template: str
+    credit_weight: float
 
 
 class EndpointCatalog:
-    """Resolve ``(method, request_path)`` to a catalog path template."""
+    """Resolve ``(method, request_path)`` to a catalog path template and credit weight."""
 
     def __init__(self, routes: list[CatalogRoute]) -> None:
-        compiled: list[tuple[str, re.Pattern[str], str]] = []
+        compiled: list[tuple[str, re.Pattern[str], str, float]] = []
         for route in routes:
             if not route.metered:
                 continue
             pattern = _template_to_regex(route.path_template)
-            compiled.append((route.method.upper(), pattern, route.path_template))
+            w = route.credit_weight if route.credit_weight > 0 else 1.0
+            compiled.append((route.method.upper(), pattern, route.path_template, w))
         self._compiled = compiled
 
-    def match(self, method: str, request_path: str) -> str | None:
+    def match(self, method: str, request_path: str) -> CatalogMatch | None:
         m = method.strip().upper() or "GET"
         path = request_path if request_path.startswith("/") else f"/{request_path}"
-        for route_method, pattern, template in self._compiled:
+        for route_method, pattern, template, weight in self._compiled:
             if route_method != m:
                 continue
             if pattern.fullmatch(path):
-                return template
+                return CatalogMatch(path_template=template, credit_weight=weight)
         return None
 
 
@@ -79,7 +87,21 @@ def _load_catalog_json(data: Any) -> list[CatalogRoute]:
         if not isinstance(path, str) or not isinstance(method, str):
             continue
         metered = bool(entry.get("metered", False))
-        routes.append(CatalogRoute(method=method, path_template=path, metered=metered))
+        raw_weight = entry.get("credit_weight", 1)
+        try:
+            credit_weight = float(raw_weight)
+        except (TypeError, ValueError):
+            credit_weight = 1.0
+        if credit_weight <= 0:
+            credit_weight = 1.0
+        routes.append(
+            CatalogRoute(
+                method=method,
+                path_template=path,
+                metered=metered,
+                credit_weight=credit_weight,
+            ),
+        )
     return routes
 
 
