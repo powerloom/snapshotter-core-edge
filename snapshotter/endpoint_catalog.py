@@ -20,6 +20,38 @@ DEFAULT_ENDPOINTS_CATALOG_URL = (
     "bds_eth_uniswapv3_core/api/endpoints.json"
 )
 
+TIMESERIES_ROUTE_TEMPLATE = (
+    "/mpp/timeSeries/{token_address}/{pool_address}/{time_interval}/{step_seconds}"
+)
+
+# USD price consumption (see ai-coord-docs/compute-modules/USD_PRICE_FEED.md):
+#
+# 1. Discover pools: GET /mpp/token/{token}/pools
+# 2. Price each pool you care about: GET /mpp/token/price/{token}/{pool}[/{block}]
+#
+# ``GET /mpp/tokenPrices/all/{token}`` is NOT supported for hub tokens (USDC, WETH, and
+# other majors with thousands of indexed pools). The API rejects >20 pools per token.
+# Use the two-step pattern above — e.g. ASTEROID ``0xf280B16EF293D8e534e370794ef26bF312694126``.
+#
+# Pulse / Threshold Guard: per-block ``/mpp/token/price/.../{block_number}`` on pinned pools.
+# Dashboards / analytics: ``/mpp/timeSeries/...`` (lookback tiers below), not tokenPrices/all.
+
+# Lookback tiers for timeSeries (seconds). Applied on top of catalog credit_weight.
+_LOOKBACK_HISTORY_MULTIPLIERS: tuple[tuple[int, float], ...] = (
+    (600, 1.0),       # <= 10 minutes
+    (1_800, 2.0),     # <= 30 minutes
+    (3_600, 4.0),     # <= 1 hour
+    (7_200, 8.0),     # <= 2 hours
+    (14_400, 16.0),   # <= 4 hours
+    (21_600, 32.0),   # <= 6 hours
+    (43_200, 64.0),   # <= 12 hours
+    (86_400, 128.0),  # <= 24 hours
+    (172_800, 256.0), # <= 48 hours
+    (345_600, 512.0), # <= 96 hours
+    (604_800, 1024.0),# <= 7 days
+)
+_MAX_LOOKBACK_HISTORY_MULTIPLIER = 2048.0
+
 
 @dataclass(frozen=True)
 class CatalogRoute:
@@ -149,3 +181,46 @@ def normalize_client_source(header_value: str | None) -> str:
     if value in {"cli", "mcp", "direct", "unknown"}:
         return value
     return "unknown"
+
+
+def parse_timeseries_lookback_seconds(request_path: str) -> int | None:
+    """Parse ``time_interval`` (lookback seconds) from a timeSeries request path."""
+    path = request_path if request_path.startswith("/") else f"/{request_path}"
+    pattern = re.compile(
+        r"^/mpp/timeSeries/[^/]+/[^/]+/(?P<interval>\d+)/\d+$",
+    )
+    match = pattern.fullmatch(path)
+    if not match:
+        return None
+    try:
+        interval = int(match.group("interval"))
+    except (TypeError, ValueError):
+        return None
+    if interval <= 0:
+        return None
+    return interval
+
+
+def history_multiplier_for_lookback_seconds(lookback_seconds: int) -> float:
+    """
+    Extra billing multiplier for timeSeries depth (how far back ``time_interval`` reaches).
+
+    Pulse / Guard use per-block ``/mpp/token/price/.../{block_number}``; timeSeries is for
+    dashboards and analytics over a window.
+    """
+    if lookback_seconds <= 0:
+        return 1.0
+    for max_seconds, multiplier in _LOOKBACK_HISTORY_MULTIPLIERS:
+        if lookback_seconds <= max_seconds:
+            return multiplier
+    return _MAX_LOOKBACK_HISTORY_MULTIPLIER
+
+
+def history_multiplier_for_path(request_path: str, path_template: str | None) -> float:
+    """Return lookback history multiplier (1.0 when not a timeSeries route)."""
+    if path_template != TIMESERIES_ROUTE_TEMPLATE:
+        return 1.0
+    lookback = parse_timeseries_lookback_seconds(request_path)
+    if lookback is None:
+        return 1.0
+    return history_multiplier_for_lookback_seconds(lookback)
