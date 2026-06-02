@@ -56,8 +56,9 @@ _LOOKBACK_HISTORY_MULTIPLIERS: tuple[tuple[int, float], ...] = (
 )
 _MAX_LOOKBACK_HISTORY_MULTIPLIER = 2048.0
 
-# Billing-modifier type that scales credit_weight by a path parameter's value.
+# Billing-modifier types (see snapshotter-computes api/endpoints.json).
 LOOKBACK_MULTIPLIER_TYPE = "lookback_multiplier"
+STREAM_SESSION_TYPE = "stream_session"
 
 
 @dataclass(frozen=True)
@@ -68,12 +69,13 @@ class LookbackTier:
 
 @dataclass(frozen=True)
 class BillingModifier:
-    """Per-route credit multiplier driven by a path parameter (e.g. timeSeries lookback)."""
+    """Per-route billing policy beyond static credit_weight (lookback tiers or stream session)."""
 
     type: str
-    param: str
-    tiers: tuple[LookbackTier, ...]
+    param: str = ""
+    tiers: tuple[LookbackTier, ...] = ()
     overflow_multiplier: float = 1.0
+    credits_per_connection: float | None = None
 
 
 @dataclass(frozen=True)
@@ -159,8 +161,23 @@ def _parse_billing_modifier(raw: Any) -> BillingModifier | None:
     if not isinstance(raw, dict):
         return None
     mtype = raw.get("type")
+    if not isinstance(mtype, str):
+        return None
+    if mtype == STREAM_SESSION_TYPE:
+        try:
+            credits = float(raw.get("credits_per_connection"))
+        except (TypeError, ValueError):
+            return None
+        if credits <= 0:
+            return None
+        return BillingModifier(
+            type=mtype,
+            credits_per_connection=credits,
+        )
+    if mtype != LOOKBACK_MULTIPLIER_TYPE:
+        return None
     param = raw.get("param")
-    if not isinstance(mtype, str) or not isinstance(param, str) or not param:
+    if not isinstance(param, str) or not param:
         return None
     tiers: list[LookbackTier] = []
     tiers_raw = raw.get("tiers")

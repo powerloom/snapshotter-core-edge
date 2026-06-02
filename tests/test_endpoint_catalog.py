@@ -206,6 +206,31 @@ def test_load_catalog_json_parses_billing_modifier():
     assert history_multiplier_for_match(m) == 4.0
 
 
+def test_load_catalog_json_stream_session_modifier():
+    data = {
+        "market": "TEST",
+        "version": 4,
+        "endpoints": [
+            {
+                "path": "/mpp/stream/allTrades",
+                "method": "GET",
+                "metered": True,
+                "sse": True,
+                "credit_weight": 1,
+                "billing_modifier": {
+                    "type": "stream_session",
+                    "credits_per_connection": 0.01,
+                },
+            },
+        ],
+    }
+    routes = _load_catalog_json(data)
+    mod = routes[0].billing_modifier
+    assert mod is not None
+    assert mod.type == "stream_session"
+    assert mod.credits_per_connection == 0.01
+
+
 def test_load_catalog_json_no_modifier_is_none():
     data = {
         "market": "TEST",
