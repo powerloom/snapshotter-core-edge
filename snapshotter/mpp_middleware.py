@@ -105,9 +105,9 @@ async def _signup_api_billing(request: Request, call_next):
     try:
         from snapshotter.endpoint_catalog import (
             get_endpoint_catalog,
-            history_multiplier_for_path,
+            history_multiplier_for_match,
+            lookback_seconds_for_match,
             normalize_client_source,
-            parse_timeseries_lookback_seconds,
         )
 
         catalog_ref = settings.mpp.endpoints_catalog_json.strip() or None
@@ -122,13 +122,10 @@ async def _signup_api_billing(request: Request, call_next):
         if catalog_match:
             deduct_body["route_template"] = catalog_match.path_template
             deduct_body["credit_weight"] = catalog_match.credit_weight
-            history_mult = history_multiplier_for_path(
-                request.url.path,
-                catalog_match.path_template,
-            )
+            history_mult = history_multiplier_for_match(catalog_match)
             if history_mult != 1.0:
                 deduct_body["history_multiplier"] = history_mult
-                lookback = parse_timeseries_lookback_seconds(request.url.path)
+                lookback = lookback_seconds_for_match(catalog_match)
                 if lookback is not None:
                     deduct_body["lookback_seconds"] = lookback
 
